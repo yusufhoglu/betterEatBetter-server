@@ -9,6 +9,8 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
+
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 
 export type Env = z.infer<typeof envSchema>;
