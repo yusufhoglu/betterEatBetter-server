@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Gender, Goal } from '../../../../shared/domain/PlanCalculationService';
 import type {
   CreateUserProfileInput,
+  UpdateUserProfileInput,
   UserProfile,
   UserProfileRepositoryPort,
 } from '../../ports/UserProfileRepositoryPort';
@@ -42,6 +43,19 @@ export class PrismaUserProfileRepository implements UserProfileRepositoryPort {
 
   async create(input: CreateUserProfileInput): Promise<UserProfile> {
     const row = await this.db.userProfile.create({ data: input });
+    return toUserProfile(row);
+  }
+
+  async update(input: UpdateUserProfileInput): Promise<UserProfile> {
+    const row = await this.db.userProfile.update({
+      where: { userId: input.userId },
+      data: {
+        weightKg: input.weightKg,
+        workoutsPerWeek: input.workoutsPerWeek,
+        goal: input.goal,
+        weeklyPaceKg: input.weeklyPaceKg,
+      },
+    });
     return toUserProfile(row);
   }
 }
