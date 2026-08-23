@@ -23,7 +23,16 @@ export interface CreateUserProfileInput {
   weeklyPaceKg: number;
 }
 
+export interface UpdateUserProfileInput {
+  userId: string;
+  weightKg?: number;
+  workoutsPerWeek?: number;
+  goal?: Goal;
+  weeklyPaceKg?: number;
+}
+
 export interface UserProfileRepositoryPort {
   findByUserId(userId: string): Promise<UserProfile | null>;
   create(input: CreateUserProfileInput): Promise<UserProfile>;
+  update(input: UpdateUserProfileInput): Promise<UserProfile>;
 }

@@ -1,0 +1,79 @@
+import { NotFoundError } from '../../../shared/errors/NotFoundError';
+import { InMemoryPlanRepository } from '../test-utils/fakes/InMemoryPlanRepository';
+import { InMemoryUserProfileRepository } from '../test-utils/fakes/InMemoryUserProfileRepository';
+import { CompleteOnboarding, type CompleteOnboardingInput } from './CompleteOnboarding';
+import { UpdatePlan, type UpdatePlanChanges } from './UpdatePlan';
+
+function buildInput(overrides: Partial<CompleteOnboardingInput> = {}): CompleteOnboardingInput {
+  return {
+    userId: 'user-1',
+    weightKg: 80,
+    heightCm: 180,
+    age: 30,
+    gender: 'male',
+    workoutsPerWeek: 3,
+    goal: 'lose',
+    weeklyPaceKg: 0.5,
+    ...overrides,
+  };
+}
+
+function buildUpdatePlan() {
+  const userProfileRepository = new InMemoryUserProfileRepository();
+  const planRepository = new InMemoryPlanRepository();
+  const completeOnboarding = new CompleteOnboarding(userProfileRepository, planRepository);
+  const updatePlan = new UpdatePlan(userProfileRepository, planRepository);
+  return { userProfileRepository, planRepository, completeOnboarding, updatePlan };
+}
+
+describe('UpdatePlan', () => {
+  test('throws NotFoundError with NOT_ONBOARDED when the user has no profile', async () => {
+    const { updatePlan } = buildUpdatePlan();
+
+    await expect(updatePlan.execute('user-1', { weeklyPaceKg: 0.75 })).rejects.toBeInstanceOf(NotFoundError);
+    await expect(updatePlan.execute('user-1', { weeklyPaceKg: 0.75 })).rejects.toMatchObject({
+      code: 'NOT_ONBOARDED',
+    });
+  });
+
+  test('recomputes the plan from the full profile while preserving untouched fields', async () => {
+    const { completeOnboarding, updatePlan, userProfileRepository } = buildUpdatePlan();
+    await completeOnboarding.execute(buildInput());
+
+    const changes: UpdatePlanChanges = { weeklyPaceKg: 0.75 };
+    const updatedPlan = await updatePlan.execute('user-1', changes);
+    const storedProfile = await userProfileRepository.findByUserId('user-1');
+
+    expect(storedProfile).toMatchObject({
+      userId: 'user-1',
+      weightKg: 80,
+      heightCm: 180,
+      age: 30,
+      gender: 'male',
+      workoutsPerWeek: 3,
+      goal: 'lose',
+      weeklyPaceKg: 0.75,
+    });
+
+    expect(updatedPlan).toMatchObject({
+      userId: 'user-1',
+      dailyCalories: 1623,
+      proteinG: 160,
+      carbsG: 123,
+      fatG: 55,
+    });
+  });
+
+  test('updates the existing plan row instead of creating a new one', async () => {
+    const { completeOnboarding, updatePlan, planRepository } = buildUpdatePlan();
+    const initialPlan = await completeOnboarding.execute(buildInput());
+
+    expect(planRepository.count()).toBe(1);
+
+    const updatedPlan = await updatePlan.execute('user-1', { weeklyPaceKg: 0.75 });
+
+    expect(planRepository.count()).toBe(1);
+    expect(updatedPlan.createdAt).toEqual(initialPlan.createdAt);
+    expect(updatedPlan.updatedAt.getTime()).toBeGreaterThanOrEqual(initialPlan.updatedAt.getTime());
+  });
+});
