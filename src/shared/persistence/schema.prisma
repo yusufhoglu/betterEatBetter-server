@@ -19,8 +19,42 @@ model User {
   updatedAt    DateTime @updatedAt
 
   refreshTokens RefreshToken[]
+  userProfile   UserProfile?
+  plan          Plan?
 
   @@map("users")
+}
+
+// onboarding-plan module: survey answers collected once at CompleteOnboarding time.
+// Entirely separate from User — related only via userId FK, no fields added to User.
+model UserProfile {
+  userId          String   @id
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weightKg        Float
+  heightCm        Float
+  age             Int
+  gender          String
+  workoutsPerWeek Int
+  goal            String // 'lose' | 'maintain' | 'gain'
+  weeklyPaceKg    Float
+  createdAt       DateTime @default(now())
+
+  @@map("user_profiles")
+}
+
+// onboarding-plan module: the single active plan per user (userId is unique — no
+// plan history is kept this round, see onboarding-plan-rule.md).
+model Plan {
+  userId        String   @id
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyCalories Float
+  proteinG      Float
+  carbsG        Float
+  fatG          Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("plans")
 }
 
 // Opaque, DB-stored token (not a JWT) — required for rotation + reuse detection.
