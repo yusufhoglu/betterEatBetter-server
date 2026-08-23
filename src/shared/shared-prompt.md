@@ -1,10 +1,4 @@
 # Claude Code Prompt — `src/shared/` Katmanı
-
-Aşağıdaki prompt'u olduğu gibi Claude Code'a verebilirsin. `shared-rule.md` dosyasını da
-aynı klasöre koyup prompt'ta referans ver ki Claude Code okuyup uygulasın.
-
----
-
 ## PROMPT
 
 ```
