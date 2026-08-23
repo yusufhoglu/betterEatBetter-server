@@ -102,3 +102,26 @@ model FoodCatalogItem {
 
   @@map("food_catalog_items")
 }
+
+model MealItem {
+  id        String   @id @default(uuid())
+  userId    String
+  date      DateTime @db.Date
+  mealType  String
+  entries   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date, mealType])
+  @@map("meal_items")
+}
+
+model OutboxEvent {
+  id          String    @id @default(uuid())
+  eventType   String
+  payload     Json
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+
+  @@map("outbox_events")
+}
