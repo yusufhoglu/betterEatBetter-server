@@ -1,6 +1,27 @@
-// TODO: Hedef/kilo/hiz degisince gunluk kaloriyi YENIDEN hesaplar (shared/domain/PlanCalculationService.ts'i cagirir)
+import { z } from 'zod';
+import { ValidationError } from '../../../shared/errors/ValidationError';
+import type { GoalPlan, PlanUpdaterPort } from '../ports/PlanUpdaterPort';
+
+const updateGoalSchema = z
+  .object({
+    weightKg: z.number().positive().optional(),
+    workoutsPerWeek: z.number().int().min(0).optional(),
+    goal: z.enum(['lose', 'maintain', 'gain']).optional(),
+    weeklyPaceKg: z.number().positive().optional(),
+  })
+  .refine((value) => Object.values(value).some((field) => field !== undefined), {
+    message: 'At least one goal field must be provided',
+  });
+
 export class UpdateGoal {
-  async execute(): Promise<void> {
-    throw new Error('Not implemented: UpdateGoal');
+  constructor(private readonly planUpdater: PlanUpdaterPort) {}
+
+  async execute(userId: string, changes: unknown): Promise<GoalPlan> {
+    const parsed = updateGoalSchema.safeParse(changes);
+    if (!parsed.success) {
+      throw new ValidationError('INVALID_GOAL_UPDATE', parsed.error.issues[0]?.message ?? 'Invalid goal update');
+    }
+
+    return this.planUpdater.update(userId, parsed.data);
   }
 }
