@@ -8,6 +8,7 @@ const envSchema = z.object({
 
   // BullMQ dedicated connection — must stay separate from the cache client.
   REDIS_URL: z.string().min(1),
+  REDIS_CACHE_URL: z.string().min(1),
 
   JWT_SECRET: z.string().min(32),
   JWT_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
