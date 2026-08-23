@@ -1,0 +1,27 @@
+{
+  "status": "sufficient",
+  "items": [
+    {
+      "name": "Grilled Salmon",
+      "portionGrams": 180,
+      "calories": 357,
+      "proteinGrams": 48,
+      "carbsGrams": 0,
+      "fatGrams": 17
+    },
+    {
+      "name": "Steamed Broccoli",
+      "portionGrams": 80,
+      "calories": 27,
+      "proteinGrams": 2.2,
+      "carbsGrams": 5.4,
+      "fatGrams": 0.3
+    }
+  ],
+  "macros": {
+    "totalCalories": 384,
+    "totalProteinGrams": 50.2,
+    "totalCarbsGrams": 5.4,
+    "totalFatGrams": 17.3
+  }
+}
