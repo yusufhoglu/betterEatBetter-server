@@ -9,7 +9,7 @@ describe('PrismaFoodEntryRepository (integration)', () => {
   let repository: PrismaFoodEntryRepository;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer('postgres:16-alpine').start();
+    container = await new PostgreSqlContainer('pgvector/pgvector:pg16').start();
 
     const databaseUrl = container.getConnectionUri();
     process.env.DATABASE_URL = databaseUrl;

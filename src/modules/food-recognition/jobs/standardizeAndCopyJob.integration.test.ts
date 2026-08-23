@@ -9,9 +9,12 @@ import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { Queue } from 'bullmq';
 import sharp from 'sharp';
-import { pendingObjectKey, finalObjectKey } from '../../../shared/storage/presignedUrl';
 import type { StandardizeAndCopyJobPayload } from '../use-cases/RecognizeFromPhoto';
 import type { createWorker as CreateWorkerFn } from '../../../shared/queue/queueConnection';
+import type {
+  pendingObjectKey as PendingObjectKeyFn,
+  finalObjectKey as FinalObjectKeyFn,
+} from '../../../shared/storage/presignedUrl';
 
 /**
  * Integration test for standardizeAndCopyJob.
@@ -26,12 +29,28 @@ import type { createWorker as CreateWorkerFn } from '../../../shared/queue/queue
  * afterward has no effect on an already-loaded connection. `createWorker` is
  * therefore imported dynamically below, after the Redis testcontainer starts
  * and REDIS_URL is set, rather than via a static top-level import.
+ *
+ * `shared/storage/presignedUrl` must be imported dynamically for the exact
+ * same reason, even though it looks unrelated to Redis: it pulls in
+ * `objectStorageClient.ts`, which imports `shared/config/env.ts` — the same
+ * module `queueConnection`'s Redis connection reads `REDIS_URL` from. A
+ * *static* top-level import of `presignedUrl` would load (and freeze) `env`
+ * before this file's `beforeAll` sets `REDIS_URL` to the testcontainer's
+ * port, so the later dynamic import of `createWorker` would silently pick up
+ * the already-cached `env` with the stale `REDIS_URL` (jest.setup.ts's
+ * `redis://localhost:6379` fallback) — the worker would then try to connect
+ * to a Redis that isn't running while `queue.add()` (a separate, explicit
+ * connection) talks to the real testcontainer, so the job is enqueued but
+ * never picked up. This was the actual bug behind a `standardizeAndCopyJob`
+ * test hang before this fix.
  */
 describe('standardizeAndCopyJob — storage integration', () => {
   let minioContainer: StartedTestContainer;
   let redisContainer: StartedRedisContainer;
   let s3: S3Client;
   let createWorker: typeof CreateWorkerFn;
+  let pendingObjectKey: typeof PendingObjectKeyFn;
+  let finalObjectKey: typeof FinalObjectKeyFn;
   const BUCKET = 'test-bucket';
   const TEST_QUEUE = 'test-standardize-and-copy';
 
@@ -63,8 +82,10 @@ describe('standardizeAndCopyJob — storage integration', () => {
     redisContainer = await new RedisContainer('redis:7-alpine').start();
     process.env.REDIS_URL = redisContainer.getConnectionUrl();
 
-    // Must be set before queueConnection (and the env it reads) is first imported.
+    // Must be set before queueConnection/presignedUrl (and the env they both
+    // transitively read) are first imported — see the module-doc comment above.
     ({ createWorker } = await import('../../../shared/queue/queueConnection'));
+    ({ pendingObjectKey, finalObjectKey } = await import('../../../shared/storage/presignedUrl'));
   }, 120_000);
 
   afterAll(async () => {
