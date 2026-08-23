@@ -23,6 +23,7 @@
     "@bull-board/api": "^5.21.0",
     "@bull-board/express": "^5.21.0",
     "@prisma/client": "^5.15.0",
+    "argon2": "^0.40.3",
     "bullmq": "^5.7.0",
     "cockatiel": "^3.2.1",
     "express": "^4.19.2",
