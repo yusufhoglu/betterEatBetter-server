@@ -21,6 +21,12 @@ const envSchema = z.object({
 
   RAG_SERVICE_URL: z.string().min(1),
 
+  // food-recognition module settings
+  LLM_SERVICE_URL: z.string().url().default('http://localhost:11434'),
+  OPEN_FOOD_FACTS_URL: z.string().url().default('https://world.openfoodfacts.org'),
+  MAX_PHOTO_SIZE_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
+  PHOTO_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
+
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 

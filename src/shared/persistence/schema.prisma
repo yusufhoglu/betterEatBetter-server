@@ -39,3 +39,32 @@ model RefreshToken {
   @@index([userId])
   @@map("refresh_tokens")
 }
+
+// food-recognition module: persists async photo recognition results.
+// ONLY the photo flow writes here — barcode/text/search are synchronous and
+// return results directly without persistent storage.
+model FoodEntry {
+  id         String   @id               // = mealPhotoId (deterministic job id)
+  userId     String
+  status     String                     // 'processing' | 'completed' | 'insufficient_data' | 'failed'
+  resultJson Json?                      // Python RAG raw result (items, macros, needsUserAction)
+  errorCode  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@map("food_entries")
+}
+
+// Pre-imported USDA FoodData Central data.
+// Populated once via: npm run import:usda
+// Full-text search uses Postgres GIN index on the name column.
+model FoodCatalogItem {
+  id              String @id @default(uuid())
+  name            String
+  caloriesPer100g Float
+  proteinPer100g  Float
+  carbsPer100g    Float
+  fatPer100g      Float
+
+  @@map("food_catalog_items")
+}
