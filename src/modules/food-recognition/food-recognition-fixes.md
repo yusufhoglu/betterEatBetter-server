@@ -104,3 +104,94 @@ REDIS_URL ile oluyor.
 Sadece `src/modules/food-recognition/` ve `src/shared/persistence/` (migration
 dosyaları + `schema.prisma` — GIN index için gerekliydi) içine dokunuldu, başka
 modül değiştirilmedi.
+
+---
+
+## 5. `standardizeAndCopyJob.integration.test.ts` — 60sn timeout (gerçek bug, Docker mevcut olan bir ortamda bulundu)
+
+### Kök neden neydi
+
+**Gerçek bir bug'dı, meşru bir yavaşlık değil.** Docker artık mevcut olan bu
+ortamda `npm run test:integration` çalıştırıldığında bu tek test 60sn'de
+timeout'a düşüyordu (aynı testte diğer 14 integration suite'i, `onboarding-plan`
+dahil, sorunsuz geçiyordu). Teşhis: testin `beforeAll`/`it` gövdesine geçici
+zaman damgalı `console.log`'lar ve worker'a `on('error')`/`on('failed')`
+event listener'ları eklenip test tekrar çalıştırıldı (Jest console çıktısını
+suite bitene/timeout'a kadar buffer'ladığı için, önce testin tamamen
+takılmadığını, sonsuz bir hata döngüsünde olduğunu bu şekilde doğrulamak
+gerekti).
+
+Bulunan: worker, job'ı HİÇ almıyordu — bunun yerine saniyede onlarca kez
+`AggregateError` (bağlantı reddedildi) fırlatıyordu, yani gerçek testcontainer
+Redis'ine değil `localhost:6379`'a bağlanmaya çalışıyordu.
+
+Kök neden — modül önbelleği (`require`/`import` cache) zehirlenmesi:
+`standardizeAndCopyJob.integration.test.ts` dosyasının en üstünde şu STATİK
+import vardı:
+
+```ts
+import { pendingObjectKey, finalObjectKey } from '../../../shared/storage/presignedUrl';
+```
+
+`presignedUrl.ts` → `objectStorageClient.ts` → `shared/config/env.ts` zincirini
+DOLAYLI olarak import ediyor. Bu, dosyanın en üstünde, yani `beforeAll` henüz
+Redis testcontainer'ını başlatıp `process.env.REDIS_URL`'i set etmeden ÖNCE
+çalışıyor — yani `env.ts`'in `envSchema.parse(process.env)`'i, `REDIS_URL` hâlâ
+`jest.setup.ts`'in fallback değeri (`redis://localhost:6379`) iken donuyor.
+
+Testin kendi yorumu zaten `createWorker`'ın `beforeAll` içinde, `REDIS_URL` set
+edildikten SONRA dinamik `import(...)` ile yüklenmesi gerektiğini doğru şekilde
+belirtiyordu — ama `env.ts` modülü o noktada zaten (yukarıdaki statik import
+zinciri yüzünden) modül önbelleğine düşmüş oluyordu. Dinamik
+`import('.../queueConnection')`, Node'un modül önbelleğinden AYNI (donmuş,
+eski `REDIS_URL`'li) `env` nesnesini alıyor — worker bu yüzden testcontainer'a
+değil `localhost:6379`'a bağlanmaya çalışıyordu (ki orada hiçbir şey
+dinlemediği için bağlantı reddediliyordu, sonsuz retry). Bu arada `queue.add()`
+ayrı, doğrudan kurulmuş bir `IORedis` bağlantısı kullandığı için testcontainer'a
+doğru bağlanıyor, job kuyruğa gerçekten ekleniyor — ama onu dinleyen worker
+YANLIŞ Redis'e bakıyor olduğu için asla göremiyordu.
+
+### Ne yapıldı
+
+Kod hatası düzeltildi (timeout artırılmadı — artırmak semptomu gizlerdi, kökü
+çözmezdi). `pendingObjectKey`/`finalObjectKey`, `createWorker` ile birebir aynı
+muameleyi görecek şekilde STATİK importtan dinamik importa çevrildi —
+`beforeAll` içinde, `REDIS_URL` set edildikten SONRA:
+
+```ts
+({ createWorker } = await import('../../../shared/queue/queueConnection'));
+({ pendingObjectKey, finalObjectKey } = await import('../../../shared/storage/presignedUrl'));
+```
+
+Teşhis için eklenen geçici `console.log`/timestamp'ler ve worker event
+listener'ları tamamen kaldırıldı — kalıcı bir iz bırakılmadı. Testin iş
+mantığı (indirme → sharp resize → upload → `srcKey` SİLİNMEZ → assertion'lar)
+tek bir satır bile değişmeden bırakıldı.
+
+### Rule dosyasındaki hangi kurala karşılık geldiği
+
+`food-recognition-rule.md`'nin "COPY, MOVE DEĞİL" kuralına (pending dosyanın
+silinmemesi gerektiği) hiç dokunulmadı — bu doğrulama zaten testin son iki
+assertion'ında (`pendingHead`) aynen duruyor. Bu, `shared-rule.md`'nin
+"container bağımlı modülleri `beforeAll` içinde, env set edildikten SONRA
+dinamik `import(...)` ile yükleyin" kuralının, tek bir dosyanın DEĞİL, o
+dosyanın transitively import ettiği HER ŞEYİN aynı kurala tabi olması
+gerektiğini gösteren somut bir örnek — kural dosyasına ek bir not olarak
+değerlendirilebilir ama bu tur sadece testi düzeltti, rule dosyasını
+güncellemedi (kapsam dışı).
+
+### Test sonuçları
+
+| Komut | Sonuç |
+|---|---|
+| `npx tsc --noEmit` | ✅ temiz |
+| `standardizeAndCopyJob.integration.test.ts` (tek başına) | ✅ 1/1 geçti (32.6s toplam, gerçek job işleme süresi 110ms — önceki 60sn+ takılma tamamen ortadan kalktı) |
+| `npm run test:integration` (repo geneli, tam koşum) | ✅ 15/15 suite, 29/35 test geçti, 6 todo, 0 fail (identity, onboarding-plan, food-recognition'ın diğer tüm testleri dahil) |
+
+### Bilinçli sapma var mı
+
+Yok. Prompt'un istediği gibi önce kök neden bulundu (geçici log'larla
+doğrulandı), gerçek bir bug olduğu netleşince timeout artırma yoluna
+GİDİLMEDİ, gerçek kod hatası düzeltildi; iş mantığına (`standardizeAndCopyJob.ts`
+prodüksiyon dosyasına) hiç dokunulmadı, sadece test dosyasındaki import
+zamanlaması değişti.

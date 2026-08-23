@@ -148,3 +148,20 @@ Referans: `backend-architecture.md` §3 ve §6.
 - Repository metodları OPSİYONEL bir transaction client parametresi kabul eder — outbox
   pattern gereken yerlerde (kayıt + event aynı transaction) bu kullanılır, verilmezse
   repository kendi bağlantısını kullanır.
+- **Outbox tablosu — genel/paylaşılan** (`shared/persistence/outbox.ts` + Prisma modeli):
+  ```
+  OutboxEvent: id, eventType (string), payload (Json), createdAt, processedAt (DateTime?)
+  ```
+  `publishEvent(tx, eventType, payload)` yardımcı fonksiyonu, verilen transaction client'ı
+  ile aynı transaction içinde bir `OutboxEvent` satırı yazar. Bu tablo `shared/`'de çünkü
+  birden fazla modülün (yayıncı + dinleyici farklı modüller) kullanacağı bir mekanizma —
+  domain'e özel pure logic değil, altyapısal bir pattern, YAGNI kuralı burada uygulanmaz.
+  Event'lerin İŞLENMESİ (okunup ilgili modüle dağıtılması) ayrı bir mekanizma/worker
+  gerektirir — bu, event'i ilk tüketen modülün turunda (örn. `body-analytics`) detaylandırılır.
+- **KRİTİK — Postgres testcontainer image'ı**: `schema.prisma`'nın migration'ı
+  `CREATE EXTENSION IF NOT EXISTS "vector"` (pgvector) içeriyor. Bu yüzden HERHANGİ bir
+  integration testte `PostgreSqlContainer` kullanılırken düz `postgres:16-alpine` image'ı
+  KULLANILMAZ — migration adımı bu extension'ı bulamayıp patlar. Her zaman
+  **`pgvector/pgvector:pg16`** (resmi pgvector image'ı, postgres:16 ile birebir uyumlu)
+  kullanılır. Bu kural TÜM modüllerin Postgres testcontainer'larına uygulanır, sadece
+  food-recognition'a özgü değil.
