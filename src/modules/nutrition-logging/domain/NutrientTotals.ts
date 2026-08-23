@@ -1,3 +1,6 @@
-// TODO: {kcal, carbsG, proteinG, fatG} value object
 export interface NutrientTotals {
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
 }

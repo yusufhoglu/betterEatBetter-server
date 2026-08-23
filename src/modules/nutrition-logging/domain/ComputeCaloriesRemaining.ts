@@ -1,4 +1,7 @@
-// TODO: goal - consumed (pure, trivial ama merkezi)
-export function ComputeCaloriesRemaining(): void {
-  throw new Error('Not implemented: ComputeCaloriesRemaining');
+export function ComputeCaloriesRemaining(goal: number | null, consumed: number): number | null {
+  if (goal === null) {
+    return null;
+  }
+
+  return Math.max(goal - consumed, 0);
 }
