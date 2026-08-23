@@ -1,10 +1,39 @@
-// TODO: modeller modul rule dosyalarina gore eklenecek. pgvector extension RAG embedding icin kullanilacak.
+// Ozellik modullerinin semalari ayri promptlarda eklenecek. pgvector extension
+// RAG embedding / benzer yemek aramasi icin kullanilacak (bkz backend-architecture.md SS5).
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
   extensions = [vector]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+// Opaque, DB-stored token (not a JWT) — required for rotation + reuse detection.
+// Only the hash is persisted so a DB leak alone can't be used to impersonate a user.
+model RefreshToken {
+  id           String    @id @default(uuid())
+  userId       String
+  tokenHash    String    @unique
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
 }
