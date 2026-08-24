@@ -130,6 +130,24 @@ describe('OpenAiProvider', () => {
     );
   });
 
+  it('uses request.model when provided instead of the provider default', async () => {
+    createMock.mockResolvedValue({
+      choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+
+    const provider = new OpenAiProvider({ apiKey: 'test-key', model: 'provider-default-model' });
+
+    await provider.complete({
+      model: 'request-level-model',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'request-level-model' }),
+    );
+  });
+
   it('streams text deltas via streamComplete', async () => {
     async function* fakeStream() {
       yield { choices: [{ delta: { content: 'Hello' } }] };

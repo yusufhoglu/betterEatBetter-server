@@ -40,7 +40,7 @@ export class AnthropicProvider implements LlmClient {
 
   async complete(request: LlmCompleteRequest): Promise<LlmCompleteResponse> {
     const response = await this.client.messages.create({
-      model: this.model,
+      model: request.model ?? this.model,
       max_tokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
       temperature: request.temperature,
       system: request.system,
@@ -64,7 +64,7 @@ export class AnthropicProvider implements LlmClient {
 
   async *streamComplete(request: LlmStreamCompleteRequest): AsyncIterable<string> {
     const stream = this.client.messages.stream({
-      model: this.model,
+      model: request.model ?? this.model,
       max_tokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
       temperature: request.temperature,
       system: request.system,

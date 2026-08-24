@@ -125,6 +125,25 @@ describe('AnthropicProvider', () => {
     expect(createMock).toHaveBeenCalledWith(expect.objectContaining({ tool_choice: { type: 'tool', name: 'report_result' } }));
   });
 
+  it('uses request.model when provided instead of the provider default', async () => {
+    createMock.mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+
+    const provider = new AnthropicProvider({ apiKey: 'test-key', model: 'provider-default-model' });
+
+    await provider.complete({
+      model: 'request-level-model',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'request-level-model' }),
+    );
+  });
+
   it('streams text deltas via streamComplete', async () => {
     async function* fakeEvents() {
       yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hello' } };

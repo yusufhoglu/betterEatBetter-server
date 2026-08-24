@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { z } from 'zod';
 
 const envSchema = z.object({
@@ -23,11 +24,21 @@ const envSchema = z.object({
 
   // food-recognition module settings
   LLM_SERVICE_URL: z.string().url().default('http://localhost:11434'),
+  CHATBOT_MODEL: z.string().optional().default('gpt-4o'),
+  FOOD_TEXT_MODEL: z.string().optional().default('gpt-4o-mini'),
   OPEN_FOOD_FACTS_URL: z.string().url().default('https://world.openfoodfacts.org'),
   MAX_PHOTO_SIZE_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
   PHOTO_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
+  FOOD_ENTRY_CLEANUP_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 60 * 1000),
+  FOOD_ENTRY_CLEANUP_MAX_AGE_HOURS: z.coerce.number().int().positive().default(24),
+  FOOD_ENTRY_CLEANUP_BATCH_SIZE: z.coerce.number().int().positive().default(100),
+  MAX_TOOL_TURNS: z.coerce.number().int().positive().default(5),
+  MAX_CONTEXT_MESSAGES: z.coerce.number().int().positive().default(20),
 
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  LOKI_URL: z.string().url().optional(),
+  LOKI_USER_ID: z.string().optional(),
+  LOKI_API_TOKEN: z.string().optional(),
 
   // shared/llm — provider-agnostic LLM client (see shared/llm/llmClientFactory.ts).
   LLM_PROVIDER: z.enum(['openai', 'anthropic']),

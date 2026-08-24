@@ -12,7 +12,7 @@ const logger = createModuleLogger('errorMapper');
  */
 export function errorMapperMiddleware(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction,
 ): void {
@@ -21,10 +21,28 @@ export function errorMapperMiddleware(
   }
 
   if (err instanceof DomainError) {
-    res.status(err.httpStatus).json({ code: err.code, message: err.message });
+    logger.warn(
+      {
+        err,
+        method: req.method,
+        path: req.originalUrl,
+        httpStatus: err.httpStatus,
+        code: err.code,
+      },
+      'domain error mapped to http response',
+    );
+    res.status(err.httpStatus).json({
+      error: { code: err.code, message: err.message },
+      code: err.code,
+      message: err.message,
+    });
     return;
   }
 
   logger.error({ err }, 'unhandled error');
-  res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Something went wrong' });
+  res.status(500).json({
+    error: { code: 'INTERNAL_ERROR', message: 'Something went wrong' },
+    code: 'INTERNAL_ERROR',
+    message: 'Something went wrong',
+  });
 }

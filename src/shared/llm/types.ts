@@ -43,6 +43,8 @@ export interface LlmUsage {
 
 export interface LlmCompleteRequest {
   readonly messages: LlmMessage[];
+  /** Optional per-request override; falls back to the provider default model. */
+  readonly model?: string;
   readonly system?: string;
   readonly tools?: LlmToolDefinition[];
   readonly forceToolChoice?: LlmForceToolChoice;
@@ -60,6 +62,8 @@ export interface LlmCompleteResponse {
 
 export interface LlmStreamCompleteRequest {
   readonly messages: LlmMessage[];
+  /** Optional per-request override; falls back to the provider default model. */
+  readonly model?: string;
   readonly system?: string;
   readonly maxTokens?: number;
   readonly temperature?: number;

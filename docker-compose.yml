@@ -56,8 +56,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Web console
+      - "9000:9000"
+      - "9001:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -72,23 +72,22 @@ volumes:
   redis_cache_data:
   minio_data:
 
-# Kullanım:
+# Usage:
 #   docker compose up -d
-#   docker compose down          (container'ları durdurur, veri kalır)
-#   docker compose down -v       (container'ları VE verileri siler, temiz başlangıç)
+#   docker compose down
+#   docker compose down -v
 #
-# .env dosyanızda bu servislere karşılık gelen değerler:
+# Matching local .env values:
 #   DATABASE_URL=postgresql://app:app@localhost:5432/food_tracking
 #   REDIS_URL=redis://localhost:6379
 #   REDIS_CACHE_URL=redis://localhost:6380
-#   R2_ENDPOINT=http://localhost:9000
-#   R2_ACCESS_KEY=minioadmin
-#   R2_SECRET_KEY=minioadmin
-#   (R2_BUCKET adını MinIO konsolundan (localhost:9001) elle oluşturmanız gerekir,
-#    gerçek R2'de bunu Cloudflare dashboard'undan yapıyorsunuz)
 #
-# NOT: Bu dosya, testcontainers'ın kullandığı GEÇİCİ container'lardan farklı bir
-# amaca hizmet eder — bu servisler sürekli açık kalır, geliştirme sırasında
-# uygulamayı manuel çalıştırıp denemek için kullanılır. Testler (npm run
-# test:integration) kendi izole container'larını testcontainers ile ayrıca açar,
-# bu docker-compose servislerini KULLANMAZ.
+# Notes:
+# - This backend currently builds the object storage endpoint from R2_ACCOUNT_ID,
+#   so it expects real Cloudflare R2 credentials in .env.
+# - MinIO is kept here as a local S3-compatible service for future local storage
+#   work and for manual experimentation, but the current app code does not use it
+#   without additional changes.
+# - The Python RAG service behind RAG_SERVICE_URL is not included in this repo
+#   and must be run separately if you want photo recognition to work locally.
+# - Integration tests still use isolated Testcontainers services, not this compose file.

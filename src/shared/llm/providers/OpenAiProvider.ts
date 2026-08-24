@@ -37,7 +37,7 @@ export class OpenAiProvider implements LlmClient {
 
   async complete(request: LlmCompleteRequest): Promise<LlmCompleteResponse> {
     const response = await this.client.chat.completions.create({
-      model: this.model,
+      model: request.model ?? this.model,
       messages: toOpenAiMessages(request),
       tools: request.tools?.map(toOpenAiTool),
       tool_choice: toOpenAiToolChoice(request),
@@ -65,7 +65,7 @@ export class OpenAiProvider implements LlmClient {
 
   async *streamComplete(request: LlmStreamCompleteRequest): AsyncIterable<string> {
     const stream = await this.client.chat.completions.create({
-      model: this.model,
+      model: request.model ?? this.model,
       messages: toOpenAiMessages(request),
       max_tokens: request.maxTokens,
       temperature: request.temperature,

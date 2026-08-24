@@ -142,7 +142,52 @@ Referans: `backend-architecture.md` §3 ve §6.
   `circuit_breaker_state`, `nutrition_low_confidence_total`.
 - `GET /metrics` endpoint'i public DEĞİLDİR — internal network'e kapalı ya da auth'lu olmalı.
 
-## Persistence (`persistence/`)
+## LLM Client (`llm/`) — sağlayıcı-agnostik, çok amaçlı
+
+- Bu, sadece `chatbot`'un değil, birden fazla modülün (food-recognition'ın text
+  tahmini, body-analytics'in insight üretimi, ileride başka özellikler) paylaştığı
+  bir ALTYAPI client'ı — `prisma`/`cacheRedisClient` ile aynı katman, `shared/`'de
+  yaşaması bilinçli (YAGNI kuralı burada uygulanmaz, tıpkı outbox gibi).
+- **Kanonik mesaj formatı**: `LlmMessage: { role: 'system'|'user'|'assistant'|'tool';
+  content: string; toolCallId?: string; toolCalls?: {id, name, input}[] }`. Her
+  sağlayıcı adapter'ı KENDİ formatına bu kanonik formattan ÇEVİRİR — modüller hiçbir
+  zaman sağlayıcıya özel bir tip görmez.
+- **İki metod**: `complete(request): Promise<LlmCompleteResponse>` (tool-calling
+  turları ve tek seferlik/yapılandırılmış istekler için) ve
+  `streamComplete(request): AsyncIterable<string>` (SADECE son, araç çağrısı
+  içermeyen metin yanıtı için — chatbot akışı: tool-calling turları `complete()` ile
+  loop'lanır, tool çağrısı kalmayınca SON turda `streamComplete()`'e geçilir).
+- **Structured output — "zorla tool çağrısı" hilesi**: native JSON mode KULLANILMAZ
+  (sağlayıcılar arası garanti farklı). Bunun yerine, yapılandırılmış çıktı isteyen her
+  çağrı, sahte bir "sonucu bildir" tool'u tanımlar ve `forceToolChoice` ile modelin
+  BUNU çağırmasını zorunlu kılar — bu teknik TÜM sağlayıcılarda güvenilir çalışır,
+  sağlayıcı değişince kod değişmez.
+- **Sağlayıcı seçimi**: `LLM_PROVIDER` env değişkeni (`openai|anthropic|deepseek`),
+  `createLlmClient()` factory fonksiyonu doğru adapter'ı döner. Yeni sağlayıcı eklemek
+  = yeni bir `providers/xProvider.ts` dosyası, başka hiçbir yer DEĞİŞMEZ.
+- Her çağrı `shared/resilience/policies.ts`'teki cockatiel policy ile sarmalanır
+  (circuit breaker + retry + timeout) — LLM çağrıları da bir "dış entegrasyon".
+- **Maliyet takibi**: her `complete()`/`streamComplete()` çağrısı opsiyonel bir
+  `feature: string` alanı alır (`'chatbot'`, `'food-recognition-text'` gibi) —
+  `llm_tokens_total{provider, feature, type}` (Counter, `shared/observability/
+  metrics.ts`) bu etikete göre artırılır, hangi özelliğin ne kadar token yaktığı
+  ayrı ayrı görünür olur.
+- Modüller `LlmClient`'ı DOĞRUDAN kullanmaz — her modül kendi dar Port'unu tanımlar
+  (`chatbot/LlmChatPort`, `food-recognition/TextEstimatorPort` gibi), o Port'un
+  adapter'ı bu shared client'ı çağırır (kural: kullanan tanımlar, `objectStorageClient`
+  ↔ `ImageStoragePort` ayrımıyla birebir aynı desen).
+- **Özellik-bazlı model seçimi**: `OPENAI_MODEL`/`ANTHROPIC_MODEL` sadece sağlayıcı
+  seviyesinde bir VARSAYILAN'dır. Her tüketici modül, kendi `complete()`/
+  `streamComplete()` çağrısında `model` parametresini KENDİ özellik-bazlı env
+  değişkeninden geçirir — sağlayıcıdan BAĞIMSIZ isimlendirilir (`OPENAI_`/`ANTHROPIC_`
+  öneki YOK), çünkü sağlayıcı değişse bile bu değişkenin anlamı aynı kalmalı:
+  - `CHATBOT_MODEL` (varsayılan `gpt-4o`) — kullanıcıyla doğrudan sohbet, kalite öncelikli
+  - `FOOD_TEXT_MODEL` (varsayılan `gpt-4o-mini`) — yapılandırılmış/basit metin
+    tahmini (`food-recognition/RecognizeFromText`), maliyet öncelikli
+  Yeni bir LLM-tüketen özellik eklendiğinde, aynı desenle kendi
+  `{ÖZELLİK}_MODEL` değişkenini tanımlar — `shared/config/env.ts`'e eklenir.
+
+
 
 - ORM: **Prisma**. Tek `prisma` client instance'ı, tüm modüller paylaşır.
 - Repository metodları OPSİYONEL bir transaction client parametresi kabul eder — outbox
