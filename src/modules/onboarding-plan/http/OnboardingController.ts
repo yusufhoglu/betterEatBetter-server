@@ -8,7 +8,7 @@ const dateOfBirthSchema = z.string().datetime({ offset: true }).or(z.string().da
 const completeOnboardingSchema = z
   .object({
     weightKg: z.number().positive(),
-    targetWeightKg: z.number().positive(),
+    targetWeightKg: z.number().positive().optional(),
     heightCm: z.number().positive(),
     age: z.number().int().positive().optional(),
     dateOfBirth: dateOfBirthSchema.optional(),
