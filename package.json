@@ -21,6 +21,7 @@
     "prisma:migrate": "prisma migrate dev"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "@aws-sdk/client-s3": "^3.600.0",
     "@aws-sdk/s3-request-presigner": "^3.600.0",
     "@bull-board/api": "^5.21.0",
@@ -35,6 +36,7 @@
     "express": "^4.19.2",
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
+    "openai": "^7.5.0",
     "pino": "^9.2.0",
     "prom-client": "^15.1.2",
     "sharp": "^0.35.3",

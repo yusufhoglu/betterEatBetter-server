@@ -28,6 +28,30 @@ const envSchema = z.object({
   PHOTO_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
 
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+
+  // shared/llm — provider-agnostic LLM client (see shared/llm/llmClientFactory.ts).
+  LLM_PROVIDER: z.enum(['openai', 'anthropic']),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().optional().default('gpt-4o'),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().optional().default('claude-sonnet-4-6'),
+}).superRefine((data, ctx) => {
+  // Only the selected provider's key is mandatory — the other provider's key
+  // stays optional, since a deployment only ever calls the one it configured.
+  if (data.LLM_PROVIDER === 'openai' && !data.OPENAI_API_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['OPENAI_API_KEY'],
+      message: "OPENAI_API_KEY is required when LLM_PROVIDER='openai'",
+    });
+  }
+  if (data.LLM_PROVIDER === 'anthropic' && !data.ANTHROPIC_API_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ANTHROPIC_API_KEY'],
+      message: "ANTHROPIC_API_KEY is required when LLM_PROVIDER='anthropic'",
+    });
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;
