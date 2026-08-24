@@ -12,7 +12,7 @@ export type MealRange = (typeof mealRanges)[number];
 export const measurementRanges = ['1W', '1M', '3M', '6M', '1Y', 'All'] as const;
 export type MeasurementRange = (typeof measurementRanges)[number];
 
-export const mealAnalyticsMetrics = ['calories', 'proteinG', 'carbsG', 'fatG'] as const;
+export const mealAnalyticsMetrics = ['calories', 'proteinG', 'carbsG', 'fatG', 'fiberG'] as const;
 export type MealAnalyticsMetric = (typeof mealAnalyticsMetrics)[number];
 
 export type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -68,6 +68,7 @@ export interface MealLogEntry {
   proteinG: number;
   carbsG: number;
   fatG: number;
+  fiberG?: number;
 }
 
 export interface MealLogReadModel {

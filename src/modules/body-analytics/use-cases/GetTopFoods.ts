@@ -18,6 +18,8 @@ export class GetTopFoods {
       }
     }
 
-    return [...counts.values()].sort((left, right) => right.logCount - left.logCount).slice(0, 10);
+    return [...counts.values()]
+      .sort((left, right) => right.logCount - left.logCount)
+      .slice(0, 10);
   }
 }

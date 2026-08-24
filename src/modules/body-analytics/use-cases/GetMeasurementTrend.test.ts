@@ -42,5 +42,6 @@ describe('GetMeasurementTrend', () => {
     expect(result.current).toBe(79);
     expect(result.deltaIsGood).toBe(true);
     expect(result.points).toHaveLength(2);
+    expect(result.points[0]?.date).toBe('2026-08-20T00:00:00.000Z');
   });
 });

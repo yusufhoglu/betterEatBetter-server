@@ -20,7 +20,7 @@ export function assertMealSlot(value: string): asserts value is MealSlot {
 }
 
 export function assertMealMetric(value: string): asserts value is MealAnalyticsMetric {
-  if (!['calories', 'proteinG', 'carbsG', 'fatG'].includes(value)) {
+  if (!['calories', 'proteinG', 'carbsG', 'fatG', 'fiberG'].includes(value)) {
     throw new ValidationError('INVALID_METRIC', 'Unsupported meal analytics metric');
   }
 }
@@ -39,7 +39,13 @@ export function unitForMetric(metric: BodyMeasurementMetric): string {
   }
 }
 
-export function sumEntries(logs: MealLogReadModel[]): { calories: number; proteinG: number; carbsG: number; fatG: number } {
+export function sumEntries(logs: MealLogReadModel[]): {
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  fiberG: number;
+} {
   return logs.reduce(
     (acc, log) => {
       for (const entry of log.entries) {
@@ -47,15 +53,19 @@ export function sumEntries(logs: MealLogReadModel[]): { calories: number; protei
         acc.proteinG += entry.proteinG;
         acc.carbsG += entry.carbsG;
         acc.fatG += entry.fatG;
+        acc.fiberG += entry.fiberG ?? 0;
       }
       return acc;
     },
-    { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+    { calories: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0 },
   );
 }
 
 export function sumEntryMetric(entries: MealLogEntry[], metric: MealAnalyticsMetric): number {
-  return entries.reduce((total, entry) => total + (metric === 'calories' ? entry.calories : entry[metric]), 0);
+  return entries.reduce(
+    (total, entry) => total + (metric === 'calories' ? entry.calories : (entry[metric] ?? 0)),
+    0,
+  );
 }
 
 export function toDateKey(date: Date): string {

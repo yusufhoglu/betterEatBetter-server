@@ -15,9 +15,7 @@ export class GetMealAverages {
       caloriesAvg: Math.round(totals.calories / dayCount),
       proteinAvgG: Math.round(totals.proteinG / dayCount),
       carbsAvgG: Math.round(totals.carbsG / dayCount),
-      // Fiber is not present in the current meal event payload, so expose the
-      // absence of data explicitly instead of fabricating a numeric value.
-      fiberAvgG: null,
+      fiberAvgG: Math.round(totals.fiberG / dayCount),
     };
   }
 }

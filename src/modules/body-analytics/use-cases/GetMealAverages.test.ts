@@ -28,7 +28,7 @@ describe('GetMealAverages', () => {
       caloriesAvg: 260,
       proteinAvgG: 29,
       carbsAvgG: 1,
-      fiberAvgG: null,
+      fiberAvgG: 0,
     });
   });
 });

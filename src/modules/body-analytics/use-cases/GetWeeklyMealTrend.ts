@@ -35,7 +35,9 @@ export class GetWeeklyMealTrend {
             ? plan?.proteinG ?? 0
             : metric === 'carbsG'
               ? plan?.carbsG ?? 0
-              : plan?.fatG ?? 0,
+              : metric === 'fatG'
+                ? plan?.fatG ?? 0
+                : 0,
     };
   }
 }

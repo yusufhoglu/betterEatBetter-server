@@ -56,7 +56,7 @@ function buildController(): BodyAnalyticsController {
   const dailyTrackingPort = new DailyTrackingAdapter(getTodayStatus);
 
   return new BodyAnalyticsController(
-    new GetBodyStats(bodyMeasurementRepository, profilePort),
+    new GetBodyStats(bodyMeasurementRepository, silhouetteProfileRepository, profilePort),
     new ListBodyMeasurements(bodyMeasurementRepository),
     new AddBodyMeasurement(bodyMeasurementRepository),
     new UpdateBodyMeasurement(bodyMeasurementRepository),
@@ -84,6 +84,7 @@ export function bodyAnalyticsRoutes(): Router {
   router.patch('/body-profile', authMiddleware, controller.handlePatchBodyProfile);
   router.get('/waist-height-ratio', authMiddleware, controller.handleGetWaistHeightRatio);
   router.get('/goal-progress', authMiddleware, controller.handleGetGoalProgress);
+  router.get('/goal/progress', authMiddleware, controller.handleGetGoalProgress);
   router.get('/meals/averages', authMiddleware, controller.handleGetMealAverages);
   router.get('/meals/weekly', authMiddleware, controller.handleGetWeeklyMealTrend);
   router.get('/meals/breakdown', authMiddleware, controller.handleGetMealBreakdown);

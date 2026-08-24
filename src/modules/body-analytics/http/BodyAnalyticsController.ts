@@ -17,12 +17,13 @@ import type { GetWeeklyMealTrend } from '../use-cases/GetWeeklyMealTrend';
 import type { ListBodyMeasurements } from '../use-cases/ListBodyMeasurements';
 import type { UpdateBodyMeasurement } from '../use-cases/UpdateBodyMeasurement';
 import type { UpdateBodySilhouetteProfile } from '../use-cases/UpdateBodySilhouetteProfile';
+import { assertBodyMeasurementMetric, assertMealMetric } from '../use-cases/bodyAnalyticsShared';
 
 const measurementSchema = z.object({
   metric: z.enum(['weight', 'bodyFat', 'waist', 'neck', 'hip', 'muscleMass']),
   value: z.number().positive(),
   unit: z.string().min(1),
-  date: z.string().datetime({ offset: true }).or(z.string().date()),
+  date: z.string().datetime({ offset: true }).or(z.string().date()).optional(),
 });
 
 const updateMeasurementSchema = z.object({
@@ -60,6 +61,23 @@ export class BodyAnalyticsController {
     private readonly getMealCorrelation: GetMealCorrelation,
   ) {}
 
+  private normalizeMealMetric(metric: string): 'calories' | 'proteinG' | 'carbsG' | 'fatG' | 'fiberG' {
+    if (metric === 'protein') {
+      return 'proteinG';
+    }
+    if (metric === 'carbs') {
+      return 'carbsG';
+    }
+    if (metric === 'fat') {
+      return 'fatG';
+    }
+    if (metric === 'fiber') {
+      return 'fiberG';
+    }
+    assertMealMetric(metric);
+    return metric;
+  }
+
   handleGetBodyStats = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       res.status(200).json(await this.getBodyStats.execute(req.auth!.userId));
@@ -91,7 +109,7 @@ export class BodyAnalyticsController {
 
       const created = await this.addBodyMeasurement.execute(req.auth!.userId, {
         ...parsed.data,
-        date: new Date(parsed.data.date),
+        date: parsed.data.date ? new Date(parsed.data.date) : new Date(),
       });
       res.status(201).json(created);
     } catch (error) {
@@ -134,9 +152,13 @@ export class BodyAnalyticsController {
 
   handleGetMeasurementTrend = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const metric = req.query.metric as 'weight' | 'bodyFat' | 'waist' | 'muscleMass';
+      const metric = req.query.metric as string;
       const range = req.query.range as '1W' | '1M' | '3M' | '6M' | '1Y' | 'All';
-      res.status(200).json(await this.getMeasurementTrend.execute(req.auth!.userId, metric, range));
+      assertBodyMeasurementMetric(metric);
+      if (!['weight', 'bodyFat', 'waist', 'muscleMass'].includes(metric)) {
+        throw new ValidationError('INVALID_METRIC', 'Unsupported trend metric');
+      }
+      res.status(200).json(await this.getMeasurementTrend.execute(req.auth!.userId, metric as never, range));
     } catch (error) {
       next(error);
     }
@@ -189,8 +211,9 @@ export class BodyAnalyticsController {
 
   handleGetWeeklyMealTrend = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const metric = this.normalizeMealMetric(req.query.metric as string);
       res.status(200).json(
-        await this.getWeeklyMealTrend.execute(req.auth!.userId, req.query.metric as never, req.query.range as never),
+        await this.getWeeklyMealTrend.execute(req.auth!.userId, metric as never, req.query.range as never),
       );
     } catch (error) {
       next(error);
@@ -223,11 +246,14 @@ export class BodyAnalyticsController {
 
   handleGetMealCorrelation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const x = this.normalizeMealMetric(req.query.x as string);
+      const y = req.query.y as string;
+      assertBodyMeasurementMetric(y);
       res.status(200).json(
         await this.getMealCorrelation.execute(
           req.auth!.userId,
-          req.query.x as never,
-          req.query.y as never,
+          x as never,
+          y,
           req.query.range as never,
         ),
       );

@@ -13,7 +13,7 @@ export class GetMealCorrelation {
   async execute(
     userId: string,
     x: MealAnalyticsMetric,
-    y: Extract<BodyMeasurementMetric, 'weight' | 'bodyFat' | 'waist'>,
+    y: BodyMeasurementMetric,
     range: 'week' | 'month' | 'threeMonths' | 'sixMonths' | 'year' | 'allTime',
   ) {
     const { startDate, endDate } = resolveDateRange(range);

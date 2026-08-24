@@ -8,20 +8,32 @@ describe('GetDaySummary', () => {
   it('returns consumed totals even when daily targets are missing', async () => {
     const repository = new InMemoryMealItemRepository();
     const targets = new FakeDailyTargetsPort();
-    const useCase = new GetDaySummary(repository, targets);
+    const useCase = new GetDaySummary(repository, targets, async () => 'https://photos.example/entry-1.jpg');
 
     await repository.appendEntries({
       userId: 'user-1',
       date: today,
       mealType: 'breakfast',
       entries: [
-        { id: 'entry-1', name: 'Eggs', portionGrams: 120, calories: 180, proteinG: 14, carbsG: 2, fatG: 12 },
+        {
+          id: 'entry-1',
+          name: 'Eggs',
+          source: 'photo',
+          portionGrams: 120,
+          calories: 180,
+          proteinG: 14,
+          carbsG: 2,
+          fatG: 12,
+        },
       ],
     });
 
     const summary = await useCase.execute({ userId: 'user-1', date: today });
 
     expect(summary.consumed).toEqual({ calories: 180, proteinG: 14, carbsG: 2, fatG: 12 });
+    expect(summary.mealItems[0]?.photoUrl).toBe('https://photos.example/entry-1.jpg');
+    expect(summary.mealItems[0]?.photoUrls).toEqual(['https://photos.example/entry-1.jpg']);
+    expect(summary.mealItems[0]?.entries[0]?.photoUrl).toBe('https://photos.example/entry-1.jpg');
     expect(summary.dailyCalorieGoal).toBeNull();
     expect(summary.remainingCalories).toBeNull();
     expect(summary.progress.protein.goal).toBeNull();
@@ -31,7 +43,7 @@ describe('GetDaySummary', () => {
     const repository = new InMemoryMealItemRepository();
     const targets = new FakeDailyTargetsPort();
     targets.setTargets('user-1', { calories: 2200, proteinG: 160, carbsG: 220, fatG: 70 });
-    const useCase = new GetDaySummary(repository, targets);
+    const useCase = new GetDaySummary(repository, targets, async (_userId, mealPhotoId) => `https://photos.example/${mealPhotoId}.jpg`);
 
     await repository.appendEntries({
       userId: 'user-1',
@@ -56,5 +68,6 @@ describe('GetDaySummary', () => {
     expect(summary.mealItems).toHaveLength(2);
     expect(summary.consumed).toEqual({ calories: 750, proteinG: 63, carbsG: 54, fatG: 25 });
     expect(summary.remainingCalories).toBe(1450);
+    expect(summary.mealItems[0]?.photoUrls).toEqual([]);
   });
 });

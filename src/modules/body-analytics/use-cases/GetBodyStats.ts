@@ -2,6 +2,7 @@ import { computeGoalProgressFraction } from '../domain/computeGoalProgressFracti
 import { isTrendImprovement } from '../domain/trendDirectionMap';
 import type { BodyMeasurementMetric } from '../domain/bodyAnalyticsTypes';
 import type { BodyMeasurementRepositoryPort } from '../ports/BodyMeasurementRepositoryPort';
+import type { BodySilhouetteProfileRepositoryPort } from '../ports/BodySilhouetteProfileRepositoryPort';
 import type { ProfilePort } from '../ports/ProfilePort';
 
 function computeBmi(weightKg: number, heightCm: number): number {
@@ -49,6 +50,7 @@ async function computeTrend(
 export class GetBodyStats {
   constructor(
     private readonly measurementRepository: BodyMeasurementRepositoryPort,
+    private readonly silhouetteProfileRepository: BodySilhouetteProfileRepositoryPort,
     private readonly profilePort: ProfilePort,
   ) {}
 
@@ -63,10 +65,11 @@ export class GetBodyStats {
       };
     }
 
-    const [latestWeight, latestBodyFat, latestWaist] = await Promise.all([
+    const [latestWeight, latestBodyFat, latestWaist, silhouetteProfile] = await Promise.all([
       this.measurementRepository.findLatestByMetric(userId, 'weight'),
       this.measurementRepository.findLatestByMetric(userId, 'bodyFat'),
       this.measurementRepository.findLatestByMetric(userId, 'waist'),
+      this.silhouetteProfileRepository.findByUserId(userId),
     ]);
 
     const weightValue = latestWeight?.value ?? profile.weightKg;
@@ -95,7 +98,7 @@ export class GetBodyStats {
         trendIsGood: isTrendImprovement('bodyFat', bodyFatTrend, profile.goal),
       },
       waist: {
-        value: latestWaist?.value ?? null,
+        value: latestWaist?.value ?? silhouetteProfile?.waistCm ?? null,
         unit: 'cm',
         fraction: null,
         trendValue: waistTrend,
