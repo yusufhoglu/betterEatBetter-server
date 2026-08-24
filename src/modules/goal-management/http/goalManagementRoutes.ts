@@ -18,7 +18,7 @@ export function goalManagementRoutes(): Router {
   const updateGoal = new UpdateGoal(planUpdater);
   const controller = new GoalManagementController(updateGoal);
 
-  router.patch('/goal', authMiddleware, controller.handleUpdateGoal);
+  router.patch('/', authMiddleware, controller.handleUpdateGoal);
 
   return router;
 }

@@ -32,6 +32,7 @@ export interface UpdateUserProfileInput {
   weightKg?: number;
   targetWeightKg?: number | null;
   heightCm?: number;
+  age?: number;
   gender?: Gender;
   workoutsPerWeek?: number;
   goal?: Goal;

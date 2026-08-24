@@ -1,7 +1,10 @@
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { ValidationError } from '../../../shared/errors/ValidationError';
+import { createModuleLogger } from '../../../shared/observability/logger';
 import type { CompleteOnboarding } from '../use-cases/CompleteOnboarding';
+
+const logger = createModuleLogger('onboarding-controller');
 
 const dateOfBirthSchema = z.string().datetime({ offset: true }).or(z.string().date());
 
@@ -56,6 +59,7 @@ export class OnboardingController {
   handleComplete = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = req.auth!.userId;
+      logger.info({ userId, bodyKeys: Object.keys((req.body ?? {}) as Record<string, unknown>) }, 'onboarding complete request received');
       const input = parseOrThrow(completeOnboardingSchema, req.body);
       const age = input.age ?? computeAgeFromDateOfBirth(input.dateOfBirth!);
       const plan = await this.completeOnboarding.execute({
@@ -69,8 +73,10 @@ export class OnboardingController {
         goal: input.goal,
         weeklyPaceKg: input.weeklyPaceKg,
       });
+      logger.info({ userId, dailyCalories: plan.dailyCalories }, 'onboarding complete request succeeded');
       res.status(201).json(plan);
     } catch (err) {
+      logger.error({ err }, 'onboarding complete request failed');
       next(err);
     }
   };

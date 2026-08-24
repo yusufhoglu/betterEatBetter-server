@@ -7,7 +7,7 @@ import type { UserProfileRepositoryPort } from '../ports/UserProfileRepositoryPo
 
 export interface UpdatePlanChanges {
   weightKg?: number;
-  targetWeightKg?: number;
+  targetWeightKg?: number | null;
   workoutsPerWeek?: number;
   goal?: Goal;
   weeklyPaceKg?: number;

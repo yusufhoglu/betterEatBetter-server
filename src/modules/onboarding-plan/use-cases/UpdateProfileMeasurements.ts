@@ -5,6 +5,7 @@ import type { UserProfile, UserProfileRepositoryPort } from '../ports/UserProfil
 
 export interface UpdateProfileMeasurementsChanges {
   heightCm?: number;
+  age?: number;
   gender?: Gender;
 }
 
@@ -23,6 +24,7 @@ export class UpdateProfileMeasurements {
     const updatedProfile = await this.userProfileRepository.update({
       userId,
       heightCm: changes.heightCm,
+      age: changes.age,
       gender: changes.gender,
     });
 

@@ -2,7 +2,7 @@ import type { Goal } from '../../../shared/domain/PlanCalculationService';
 
 export interface UpdateGoalChanges {
   weightKg?: number;
-  targetWeightKg?: number;
+  targetWeightKg?: number | null;
   workoutsPerWeek?: number;
   goal?: Goal;
   weeklyPaceKg?: number;

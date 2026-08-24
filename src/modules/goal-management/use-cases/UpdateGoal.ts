@@ -5,7 +5,7 @@ import type { GoalPlan, PlanUpdaterPort } from '../ports/PlanUpdaterPort';
 const updateGoalSchema = z
   .object({
     weightKg: z.number().positive().optional(),
-    targetWeightKg: z.number().positive().optional(),
+    targetWeightKg: z.number().positive().nullable().optional(),
     workoutsPerWeek: z.number().int().min(0).optional(),
     goal: z.enum(['lose', 'maintain', 'gain']).optional(),
     weeklyPaceKg: z.number().positive().optional(),
