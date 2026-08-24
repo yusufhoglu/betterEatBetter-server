@@ -4,6 +4,7 @@ import { identityRoutes } from '../modules/identity/http/identityRoutes';
 import { onboardingRoutes } from '../modules/onboarding-plan/http/onboardingRoutes';
 import { goalManagementRoutes } from '../modules/goal-management/http/goalManagementRoutes';
 import { foodRecognitionRoutes } from '../modules/food-recognition/http/foodRecognitionRoutes';
+import { mediaUploadRoutes } from '../modules/food-recognition/http/mediaUploadRoutes';
 import { nutritionLoggingRoutes } from '../modules/nutrition-logging/http/nutritionLoggingRoutes';
 import { dailyTrackingRoutes } from '../modules/daily-tracking/http/dailyTrackingRoutes';
 import { bodyAnalyticsRoutes } from '../modules/body-analytics/http/bodyAnalyticsRoutes';
@@ -18,6 +19,7 @@ export function createRouter(): Router {
   router.use('/onboarding', onboardingRoutes());
   router.use('/goal', goalManagementRoutes());
   router.use('/food', foodRecognitionRoutes());
+  router.use('/media', mediaUploadRoutes());
   router.use('/nutrition-logs', nutritionLoggingRoutes());
   router.use('/tracking', dailyTrackingRoutes());
   router.use('/analytics', bodyAnalyticsRoutes());
