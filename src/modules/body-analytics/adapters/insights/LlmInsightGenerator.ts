@@ -1,4 +1,12 @@
-// TODO: Ileride: InsightGeneratorPort'un LLM implementasyonu
-export class LlmInsightGenerator {
-  // TODO: implement port contract -- see module rule doc
+import type { MealInsightCard, MealLogReadModel } from '../../domain/bodyAnalyticsTypes';
+import type { InsightGeneratorPort } from '../../ports/InsightGeneratorPort';
+
+/**
+ * Placeholder-free fallback that preserves the future extension point without
+ * introducing an LLM dependency in this round.
+ */
+export class LlmInsightGenerator implements InsightGeneratorPort {
+  generate(_logs: MealLogReadModel[]): MealInsightCard[] {
+    return [];
+  }
 }
