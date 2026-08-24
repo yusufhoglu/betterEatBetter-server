@@ -1,0 +1,4 @@
+-- No-op.
+-- The actual onboarding-profile alteration must run after
+-- 20260824000000_add_onboarding_plan_tables, because user_profiles does not
+-- exist yet during this earlier migration slot.

@@ -31,7 +31,8 @@ model UserProfile {
   userId          String   @id
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   weightKg        Float
-  targetWeightKg  Float
+  targetWeightKg  Float?
+  initialWeightKg Float
   heightCm        Float
   age             Int
   gender          String
