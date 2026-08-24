@@ -3,7 +3,8 @@ import type { Gender, Goal } from '../../../shared/domain/PlanCalculationService
 export interface UserProfile {
   userId: string;
   weightKg: number;
-  targetWeightKg: number;
+  targetWeightKg: number | null;
+  initialWeightKg: number;
   heightCm: number;
   age: number;
   gender: Gender;
@@ -16,7 +17,8 @@ export interface UserProfile {
 export interface CreateUserProfileInput {
   userId: string;
   weightKg: number;
-  targetWeightKg: number;
+  targetWeightKg: number | null;
+  initialWeightKg: number;
   heightCm: number;
   age: number;
   gender: Gender;
@@ -28,7 +30,9 @@ export interface CreateUserProfileInput {
 export interface UpdateUserProfileInput {
   userId: string;
   weightKg?: number;
-  targetWeightKg?: number;
+  targetWeightKg?: number | null;
+  heightCm?: number;
+  gender?: Gender;
   workoutsPerWeek?: number;
   goal?: Goal;
   weeklyPaceKg?: number;

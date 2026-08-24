@@ -57,6 +57,7 @@ describe('UpdatePlan', () => {
       userId: 'user-1',
       weightKg: 80,
       targetWeightKg: 72,
+      initialWeightKg: 80,
       heightCm: 180,
       age: 30,
       gender: 'male',
@@ -95,6 +96,24 @@ describe('UpdatePlan', () => {
       proteinG: 180,
       carbsG: 190,
       fatG: 62,
+    });
+  });
+
+  test('updates targetWeightKg without changing immutable initialWeightKg', async () => {
+    const { completeOnboarding, updatePlan, userProfileRepository } = buildUpdatePlan();
+    await completeOnboarding.execute(buildInput());
+
+    const updatedPlan = await updatePlan.execute('user-1', { targetWeightKg: 68 });
+    const storedProfile = await userProfileRepository.findByUserId('user-1');
+
+    expect(updatedPlan.projection).toEqual({
+      startWeightKg: 80,
+      targetWeightKg: 68,
+      estimatedTargetDate: new Date('2027-02-07T00:00:00.000Z'),
+    });
+    expect(storedProfile).toMatchObject({
+      targetWeightKg: 68,
+      initialWeightKg: 80,
     });
   });
 

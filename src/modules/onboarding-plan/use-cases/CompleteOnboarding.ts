@@ -7,7 +7,7 @@ import type { UserProfileRepositoryPort } from '../ports/UserProfileRepositoryPo
 export interface CompleteOnboardingInput {
   userId: string;
   weightKg: number;
-  targetWeightKg: number;
+  targetWeightKg?: number;
   heightCm: number;
   age: number;
   gender: Gender;
@@ -36,7 +36,8 @@ export class CompleteOnboarding {
     const profile = await this.userProfileRepository.create({
       userId: input.userId,
       weightKg: input.weightKg,
-      targetWeightKg: input.targetWeightKg,
+      targetWeightKg: input.targetWeightKg ?? null,
+      initialWeightKg: input.weightKg,
       heightCm: input.heightCm,
       age: input.age,
       gender: input.gender,

@@ -32,8 +32,12 @@ describe('PrismaPlanRepository (integration)', () => {
   }, 120_000);
 
   afterAll(async () => {
-    await prisma.$disconnect();
-    await container.stop();
+    if (prisma) {
+      await prisma.$disconnect();
+    }
+    if (container) {
+      await container.stop();
+    }
   });
 
   it('creates a plan and finds it by userId', async () => {

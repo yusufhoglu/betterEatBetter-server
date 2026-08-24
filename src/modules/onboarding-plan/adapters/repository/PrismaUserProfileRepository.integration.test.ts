@@ -39,8 +39,12 @@ describe('PrismaUserProfileRepository (integration)', () => {
   }, 120_000);
 
   afterAll(async () => {
-    await prisma.$disconnect();
-    await container.stop();
+    if (prisma) {
+      await prisma.$disconnect();
+    }
+    if (container) {
+      await container.stop();
+    }
   });
 
   it('creates a profile and finds it by userId', async () => {
@@ -48,6 +52,7 @@ describe('PrismaUserProfileRepository (integration)', () => {
       userId: 'user-1',
       weightKg: 80,
       targetWeightKg: 72,
+      initialWeightKg: 80,
       heightCm: 180,
       age: 30,
       gender: 'male',
@@ -60,6 +65,7 @@ describe('PrismaUserProfileRepository (integration)', () => {
       userId: 'user-1',
       weightKg: 80,
       targetWeightKg: 72,
+      initialWeightKg: 80,
       heightCm: 180,
       age: 30,
       gender: 'male',
@@ -75,5 +81,29 @@ describe('PrismaUserProfileRepository (integration)', () => {
 
   it('returns null for a user with no profile', async () => {
     expect(await repository.findByUserId('does-not-exist')).toBeNull();
+  });
+
+  it('supports a null targetWeightKg while keeping initialWeightKg required', async () => {
+    await prisma.user.create({
+      data: { id: 'user-2', email: 'targetless@example.com', passwordHash: 'hashed-value' },
+    });
+
+    const created = await repository.create({
+      userId: 'user-2',
+      weightKg: 92,
+      targetWeightKg: null,
+      initialWeightKg: 92,
+      heightCm: 190,
+      age: 33,
+      gender: 'male',
+      workoutsPerWeek: 2,
+      goal: 'maintain',
+      weeklyPaceKg: 0.25,
+    });
+
+    expect(created).toMatchObject({
+      targetWeightKg: null,
+      initialWeightKg: 92,
+    });
   });
 });

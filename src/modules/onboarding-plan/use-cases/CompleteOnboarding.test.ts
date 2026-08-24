@@ -62,6 +62,7 @@ describe('CompleteOnboarding', () => {
       userId: 'user-1',
       weightKg: 80,
       targetWeightKg: 72,
+      initialWeightKg: 80,
       heightCm: 180,
       age: 30,
       gender: 'male',
@@ -104,5 +105,22 @@ describe('CompleteOnboarding', () => {
 
     const plan = await planRepository.findByUserId('user-1');
     expect(plan?.userId).toBe('user-1');
+  });
+
+  test('stores targetWeightKg as null when it is omitted during onboarding', async () => {
+    const { completeOnboarding, userProfileRepository } = buildCompleteOnboarding();
+
+    const plan = await completeOnboarding.execute(buildInput({ targetWeightKg: undefined }));
+    const storedProfile = await userProfileRepository.findByUserId('user-1');
+
+    expect(plan.projection).toEqual({
+      startWeightKg: 80,
+      targetWeightKg: 80,
+      estimatedTargetDate: null,
+    });
+    expect(storedProfile).toMatchObject({
+      targetWeightKg: null,
+      initialWeightKg: 80,
+    });
   });
 });
