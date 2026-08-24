@@ -3,12 +3,13 @@ import { ValidationError } from '../../../shared/errors/ValidationError';
 import { withTransaction, type TransactionClient } from '../../../shared/persistence/transaction';
 import type { LoggedMealEntry, MealItem, MealType } from '../domain/MealItem';
 import { mealTypes } from '../domain/MealItem';
-import type { MealLoggedEventPublisher } from '../events/publishers/MealLoggedEventPublisher';
+import { toMealEventEntries, type MealLoggedEventPublisher } from '../events/publishers/MealLoggedEventPublisher';
 import type { MealItemRepositoryPort } from '../ports/MealItemRepositoryPort';
 
 const loggedMealEntrySchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(200),
+  source: z.string().min(1).max(50).optional(),
   portionGrams: z.number().positive().max(5000),
   calories: z.number().min(0).max(5000),
   proteinG: z.number().min(0).max(500),
@@ -62,6 +63,7 @@ export class LogMealEntries {
         date: serializeDate(mealItem.date),
         mealType: mealItem.mealType,
         mealItemId: mealItem.id,
+        entries: toMealEventEntries(mealItem.entries),
       });
       return mealItem;
     });

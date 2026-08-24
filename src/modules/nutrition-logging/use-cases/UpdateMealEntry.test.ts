@@ -33,6 +33,26 @@ describe('UpdateMealEntry', () => {
       { id: 'entry-1', name: 'Chicken Bowl', portionGrams: 220, calories: 360, proteinG: 44, carbsG: 8, fatG: 12 },
     ]);
     expect(publisher.publishUpdated).toHaveBeenCalledTimes(1);
+    expect(publisher.publishUpdated).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        userId: 'user-1',
+        date: '2026-08-23',
+        mealType: 'lunch',
+        mealItemId: updated.id,
+        entries: [
+          {
+            name: 'Chicken Bowl',
+            source: 'manual',
+            portionGrams: 220,
+            calories: 360,
+            proteinG: 44,
+            carbsG: 8,
+            fatG: 12,
+          },
+        ],
+      }),
+    );
   });
 
   it('throws NotFoundError when the entry does not exist', async () => {

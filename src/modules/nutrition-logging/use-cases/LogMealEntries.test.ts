@@ -26,6 +26,26 @@ describe('LogMealEntries', () => {
     expect(created.entries).toHaveLength(1);
     expect(repository.findAll()).toHaveLength(1);
     expect(publisher.publishLogged).toHaveBeenCalledTimes(1);
+    expect(publisher.publishLogged).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        userId: 'user-1',
+        date: '2026-08-23',
+        mealType: 'breakfast',
+        mealItemId: created.id,
+        entries: [
+          {
+            name: 'Eggs',
+            source: 'manual',
+            portionGrams: 120,
+            calories: 180,
+            proteinG: 14,
+            carbsG: 2,
+            fatG: 12,
+          },
+        ],
+      }),
+    );
   });
 
   it('appends entries to the existing meal item for the same user/date/mealType', async () => {
@@ -107,5 +127,46 @@ describe('LogMealEntries', () => {
     });
 
     expect(events).toEqual(['tx:start', 'repo:true', 'publisher:true', 'tx:end']);
+  });
+
+  it('publishes the stored meal entries inside the outbox payload', async () => {
+    const repository = new InMemoryMealItemRepository();
+    const publisher = { publishLogged: jest.fn().mockResolvedValue(undefined) };
+    const useCase = new LogMealEntries(repository, publisher, runInTransaction);
+
+    await useCase.execute({
+      userId: 'user-1',
+      date: today,
+      mealType: 'breakfast',
+      entries: [
+        {
+          id: 'entry-1',
+          name: 'Eggs',
+          source: 'photo',
+          portionGrams: 120,
+          calories: 180,
+          proteinG: 14,
+          carbsG: 2,
+          fatG: 12,
+        },
+      ],
+    });
+
+    expect(publisher.publishLogged).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        entries: [
+          {
+            name: 'Eggs',
+            source: 'photo',
+            portionGrams: 120,
+            calories: 180,
+            proteinG: 14,
+            carbsG: 2,
+            fatG: 12,
+          },
+        ],
+      }),
+    );
   });
 });

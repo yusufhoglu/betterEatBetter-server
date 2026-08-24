@@ -1,7 +1,7 @@
 import { NotFoundError } from '../../../shared/errors/NotFoundError';
 import { withTransaction, type TransactionClient } from '../../../shared/persistence/transaction';
 import type { MealItem, MealType } from '../domain/MealItem';
-import type { MealLoggedEventPublisher } from '../events/publishers/MealLoggedEventPublisher';
+import { toMealEventEntries, type MealLoggedEventPublisher } from '../events/publishers/MealLoggedEventPublisher';
 import type { MealItemRepositoryPort } from '../ports/MealItemRepositoryPort';
 
 export interface DeleteMealEntryInput {
@@ -57,6 +57,7 @@ export class DeleteMealEntry {
         date: serializeDate(mealItem.date),
         mealType: mealItem.mealType,
         mealItemId: mealItem.id,
+        entries: toMealEventEntries(mealItem.entries),
       });
 
       return updatedMealItem;

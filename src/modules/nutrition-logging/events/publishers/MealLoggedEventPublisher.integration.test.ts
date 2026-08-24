@@ -64,6 +64,17 @@ describe('MealLoggedEventPublisher (integration)', () => {
         date: '2026-08-23',
         mealType: 'breakfast',
         mealItemId: mealItem.id,
+        entries: [
+          {
+            name: 'Eggs',
+            source: 'manual',
+            portionGrams: 120,
+            calories: 180,
+            proteinG: 14,
+            carbsG: 2,
+            fatG: 12,
+          },
+        ],
       },
     });
   });

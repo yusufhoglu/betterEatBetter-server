@@ -5,6 +5,7 @@ export type MealType = (typeof mealTypes)[number];
 export interface LoggedMealEntry {
   id: string;
   name: string;
+  source?: string;
   portionGrams: number;
   calories: number;
   proteinG: number;

@@ -34,6 +34,34 @@ describe('DeleteMealEntry', () => {
     ]);
     expect(repository.findAll()).toHaveLength(1);
     expect(publisher.publishDeleted).toHaveBeenCalledTimes(1);
+    expect(publisher.publishDeleted).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        userId: 'user-1',
+        date: '2026-08-23',
+        mealType: 'dinner',
+        entries: [
+          {
+            name: 'Chicken',
+            source: 'manual',
+            portionGrams: 180,
+            calories: 300,
+            proteinG: 40,
+            carbsG: 0,
+            fatG: 10,
+          },
+          {
+            name: 'Rice',
+            source: 'manual',
+            portionGrams: 180,
+            calories: 240,
+            proteinG: 4,
+            carbsG: 52,
+            fatG: 1,
+          },
+        ],
+      }),
+    );
   });
 
   it('deletes the meal item when the last entry is removed', async () => {
