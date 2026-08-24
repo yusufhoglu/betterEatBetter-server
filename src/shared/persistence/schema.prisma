@@ -15,12 +15,21 @@ model User {
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String
+  name         String?
+  username     String?  @unique
+  bio          String?
+  avatarUrl    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  refreshTokens RefreshToken[]
-  userProfile   UserProfile?
-  plan          Plan?
+  refreshTokens          RefreshToken[]
+  userProfile            UserProfile?
+  plan                   Plan?
+  unitPreference         UnitPreference?
+  notificationPreference NotificationPreference?
+  favoriteRecipes        FavoriteRecipe[]
+  savedMeals             SavedMeal[]
+  subscriptions          Subscription[]
 
   @@map("users")
 }
@@ -164,4 +173,104 @@ model MealLogReadModel {
   @@unique([userId, date, mealType])
   @@index([userId, date])
   @@map("meal_log_read_models")
+}
+
+model UnitPreference {
+  userId     String   @id
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weightUnit String   @default("kg")
+  heightUnit String   @default("cm")
+  energyUnit String   @default("kcal")
+  waterUnit  String   @default("ml")
+  updatedAt  DateTime @updatedAt
+
+  @@map("unit_preferences")
+}
+
+model NotificationPreference {
+  userId           String   @id
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  masterEnabled    Boolean  @default(true)
+  breakfastEnabled Boolean  @default(true)
+  breakfastTime    String   @default("08:30")
+  lunchEnabled     Boolean  @default(true)
+  lunchTime        String   @default("12:30")
+  dinnerEnabled    Boolean  @default(true)
+  dinnerTime       String   @default("19:30")
+  waterReminders   Boolean  @default(true)
+  streakSaver      Boolean  @default(true)
+  weeklyReport     Boolean  @default(true)
+  updatedAt        DateTime @updatedAt
+
+  @@map("notification_preferences")
+}
+
+model FavoriteRecipe {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  imageUrl        String?
+  emoji           String?
+  kcal            Int
+  prepTimeMinutes Int
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("favorite_recipes")
+}
+
+model SavedMeal {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  imageUrl  String?
+  emoji     String?
+  kcal      Int
+  proteinG  Int
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("saved_meals")
+}
+
+model Subscription {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId  String
+  provider   String
+  status     String
+  expiresAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, status, expiresAt])
+  @@unique([userId, productId, provider])
+  @@map("subscriptions")
+}
+
+// chatbot module: conversationId is client/trace-supplied (stays fixed for the
+// whole chat, doubles as trace_id) — never server-generated per message.
+model Conversation {
+  id        String    @id @default(uuid())
+  userId    String
+  createdAt DateTime  @default(now())
+  messages  Message[]
+
+  @@index([userId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // 'system'|'user'|'assistant'|'tool'
+  content        String
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
 }
