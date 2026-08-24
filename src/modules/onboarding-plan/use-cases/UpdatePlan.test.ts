@@ -8,6 +8,7 @@ function buildInput(overrides: Partial<CompleteOnboardingInput> = {}): CompleteO
   return {
     userId: 'user-1',
     weightKg: 80,
+    targetWeightKg: 72,
     heightCm: 180,
     age: 30,
     gender: 'male',
@@ -27,6 +28,14 @@ function buildUpdatePlan() {
 }
 
 describe('UpdatePlan', () => {
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-23T00:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test('throws NotFoundError with NOT_ONBOARDED when the user has no profile', async () => {
     const { updatePlan } = buildUpdatePlan();
 
@@ -47,6 +56,7 @@ describe('UpdatePlan', () => {
     expect(storedProfile).toMatchObject({
       userId: 'user-1',
       weightKg: 80,
+      targetWeightKg: 72,
       heightCm: 180,
       age: 30,
       gender: 'male',
@@ -61,6 +71,30 @@ describe('UpdatePlan', () => {
       proteinG: 160,
       carbsG: 123,
       fatG: 55,
+      projection: {
+        startWeightKg: 80,
+        targetWeightKg: 72,
+        estimatedTargetDate: new Date('2026-11-08T00:00:00.000Z'),
+      },
+    });
+  });
+
+  test('persists manual macro overrides on top of the recalculated plan', async () => {
+    const { completeOnboarding, updatePlan } = buildUpdatePlan();
+    await completeOnboarding.execute(buildInput());
+
+    const updatedPlan = await updatePlan.execute('user-1', {
+      dailyCalories: 2100,
+      proteinG: 180,
+      carbsG: 190,
+      fatG: 62,
+    });
+
+    expect(updatedPlan).toMatchObject({
+      dailyCalories: 2100,
+      proteinG: 180,
+      carbsG: 190,
+      fatG: 62,
     });
   });
 

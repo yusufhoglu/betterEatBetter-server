@@ -1,4 +1,5 @@
 import type { CreatePlanInput, Plan, PlanRepositoryPort, UpdatePlanInput } from '../../ports/PlanRepositoryPort';
+import { NotFoundError } from '../../../../shared/errors/NotFoundError';
 
 export class InMemoryPlanRepository implements PlanRepositoryPort {
   private readonly plansByUserId = new Map<string, Plan>();
@@ -17,7 +18,7 @@ export class InMemoryPlanRepository implements PlanRepositoryPort {
   async update(input: UpdatePlanInput): Promise<Plan> {
     const existingPlan = this.plansByUserId.get(input.userId);
     if (!existingPlan) {
-      throw new Error(`Plan not found for userId=${input.userId}`);
+      throw new NotFoundError('PLAN_NOT_FOUND', `Plan not found for userId=${input.userId}`);
     }
 
     const updatedPlan: Plan = {

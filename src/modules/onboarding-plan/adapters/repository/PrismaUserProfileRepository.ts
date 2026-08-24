@@ -10,6 +10,7 @@ import type {
 interface UserProfileRow {
   userId: string;
   weightKg: number;
+  targetWeightKg: number;
   heightCm: number;
   age: number;
   gender: string;
@@ -23,6 +24,7 @@ function toUserProfile(row: UserProfileRow): UserProfile {
   return {
     userId: row.userId,
     weightKg: row.weightKg,
+    targetWeightKg: row.targetWeightKg,
     heightCm: row.heightCm,
     age: row.age,
     gender: row.gender as Gender,
@@ -51,6 +53,7 @@ export class PrismaUserProfileRepository implements UserProfileRepositoryPort {
       where: { userId: input.userId },
       data: {
         weightKg: input.weightKg,
+        targetWeightKg: input.targetWeightKg,
         workoutsPerWeek: input.workoutsPerWeek,
         goal: input.goal,
         weeklyPaceKg: input.weeklyPaceKg,

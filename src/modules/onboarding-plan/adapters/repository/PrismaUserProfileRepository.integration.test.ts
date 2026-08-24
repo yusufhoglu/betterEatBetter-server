@@ -47,6 +47,7 @@ describe('PrismaUserProfileRepository (integration)', () => {
     const created = await repository.create({
       userId: 'user-1',
       weightKg: 80,
+      targetWeightKg: 72,
       heightCm: 180,
       age: 30,
       gender: 'male',
@@ -58,6 +59,7 @@ describe('PrismaUserProfileRepository (integration)', () => {
     expect(created).toMatchObject({
       userId: 'user-1',
       weightKg: 80,
+      targetWeightKg: 72,
       heightCm: 180,
       age: 30,
       gender: 'male',

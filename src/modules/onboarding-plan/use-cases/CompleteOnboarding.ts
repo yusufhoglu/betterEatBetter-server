@@ -1,11 +1,13 @@
 import { ConflictError } from '../../../shared/errors/ConflictError';
 import { computePlan, type Gender, type Goal } from '../../../shared/domain/PlanCalculationService';
+import { BuildPlanResponse, type EnrichedPlan } from '../domain/BuildPlanResponse';
 import type { Plan, PlanRepositoryPort } from '../ports/PlanRepositoryPort';
 import type { UserProfileRepositoryPort } from '../ports/UserProfileRepositoryPort';
 
 export interface CompleteOnboardingInput {
   userId: string;
   weightKg: number;
+  targetWeightKg: number;
   heightCm: number;
   age: number;
   gender: Gender;
@@ -25,15 +27,16 @@ export class CompleteOnboarding {
     private readonly planRepository: PlanRepositoryPort,
   ) {}
 
-  async execute(input: CompleteOnboardingInput): Promise<Plan> {
+  async execute(input: CompleteOnboardingInput): Promise<EnrichedPlan> {
     const existingProfile = await this.userProfileRepository.findByUserId(input.userId);
     if (existingProfile) {
       throw new ConflictError('ALREADY_ONBOARDED', 'User has already completed onboarding');
     }
 
-    await this.userProfileRepository.create({
+    const profile = await this.userProfileRepository.create({
       userId: input.userId,
       weightKg: input.weightKg,
+      targetWeightKg: input.targetWeightKg,
       heightCm: input.heightCm,
       age: input.age,
       gender: input.gender,
@@ -52,12 +55,14 @@ export class CompleteOnboarding {
       weeklyPaceKg: input.weeklyPaceKg,
     });
 
-    return this.planRepository.create({
+    const plan = await this.planRepository.create({
       userId: input.userId,
       dailyCalories,
       proteinG,
       carbsG,
       fatG,
     });
+
+    return BuildPlanResponse(profile, plan);
   }
 }

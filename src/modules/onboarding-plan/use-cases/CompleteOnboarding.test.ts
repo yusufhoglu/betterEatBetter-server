@@ -14,6 +14,7 @@ function buildInput(overrides: Partial<CompleteOnboardingInput> = {}): CompleteO
   return {
     userId: 'user-1',
     weightKg: 80,
+    targetWeightKg: 72,
     heightCm: 180,
     age: 30,
     gender: 'male',
@@ -25,6 +26,14 @@ function buildInput(overrides: Partial<CompleteOnboardingInput> = {}): CompleteO
 }
 
 describe('CompleteOnboarding', () => {
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-23T00:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test('CompleteOnboarding: fake port implementasyonlariyla (jest.mock() degil)', async () => {
     const { completeOnboarding, userProfileRepository, planRepository } = buildCompleteOnboarding();
     const input = buildInput();
@@ -40,12 +49,19 @@ describe('CompleteOnboarding', () => {
       proteinG: 160,
       carbsG: 157,
       fatG: 70,
+      projection: {
+        startWeightKg: 80,
+        targetWeightKg: 72,
+        estimatedTargetDate: new Date('2026-12-13T00:00:00.000Z'),
+      },
+      healthScore: expect.any(Number),
     });
 
     const storedProfile = await userProfileRepository.findByUserId('user-1');
     expect(storedProfile).toMatchObject({
       userId: 'user-1',
       weightKg: 80,
+      targetWeightKg: 72,
       heightCm: 180,
       age: 30,
       gender: 'male',
@@ -55,7 +71,13 @@ describe('CompleteOnboarding', () => {
     });
 
     const storedPlan = await planRepository.findByUserId('user-1');
-    expect(storedPlan).toEqual(plan);
+    expect(storedPlan).toMatchObject({
+      userId: plan.userId,
+      dailyCalories: plan.dailyCalories,
+      proteinG: plan.proteinG,
+      carbsG: plan.carbsG,
+      fatG: plan.fatG,
+    });
   });
 
   test('throws ConflictError with ALREADY_ONBOARDED when the user already has a profile', async () => {
