@@ -8,7 +8,7 @@ export interface WeightProjection {
 
 export interface ComputeWeightProjectionInput {
   startWeightKg: number;
-  targetWeightKg: number;
+  targetWeightKg: number | null;
   goal: Goal;
   weeklyPaceKg: number;
   referenceDate?: Date;
@@ -22,6 +22,14 @@ function normalizeToStartOfUtcDay(date: Date): Date {
 
 export function ComputeWeightProjection(input: ComputeWeightProjectionInput): WeightProjection {
   const referenceDate = normalizeToStartOfUtcDay(input.referenceDate ?? new Date());
+  if (input.targetWeightKg === null) {
+    return {
+      startWeightKg: input.startWeightKg,
+      targetWeightKg: input.startWeightKg,
+      estimatedTargetDate: null,
+    };
+  }
+
   const deltaKg = Math.abs(input.targetWeightKg - input.startWeightKg);
 
   if (input.goal === 'maintain' || deltaKg === 0 || input.weeklyPaceKg <= 0) {

@@ -2,7 +2,7 @@ import type { Goal } from '../../../shared/domain/PlanCalculationService';
 
 export interface ComputeHealthScoreInput {
   weightKg: number;
-  targetWeightKg: number;
+  targetWeightKg: number | null;
   heightCm: number;
   age: number;
   workoutsPerWeek: number;
@@ -24,7 +24,8 @@ export function ComputeHealthScore(input: ComputeHealthScoreInput): number {
   const bmiPenalty = bmi < 18.5 ? (18.5 - bmi) * 4 : bmi > 25 ? (bmi - 25) * 3 : 0;
   const workoutBonus = clamp(input.workoutsPerWeek, 0, 5) * 3;
   const pacePenalty = input.goal === 'maintain' ? 0 : Math.max(0, input.weeklyPaceKg - 0.75) * 16;
-  const goalDistancePenalty = Math.max(0, Math.abs(input.weightKg - input.targetWeightKg) - 12) * 0.8;
+  const goalDistancePenalty =
+    input.targetWeightKg === null ? 0 : Math.max(0, Math.abs(input.weightKg - input.targetWeightKg) - 12) * 0.8;
   const agePenalty = Math.max(0, input.age - 45) * 0.15;
 
   return Math.round(clamp(82 - bmiPenalty - pacePenalty - goalDistancePenalty - agePenalty + workoutBonus, 1, 100));
