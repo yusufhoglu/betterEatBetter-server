@@ -10,6 +10,12 @@ export class FakePlanUpdaterPort implements PlanUpdaterPort {
     fatG: 70,
     createdAt: new Date('2026-08-23T00:00:00.000Z'),
     updatedAt: new Date('2026-08-23T00:00:00.000Z'),
+    projection: {
+      startWeightKg: 80,
+      targetWeightKg: 72,
+      estimatedTargetDate: new Date('2026-11-15T00:00:00.000Z'),
+    },
+    healthScore: 82,
   };
 
   async update(userId: string, changes: UpdateGoalChanges): Promise<GoalPlan> {

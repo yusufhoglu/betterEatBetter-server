@@ -5,9 +5,14 @@ import type { GoalPlan, PlanUpdaterPort } from '../ports/PlanUpdaterPort';
 const updateGoalSchema = z
   .object({
     weightKg: z.number().positive().optional(),
+    targetWeightKg: z.number().positive().optional(),
     workoutsPerWeek: z.number().int().min(0).optional(),
     goal: z.enum(['lose', 'maintain', 'gain']).optional(),
     weeklyPaceKg: z.number().positive().optional(),
+    dailyCalories: z.number().int().positive().optional(),
+    proteinG: z.number().nonnegative().optional(),
+    carbsG: z.number().nonnegative().optional(),
+    fatG: z.number().nonnegative().optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), {
     message: 'At least one goal field must be provided',

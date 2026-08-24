@@ -5,6 +5,14 @@ import { UpdatePlan } from '../../../onboarding-plan/use-cases/UpdatePlan';
 import { OnboardingPlanUpdateAdapter } from './OnboardingPlanUpdateAdapter';
 
 describe('OnboardingPlanUpdateAdapter', () => {
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-23T00:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test('delegates to onboarding-plan UpdatePlan through the public use-case', async () => {
     const userProfileRepository = new InMemoryUserProfileRepository();
     const planRepository = new InMemoryPlanRepository();
@@ -13,6 +21,7 @@ describe('OnboardingPlanUpdateAdapter', () => {
     await completeOnboarding.execute({
       userId: 'user-1',
       weightKg: 80,
+      targetWeightKg: 72,
       heightCm: 180,
       age: 30,
       gender: 'male',
@@ -32,6 +41,11 @@ describe('OnboardingPlanUpdateAdapter', () => {
       proteinG: 160,
       carbsG: 123,
       fatG: 55,
+      projection: {
+        startWeightKg: 80,
+        targetWeightKg: 72,
+        estimatedTargetDate: new Date('2026-11-08T00:00:00.000Z'),
+      },
     });
     expect(planRepository.count()).toBe(1);
   });

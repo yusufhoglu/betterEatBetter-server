@@ -8,10 +8,12 @@ describe('UpdateGoal', () => {
     const planUpdater = new FakePlanUpdaterPort();
     const updateGoal = new UpdateGoal(planUpdater);
 
-    const plan = await updateGoal.execute('user-1', { goal: 'gain', weeklyPaceKg: 0.25 });
+    const plan = await updateGoal.execute('user-1', { goal: 'gain', weeklyPaceKg: 0.25, targetWeightKg: 84 });
 
     expect(plan).toEqual(planUpdater.result);
-    expect(planUpdater.calls).toEqual([{ userId: 'user-1', changes: { goal: 'gain', weeklyPaceKg: 0.25 } }]);
+    expect(planUpdater.calls).toEqual([
+      { userId: 'user-1', changes: { goal: 'gain', weeklyPaceKg: 0.25, targetWeightKg: 84 } },
+    ]);
   });
 
   test('throws ValidationError when every update field is omitted', async () => {
@@ -33,5 +35,19 @@ describe('UpdateGoal', () => {
     const updateGoal = new UpdateGoal(planUpdater);
 
     await expect(updateGoal.execute('user-1', { weightKg: 79 })).rejects.toBe(notOnboardedError);
+  });
+
+  test('accepts manual macro override fields when they are present', async () => {
+    const planUpdater = new FakePlanUpdaterPort();
+    const updateGoal = new UpdateGoal(planUpdater);
+
+    await updateGoal.execute('user-1', { dailyCalories: 2100, proteinG: 180, carbsG: 190, fatG: 62 });
+
+    expect(planUpdater.calls).toEqual([
+      {
+        userId: 'user-1',
+        changes: { dailyCalories: 2100, proteinG: 180, carbsG: 190, fatG: 62 },
+      },
+    ]);
   });
 });
