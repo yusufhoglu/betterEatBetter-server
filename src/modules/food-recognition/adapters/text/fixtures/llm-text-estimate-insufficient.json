@@ -1,0 +1,10 @@
+{
+  "status": "insufficient_data",
+  "items": [],
+  "macros": {
+    "totalCalories": 0,
+    "totalProteinGrams": 0,
+    "totalCarbsGrams": 0,
+    "totalFatGrams": 0
+  }
+}

@@ -51,6 +51,18 @@ import {
 
 const mockSend = objectStorageClient.send as jest.Mock;
 
+function summarizeMacros(items: Array<{ calories: number; proteinGrams: number; carbsGrams: number; fatGrams: number }>) {
+  return items.reduce(
+    (totals, item) => ({
+      totalCalories: totals.totalCalories + item.calories,
+      totalProteinGrams: totals.totalProteinGrams + item.proteinGrams,
+      totalCarbsGrams: totals.totalCarbsGrams + item.carbsGrams,
+      totalFatGrams: totals.totalFatGrams + item.fatGrams,
+    }),
+    { totalCalories: 0, totalProteinGrams: 0, totalCarbsGrams: 0, totalFatGrams: 0 },
+  );
+}
+
 describe('photo-recognition-flow (E2E)', () => {
   let repository: InMemoryFoodEntryRepository;
   let fakeEstimator: FakePhotoEstimator;
@@ -175,7 +187,7 @@ describe('photo-recognition-flow (E2E)', () => {
     await repository.updateResult(MEAL_PHOTO_ID, {
       status: needsUserAction ? 'insufficient_data' : 'completed',
       items: fakeResult.items,
-      macros: fakeResult.macros,
+      macros: summarizeMacros(fakeResult.items),
       needsUserAction,
       resultJson: fakeResult.raw,
     });

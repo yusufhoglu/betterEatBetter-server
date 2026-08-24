@@ -1,9 +1,9 @@
-import { CopyObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { createWorker } from '../../../shared/queue/queueConnection';
 import { createModuleLogger } from '../../../shared/observability/logger';
 import { OBJECT_STORAGE_BUCKET, objectStorageClient } from '../../../shared/storage/objectStorageClient';
-import { pendingObjectKey, finalObjectKey } from '../../../shared/storage/presignedUrl';
+import { finalObjectExists, pendingObjectKey, finalObjectKey } from '../../../shared/storage/presignedUrl';
 import { IntegrationError } from '../../../shared/errors/IntegrationError';
 import type { StandardizeAndCopyJobPayload } from '../use-cases/RecognizeFromPhoto';
 
@@ -13,6 +13,15 @@ const QUEUE_NAME = 'standardize-and-copy';
 const MAX_WIDTH = 2048;
 const MAX_HEIGHT = 2048;
 const JPEG_QUALITY = 85;
+
+export async function standardizeImage(imageBuffer: Buffer): Promise<Buffer> {
+  return sharp(imageBuffer)
+    // Normalize EXIF orientation into the pixel buffer before any resize/re-encode.
+    .rotate()
+    .resize({ width: MAX_WIDTH, height: MAX_HEIGHT, fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: JPEG_QUALITY })
+    .toBuffer();
+}
 
 /**
  * standardizeAndCopyJob:
@@ -34,6 +43,11 @@ export const standardizeAndCopyWorker = createWorker<StandardizeAndCopyJobPayloa
 
     logger.info({ mealPhotoId, sourceKey, destKey }, 'starting standardize-and-copy');
 
+    if (await finalObjectExists(userId, mealPhotoId)) {
+      logger.info({ mealPhotoId, destKey }, 'standardize-and-copy skipped because final object already exists');
+      return;
+    }
+
     // Download the pending photo
     let imageBuffer: Buffer;
     try {
@@ -53,10 +67,7 @@ export const standardizeAndCopyWorker = createWorker<StandardizeAndCopyJobPayloa
     // Resize and re-compress
     let processedBuffer: Buffer;
     try {
-      processedBuffer = await sharp(imageBuffer)
-        .resize({ width: MAX_WIDTH, height: MAX_HEIGHT, fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: JPEG_QUALITY })
-        .toBuffer();
+      processedBuffer = await standardizeImage(imageBuffer);
     } catch (err) {
       throw new IntegrationError('IMAGE_PROCESSING_ERROR', 'Failed to process image with sharp', false);
     }
@@ -65,6 +76,11 @@ export const standardizeAndCopyWorker = createWorker<StandardizeAndCopyJobPayloa
     // We upload the processed bytes — not a S3 CopyObject — because we changed the content
     const { PutObjectCommand } = await import('@aws-sdk/client-s3');
     try {
+      if (await finalObjectExists(userId, mealPhotoId)) {
+        logger.info({ mealPhotoId, destKey }, 'standardize-and-copy upload skipped because final object already exists');
+        return;
+      }
+
       await objectStorageClient.send(
         new PutObjectCommand({
           Bucket: OBJECT_STORAGE_BUCKET,

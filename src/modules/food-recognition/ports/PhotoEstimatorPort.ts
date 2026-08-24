@@ -1,10 +1,9 @@
-import type { FoodItem, MacroSummary } from '../domain/FoodEntry';
+import type { FoodItem } from '../domain/FoodEntry';
 
 /** What Python/RAG returns for a single photo analysis call. */
 export interface PhotoEstimateResult {
   status: 'sufficient' | 'insufficient_data';
   items: FoodItem[];
-  macros: MacroSummary;
   /** Raw response for storage in resultJson */
   raw: unknown;
 }

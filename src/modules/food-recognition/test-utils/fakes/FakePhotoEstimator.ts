@@ -31,12 +31,6 @@ export class FakePhotoEstimator implements PhotoEstimatorPort {
           fatGrams: 7,
         },
       ],
-      macros: {
-        totalCalories: 330,
-        totalProteinGrams: 62,
-        totalCarbsGrams: 0,
-        totalFatGrams: 7,
-      },
       raw: {},
     });
   }
@@ -46,7 +40,6 @@ export class FakePhotoEstimator implements PhotoEstimatorPort {
     return new FakePhotoEstimator({
       status: 'insufficient_data',
       items: [],
-      macros: { totalCalories: 0, totalProteinGrams: 0, totalCarbsGrams: 0, totalFatGrams: 0 },
       raw: {},
     });
   }

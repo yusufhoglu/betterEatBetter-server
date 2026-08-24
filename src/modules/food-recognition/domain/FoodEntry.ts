@@ -7,6 +7,31 @@ export interface FoodItem {
   proteinGrams: number;
   carbsGrams: number;
   fatGrams: number;
+  vitaminAMcg?: number;
+  vitaminCMg?: number;
+  vitaminDMcg?: number;
+  calciumMg?: number;
+  ironMg?: number;
+  potassiumMg?: number;
+  cholesterolMg?: number;
+}
+
+export interface NutrientAmount {
+  amount: number;
+  unit: 'g' | 'mg' | 'mcg';
+  dailyValuePercent: number;
+}
+
+export interface NutrientSummary {
+  vitaminA?: NutrientAmount;
+  vitaminC?: NutrientAmount;
+  vitaminD?: NutrientAmount;
+  calcium?: NutrientAmount;
+  iron?: NutrientAmount;
+  potassium?: NutrientAmount;
+  cholesterol?: NutrientAmount;
+  fiber?: NutrientAmount;
+  sodium?: NutrientAmount;
 }
 
 export interface MacroSummary {
@@ -31,6 +56,7 @@ export interface FoodEntry {
   status: 'processing' | 'completed' | 'insufficient_data' | 'failed';
   items: FoodItem[];
   macros: MacroSummary;
+  nutrients?: NutrientSummary;
   /** True when Python/LLM confidence is low and the user should confirm */
   needsUserAction: boolean;
   errorCode?: string;

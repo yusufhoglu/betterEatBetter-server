@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { IntegrationError } from '../../../../shared/errors/IntegrationError';
 import { createModuleLogger } from '../../../../shared/observability/logger';
@@ -10,27 +11,40 @@ const logger = createModuleLogger('food-recognition');
 /** Zod schema for the Python RAG service response. */
 export const ragResponseSchema = z.union([
   z.object({
-    status: z.enum(['sufficient', 'insufficient_data']),
-    items: z.array(
-      z.object({
-        name: z.string(),
-        portionGrams: z.number(),
-        calories: z.number(),
-        proteinGrams: z.number(),
-        carbsGrams: z.number(),
-        fatGrams: z.number(),
-      }),
-    ),
-    macros: z.object({
-      totalCalories: z.number(),
-      totalProteinGrams: z.number(),
-      totalCarbsGrams: z.number(),
-      totalFatGrams: z.number(),
+    requestId: z.string(),
+    status: z.literal('completed'),
+    estimate: z.object({
+      confidenceStatus: z.enum(['sufficient', 'insufficient_data']),
+      items: z.array(
+        z.object({
+          name: z.string(),
+          confidence: z.number(),
+          portionGrams: z.number(),
+          calories: z.number(),
+          proteinG: z.number(),
+          carbsG: z.number(),
+          fatG: z.number(),
+          vitaminAMcg: z.number(),
+          vitaminCMg: z.number(),
+          vitaminDMcg: z.number(),
+          calciumMg: z.number(),
+          ironMg: z.number(),
+          potassiumMg: z.number(),
+          cholesterolMg: z.number(),
+        }),
+      ),
     }),
+    modelVersion: z.string(),
+    processingTimeMs: z.number(),
   }),
   z.object({
-    error: z.string(),
-    message: z.string().optional(),
+    requestId: z.string(),
+    status: z.literal('failed'),
+    error: z.object({
+      code: z.enum(['IMAGE_UNREADABLE', 'MODEL_ERROR']),
+      message: z.string(),
+    }),
+    processingTimeMs: z.number(),
   }),
 ]);
 
@@ -49,6 +63,7 @@ export class RagHttpEstimator implements PhotoEstimatorPort {
 
   async estimate(photoUrl: string): Promise<PhotoEstimateResult> {
     const traceId = getTraceId();
+    const requestId = traceId ?? randomUUID();
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -59,10 +74,10 @@ export class RagHttpEstimator implements PhotoEstimatorPort {
 
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}/estimate`, {
+      response = await fetch(`${this.baseUrl}/v1/meals/estimate`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ photo_url: photoUrl }),
+        body: JSON.stringify({ imageUrl: photoUrl, requestId }),
       });
     } catch (err) {
       logger.error({ err }, 'RAG service network error');
@@ -94,15 +109,27 @@ export class RagHttpEstimator implements PhotoEstimatorPort {
 
     const data = parsed.data;
 
-    // Error response from Python
-    if ('error' in data) {
-      throw new IntegrationError('RAG_PROCESSING_ERROR', data.message ?? data.error, false);
+    if (data.status === 'failed') {
+      throw new IntegrationError('RAG_PROCESSING_ERROR', data.error.message, false);
     }
 
     return {
-      status: data.status,
-      items: data.items,
-      macros: data.macros,
+      status: data.estimate.confidenceStatus,
+      items: data.estimate.items.map((item) => ({
+        name: item.name,
+        portionGrams: item.portionGrams,
+        calories: item.calories,
+        proteinGrams: item.proteinG,
+        carbsGrams: item.carbsG,
+        fatGrams: item.fatG,
+        vitaminAMcg: item.vitaminAMcg,
+        vitaminCMg: item.vitaminCMg,
+        vitaminDMcg: item.vitaminDMcg,
+        calciumMg: item.calciumMg,
+        ironMg: item.ironMg,
+        potassiumMg: item.potassiumMg,
+        cholesterolMg: item.cholesterolMg,
+      })),
       raw: body,
     };
   }

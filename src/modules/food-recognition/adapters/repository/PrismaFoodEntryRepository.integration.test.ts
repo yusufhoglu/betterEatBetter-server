@@ -56,6 +56,13 @@ describe('PrismaFoodEntryRepository (integration)', () => {
           proteinGrams: 4,
           carbsGrams: 43,
           fatGrams: 0.4,
+          vitaminAMcg: 220,
+          vitaminCMg: 18,
+          vitaminDMcg: 4,
+          calciumMg: 80,
+          ironMg: 2.1,
+          potassiumMg: 500,
+          cholesterolMg: 60,
         },
       ],
       macros: { totalCalories: 195, totalProteinGrams: 4, totalCarbsGrams: 43, totalFatGrams: 0.4 },
@@ -68,6 +75,15 @@ describe('PrismaFoodEntryRepository (integration)', () => {
     expect(updated!.items).toHaveLength(1);
     expect(updated!.items[0]!.name).toBe('Rice');
     expect(updated!.needsUserAction).toBe(false);
+    expect(updated!.nutrients).toEqual({
+      vitaminA: { amount: 220, unit: 'mcg', dailyValuePercent: 24 },
+      vitaminC: { amount: 18, unit: 'mg', dailyValuePercent: 20 },
+      vitaminD: { amount: 4, unit: 'mcg', dailyValuePercent: 20 },
+      calcium: { amount: 80, unit: 'mg', dailyValuePercent: 6 },
+      iron: { amount: 2.1, unit: 'mg', dailyValuePercent: 12 },
+      potassium: { amount: 500, unit: 'mg', dailyValuePercent: 11 },
+      cholesterol: { amount: 60, unit: 'mg', dailyValuePercent: 20 },
+    });
   });
 
   it('updates a food entry to failed with errorCode', async () => {

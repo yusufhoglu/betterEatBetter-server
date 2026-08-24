@@ -1,12 +1,13 @@
 import { createWorker } from '../../../shared/queue/queueConnection';
 import { createModuleLogger } from '../../../shared/observability/logger';
 import { ConfidencePolicy } from '../domain/policies/ConfidencePolicy';
+import type { MacroSummary } from '../domain/FoodEntry';
 import { RagHttpEstimator } from '../adapters/photo/RagHttpEstimator';
 import { ResilientPhotoEstimator } from '../adapters/photo/ResilientPhotoEstimator';
 import { PrismaFoodEntryRepository } from '../adapters/repository/PrismaFoodEntryRepository';
 import { prisma } from '../../../shared/persistence/db';
 import type { RecognizePhotoJobPayload } from '../use-cases/RecognizeFromPhoto';
-import { env } from '../../../shared/config/env';
+import { createPendingDownloadUrl } from '../../../shared/storage/presignedUrl';
 
 const logger = createModuleLogger('food-recognition');
 
@@ -16,6 +17,30 @@ const CONCURRENCY = Number(process.env.PHOTO_WORKER_CONCURRENCY ?? 2);
 const repository = new PrismaFoodEntryRepository(prisma);
 const innerEstimator = new RagHttpEstimator();
 const estimator = new ResilientPhotoEstimator(innerEstimator);
+
+function summarizeMacros(
+  items: Array<{
+    calories: number;
+    proteinGrams: number;
+    carbsGrams: number;
+    fatGrams: number;
+  }>,
+): MacroSummary {
+  return items.reduce<MacroSummary>(
+    (totals, item) => ({
+      totalCalories: totals.totalCalories + item.calories,
+      totalProteinGrams: totals.totalProteinGrams + item.proteinGrams,
+      totalCarbsGrams: totals.totalCarbsGrams + item.carbsGrams,
+      totalFatGrams: totals.totalFatGrams + item.fatGrams,
+    }),
+    {
+      totalCalories: 0,
+      totalProteinGrams: 0,
+      totalCarbsGrams: 0,
+      totalFatGrams: 0,
+    },
+  );
+}
 
 /**
  * recognizePhotoJob worker.
@@ -30,20 +55,20 @@ const estimator = new ResilientPhotoEstimator(innerEstimator);
 export const recognizePhotoWorker = createWorker<RecognizePhotoJobPayload>(
   QUEUE_NAME,
   async (job) => {
-    const { mealPhotoId, userId, photoObjectKey } = job.data;
+    const { mealPhotoId, userId } = job.data;
     logger.info({ mealPhotoId }, 'starting photo recognition');
 
-    const photoUrl = `${env.RAG_SERVICE_URL}/pending/${photoObjectKey}`;
+    const photoUrl = await createPendingDownloadUrl(mealPhotoId);
 
     const result = await estimator.estimate(photoUrl);
     const needsUserAction = ConfidencePolicy.needsUserAction(result.status);
-
+    const macros = summarizeMacros(result.items);
     const status = needsUserAction ? 'insufficient_data' : 'completed';
 
     await repository.updateResult(mealPhotoId, {
       status,
       items: result.items,
-      macros: result.macros,
+      macros,
       needsUserAction,
       resultJson: result.raw,
     });

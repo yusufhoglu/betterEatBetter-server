@@ -13,6 +13,8 @@ const logger = createModuleLogger('food-recognition');
 
 const MAX_PHOTO_SIZE_BYTES = Number(process.env.MAX_PHOTO_SIZE_BYTES ?? 10 * 1024 * 1024);
 const MAX_PHOTO_DIMENSION_PX = 8000;
+const JOB_RETRY_ATTEMPTS = 3;
+const JOB_RETRY_BACKOFF_MS = 5_000;
 
 // Job queues — jobId = mealPhotoId (deterministic for idempotency)
 export interface RecognizePhotoJobPayload extends BaseJobPayload {
@@ -152,12 +154,26 @@ export class RecognizeFromPhoto {
       recognizePhotoQueue.add(
         'recognize-photo',
         { mealPhotoId, userId, photoObjectKey: objectKey, traceId },
-        { jobId: mealPhotoId },
+        {
+          jobId: mealPhotoId,
+          attempts: JOB_RETRY_ATTEMPTS,
+          backoff: {
+            type: 'fixed',
+            delay: JOB_RETRY_BACKOFF_MS,
+          },
+        },
       ),
       standardizeAndCopyQueue.add(
         'standardize-and-copy',
         { mealPhotoId, userId, traceId },
-        { jobId: mealPhotoId },
+        {
+          jobId: mealPhotoId,
+          attempts: JOB_RETRY_ATTEMPTS,
+          backoff: {
+            type: 'fixed',
+            delay: JOB_RETRY_BACKOFF_MS,
+          },
+        },
       ),
     ]);
 

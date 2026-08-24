@@ -1,0 +1,19 @@
+{
+  "status": "sufficient",
+  "items": [
+    {
+      "name": "Grilled chicken wrap",
+      "portionGrams": 240,
+      "calories": 420,
+      "proteinGrams": 31,
+      "carbsGrams": 34,
+      "fatGrams": 18
+    }
+  ],
+  "macros": {
+    "totalCalories": 420,
+    "totalProteinGrams": 31,
+    "totalCarbsGrams": 34,
+    "totalFatGrams": 18
+  }
+}
