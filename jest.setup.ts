@@ -13,4 +13,7 @@ process.env.LLM_SERVICE_URL ??= 'http://localhost:11434';
 process.env.OPEN_FOOD_FACTS_URL ??= 'https://world.openfoodfacts.org';
 process.env.MAX_PHOTO_SIZE_BYTES ??= String(10 * 1024 * 1024);
 process.env.PHOTO_WORKER_CONCURRENCY ??= '2';
+// shared/llm module defaults for test environment
+process.env.LLM_PROVIDER ??= 'openai';
+process.env.OPENAI_API_KEY ??= 'test-key-not-real';
 

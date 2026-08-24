@@ -1,6 +1,6 @@
 jest.mock('../config/env', () => ({
   env: {
-    LLM_PROVIDER: undefined as 'openai' | 'anthropic' | undefined,
+    LLM_PROVIDER: 'openai' as 'openai' | 'anthropic',
     OPENAI_API_KEY: undefined as string | undefined,
     OPENAI_MODEL: 'gpt-4o',
     ANTHROPIC_API_KEY: undefined as string | undefined,
@@ -74,5 +74,11 @@ describe('createLlmClient extensibility', () => {
     env.OPENAI_API_KEY = 'test-key';
 
     expect(() => createLlmClient({ provider: 'openai' })).not.toThrow();
+  });
+
+  it('falls back to env.LLM_PROVIDER when no provider option is passed', () => {
+    env.OPENAI_API_KEY = 'test-key';
+
+    expect(() => createLlmClient()).not.toThrow();
   });
 });

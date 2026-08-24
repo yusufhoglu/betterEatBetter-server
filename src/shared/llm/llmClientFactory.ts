@@ -43,7 +43,7 @@ export interface CreateLlmClientOptions {
 const DEFAULT_RESILIENCE_OPTIONS: ResiliencePolicyOptions = { timeoutMs: 60_000 };
 
 export function createLlmClient(options: CreateLlmClientOptions = {}): LlmClient {
-  const providerName = options.provider ?? env.LLM_PROVIDER ?? DEFAULT_PROVIDER;
+  const providerName = options.provider ?? env.LLM_PROVIDER;
   const factory = providerRegistry.get(providerName);
   if (!factory) {
     throw new Error(`Unknown LLM_PROVIDER: ${providerName}`);
