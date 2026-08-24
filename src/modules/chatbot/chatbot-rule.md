@@ -63,13 +63,50 @@ SendMessage.execute(conversationId, userMessage):
   `GetLoggedMealTypesForDateRange`) use-case'lerini DOĞRUDAN import edip çağırır.
 - `tools/AnalyticsSummaryTool.ts`: `body-analytics`'in ilgili public use-case'lerini
   (örn. `GetBodyStats`, `GetMealAverages`) DOĞRUDAN import edip çağırır.
+- `tools/ProposeMealLogTool.ts` (SONRADAN EKLENDİ, bkz. "Konuşarak yemek loglama"
+  bölümü): `food-recognition/RecognizeFromText` use-case'ini DOĞRUDAN import eder.
 - Her tool, `shared/llm/types.ts`'teki `LlmToolDefinition` formatında bir şema
   (`name`, `description`, `inputSchema`) + bir `execute(input): Promise<result>`
   fonksiyonu olarak dışa açılır — `SendMessage` bu listeyi `sendTurn`'e `tools`
   parametresi olarak geçirir.
-- `chatbot`, `nutrition-logging`/`body-analytics`'in `domain/`/`adapters/`
-  klasörlerine ASLA dokunmaz — sadece bu köprüler üzerinden, tıpkı `GetActivePlan`/
-  `GetLoggedMealTypesForDateRange` pattern'i gibi.
+- `chatbot`, `nutrition-logging`/`body-analytics`/`food-recognition`'ın `domain/`/
+  `adapters/` klasörlerine ASLA dokunmaz — sadece bu köprüler üzerinden, tıpkı
+  `GetActivePlan`/`GetLoggedMealTypesForDateRange` pattern'i gibi.
+
+## Konuşarak yemek loglama — `ProposeMealLogTool` (SONRADAN EKLENDİ)
+
+**Temel prensip: chatbot ASLA yazma işlemi yapmaz, sadece ÖNERİ üretir.** Kullanıcı
+onayı ve gerçek `LogMealEntries` çağrısı tamamen chatbot'un DIŞINDA, mobil ↔
+`nutrition-logging` arasında gerçekleşir — chatbot'un backend'i bu adımdan HİÇ HABERDAR
+OLMAZ, hiçbir state tutmaz.
+
+- Kullanıcı sohbette bir yemek tarif ettiğinde (örn. "tavuklu sandviç yedim"), model
+  `ProposeMealLogTool`'u çağırır. Bu tool, `food-recognition/RecognizeFromText`'i
+  DOĞRUDAN çağırıp bir `FoodEntry` alır, bunu `MealLogProposal` olarak paketler:
+  `{ entries: FoodEntry[]; rawDescription: string }` (dizi — `LogMealEntries`'in
+  girdi sözleşmesiyle tutarlı olsun diye tek elemanlı bile olsa dizi).
+- `mealType` bu öneriye DAHİL DEĞİLDİR — `nutrition-logging-rule.md`'deki kural
+  ("mealType her zaman kullanıcı seçer, backend çıkarım yapmaz") burada da geçerli.
+  Mobil, "Onayla" akışında kullanıcıya `mealType` seçtirip ONDAN SONRA
+  `nutrition-logging`'e istek atar.
+- **`SendMessage`'ın çıktı tipi değişti**: artık düz `AsyncIterable<string>` DEĞİL,
+  `AsyncIterable<ChatStreamChunk>` — `ChatStreamChunk = { type: 'text'; delta: string }
+  | { type: 'proposal'; proposal: MealLogProposal }`.
+- Akış: tool-calling loop'unda (`complete()` turları) `ProposeMealLogTool` çağrılırsa,
+  sonucu HEMEN `{ type: 'proposal', proposal }` olarak yield edilir (stream'e
+  interleaved) VE tool sonucu (özet halde) mesaj geçmişine eklenip loop DEVAM eder —
+  model bu bilgiyi kullanarak son metninde ("İşte bulduklarım, onaylarsan
+  kaydedebilirsin" gibi) doğal bir kapanış yazabilir. Son metin her zaman
+  `{ type: 'text', delta }` parçaları olarak `streamFinalReply`'den gelir.
+- `ChatController.ts`, SSE'de bunu İKİ ayrı event tipiyle iletir: `event: text` ve
+  `event: proposal` (`data` alanında JSON). Mobil bu ikisini ayrı UI elemanlarına
+  (metin balonu / öneri kartı) render eder.
+- **Öneri, DB'ye mesaj olarak KAYDEDİLMEZ** — tıpkı diğer tool sonuçları gibi
+  (bkz. "Bilinçli sapma" notu: tool-turn kalıcılığı), sadece o anki stream'in bir
+  parçası. Konuşma geçmişi tekrar yüklendiğinde eski öneriler GÖRÜNMEZ — bu kabul
+  edilen bir sınırlama, kullanıcı öneriyi kaçırırsa tekrar sormalı.
+- Chatbot'un backend'i, `mealType` seçimini ya da onay/red kararını HİÇBİR ŞEKİLDE
+  bilmez/saklamaz — bu tamamen mobil + `nutrition-logging` arasında.
 
 ## Konuşma geçmişi ve context window
 
@@ -126,6 +163,17 @@ SendMessage.execute(conversationId, userMessage):
 ### Cross-module
 - `MealDataTool.test.ts`, `AnalyticsSummaryTool.test.ts`: gerçek
   `nutrition-logging`/`body-analytics` use-case importlarıyla (fake değil).
+- `ProposeMealLogTool.test.ts`: gerçek `food-recognition/RecognizeFromText`
+  importuyla (fake değil), dönen `FoodEntry`'nin doğru `MealLogProposal` şekline
+  paketlendiği doğrulanır.
+
+### `SendMessage` — öneri akışı (KRİTİK, ek testler)
+- Tool çağrısı `ProposeMealLogTool` olduğunda: stream'in `{ type: 'proposal', ... }`
+  parçasını HEMEN yield ettiği, ardından loop'un devam edip son `{ type: 'text', ... }`
+  parçalarının geldiği.
+- Öneri içeren bir turdan sonra DB'ye kaydedilen mesajın SADECE metin içerdiği,
+  `proposal` verisinin DB'ye hiç yazılmadığı (fake repository'ye giden çağrı
+  incelenerek).
 
 ### Integration — `adapters/`
 - `PrismaConversationRepository.integration.test.ts`: testcontainers,
