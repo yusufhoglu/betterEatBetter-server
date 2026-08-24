@@ -1,5 +1,5 @@
 import { prisma } from '../../../../shared/persistence/db';
-import type { CreateUserInput, User, UserRepositoryPort } from '../../ports/UserRepositoryPort';
+import type { CreateUserInput, UpdateUserProfileInput, User, UserRepositoryPort } from '../../ports/UserRepositoryPort';
 
 export class PrismaUserRepository implements UserRepositoryPort {
   async findByEmail(email: string): Promise<User | null> {
@@ -12,6 +12,18 @@ export class PrismaUserRepository implements UserRepositoryPort {
 
   async create(input: CreateUserInput): Promise<User> {
     return prisma.user.create({ data: input });
+  }
+
+  async updateProfile(input: UpdateUserProfileInput): Promise<User> {
+    return prisma.user.update({
+      where: { id: input.id },
+      data: {
+        name: input.name,
+        username: input.username,
+        bio: input.bio,
+        avatarUrl: input.avatarUrl,
+      },
+    });
   }
 
   async deleteById(id: string): Promise<void> {

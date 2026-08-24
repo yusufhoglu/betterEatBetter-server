@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CreateUserInput, User, UserRepositoryPort } from '../../ports/UserRepositoryPort';
+import type { CreateUserInput, UpdateUserProfileInput, User, UserRepositoryPort } from '../../ports/UserRepositoryPort';
 
 export class InMemoryUserRepository implements UserRepositoryPort {
   private readonly usersById = new Map<string, User>();
@@ -22,10 +22,31 @@ export class InMemoryUserRepository implements UserRepositoryPort {
       id: randomUUID(),
       email: input.email,
       passwordHash: input.passwordHash,
+      name: input.name ?? null,
+      username: input.username ?? null,
+      bio: input.bio ?? null,
+      avatarUrl: input.avatarUrl ?? null,
       createdAt: new Date(),
     };
     this.usersById.set(user.id, user);
     return user;
+  }
+
+  async updateProfile(input: UpdateUserProfileInput): Promise<User> {
+    const existing = this.usersById.get(input.id);
+    if (!existing) {
+      throw new Error('User not found');
+    }
+
+    const updated: User = {
+      ...existing,
+      name: input.name === undefined ? existing.name : input.name,
+      username: input.username === undefined ? existing.username : input.username,
+      bio: input.bio === undefined ? existing.bio : input.bio,
+      avatarUrl: input.avatarUrl === undefined ? existing.avatarUrl : input.avatarUrl,
+    };
+    this.usersById.set(updated.id, updated);
+    return updated;
   }
 
   async deleteById(id: string): Promise<void> {
