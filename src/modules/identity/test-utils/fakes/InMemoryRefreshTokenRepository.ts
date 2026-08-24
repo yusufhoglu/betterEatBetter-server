@@ -47,6 +47,23 @@ export class InMemoryRefreshTokenRepository implements RefreshTokenRepositoryPor
     return { userId: existing.userId, refreshToken: next };
   }
 
+  async revoke(presentedToken: string): Promise<void> {
+    const existing = this.tokensByValue.get(presentedToken);
+    if (!existing) {
+      throw new UnauthorizedError('REFRESH_TOKEN_INVALID', 'Refresh token is invalid');
+    }
+
+    existing.status = 'revoked';
+  }
+
+  async revokeAllForUser(userId: string): Promise<void> {
+    for (const stored of this.tokensByValue.values()) {
+      if (stored.userId === userId) {
+        stored.status = 'revoked';
+      }
+    }
+  }
+
   statusOf(token: string): 'active' | 'used' | 'revoked' | undefined {
     return this.tokensByValue.get(token)?.status;
   }

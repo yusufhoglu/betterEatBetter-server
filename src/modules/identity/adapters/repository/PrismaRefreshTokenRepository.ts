@@ -1,4 +1,9 @@
-import { issueInitialRefreshToken, rotateRefreshToken } from '../../../../shared/auth/refreshTokenService';
+import {
+  issueInitialRefreshToken,
+  revokeAllRefreshTokens,
+  revokeRefreshToken,
+  rotateRefreshToken,
+} from '../../../../shared/auth/refreshTokenService';
 import type {
   IssuedRefreshToken,
   RefreshTokenRepositoryPort,
@@ -27,5 +32,13 @@ export class PrismaRefreshTokenRepository implements RefreshTokenRepositoryPort 
         expiresAt: rotated.refreshToken.expiresAt,
       },
     };
+  }
+
+  async revoke(presentedToken: string): Promise<void> {
+    await revokeRefreshToken(presentedToken);
+  }
+
+  async revokeAllForUser(userId: string): Promise<void> {
+    await revokeAllRefreshTokens(userId);
   }
 }

@@ -37,6 +37,25 @@ export async function revokeAllRefreshTokens(userId: string): Promise<void> {
   });
 }
 
+export async function revokeRefreshToken(presentedToken: string): Promise<void> {
+  const tokenHash = hashToken(presentedToken);
+  const existing = await prisma.refreshToken.findUnique({ where: { tokenHash } });
+
+  if (!existing) {
+    throw new UnauthorizedError('REFRESH_TOKEN_INVALID', 'Refresh token is invalid');
+  }
+
+  if (existing.revokedAt) {
+    await revokeAllRefreshTokens(existing.userId);
+    throw new UnauthorizedError('REFRESH_TOKEN_REUSE_DETECTED', 'Refresh token reuse detected');
+  }
+
+  await prisma.refreshToken.update({
+    where: { id: existing.id },
+    data: { revokedAt: new Date() },
+  });
+}
+
 export interface RotatedRefreshToken {
   userId: string;
   refreshToken: IssuedRefreshToken;

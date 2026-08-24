@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { ValidationError } from '../../../shared/errors/ValidationError';
+import type { DeleteAccount } from '../use-cases/DeleteAccount';
+import type { Logout } from '../use-cases/Logout';
 import type { RefreshSession } from '../use-cases/RefreshSession';
 import type { SignIn } from '../use-cases/SignIn';
 import type { SignUp } from '../use-cases/SignUp';
@@ -28,6 +30,8 @@ export class IdentityController {
     private readonly signUp: SignUp,
     private readonly signIn: SignIn,
     private readonly refreshSession: RefreshSession,
+    private readonly logout: Logout,
+    private readonly deleteAccount: DeleteAccount,
   ) {}
 
   handleSignUp = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -55,6 +59,25 @@ export class IdentityController {
       const { refreshToken } = parseOrThrow(refreshSchema, req.body);
       const session = await this.refreshSession.execute(refreshToken);
       res.status(200).json(session);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  handleLogout = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { refreshToken } = parseOrThrow(refreshSchema, req.body);
+      await this.logout.execute(refreshToken);
+      res.status(204).send();
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  handleDeleteAccount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      await this.deleteAccount.execute(req.auth!.userId);
+      res.status(204).send();
     } catch (err) {
       next(err);
     }

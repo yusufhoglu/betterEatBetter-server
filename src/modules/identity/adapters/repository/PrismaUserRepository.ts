@@ -13,4 +13,12 @@ export class PrismaUserRepository implements UserRepositoryPort {
   async create(input: CreateUserInput): Promise<User> {
     return prisma.user.create({ data: input });
   }
+
+  async deleteById(id: string): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.mealItem.deleteMany({ where: { userId: id } });
+      await tx.foodEntry.deleteMany({ where: { userId: id } });
+      await tx.user.delete({ where: { id } });
+    });
+  }
 }

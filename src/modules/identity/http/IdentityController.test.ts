@@ -1,7 +1,10 @@
 import express from 'express';
+import type { RequestHandler } from 'express';
 import request from 'supertest';
 import { errorMapperMiddleware } from '../../../shared/errors/errorMapper';
 import { EmailPasswordAdapter } from '../adapters/provider/EmailPasswordAdapter';
+import { DeleteAccount } from '../use-cases/DeleteAccount';
+import { Logout } from '../use-cases/Logout';
 import { RefreshSession } from '../use-cases/RefreshSession';
 import { SignIn } from '../use-cases/SignIn';
 import { SignUp } from '../use-cases/SignUp';
@@ -14,6 +17,11 @@ jest.mock('../../../shared/rateLimiting/rateLimiter', () => ({
   checkRateLimit: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Identity controller tests exercise the real argon2-based password hashing
+// path through SignUp, so they can exceed Jest's default 5-second timeout on
+// slower Windows/debug runs.
+jest.setTimeout(15000);
+
 function buildApp() {
   const userRepository = new InMemoryUserRepository();
   const emailPasswordAdapter = new EmailPasswordAdapter(userRepository);
@@ -23,13 +31,21 @@ function buildApp() {
   const signUp = new SignUp(userRepository, emailPasswordAdapter, sessionTokenPort, refreshTokenRepository);
   const signIn = new SignIn(emailPasswordAdapter, sessionTokenPort, refreshTokenRepository);
   const refreshSession = new RefreshSession(refreshTokenRepository, sessionTokenPort);
-  const controller = new IdentityController(signUp, signIn, refreshSession);
+  const logout = new Logout(refreshTokenRepository);
+  const deleteAccount = new DeleteAccount(userRepository, refreshTokenRepository);
+  const controller = new IdentityController(signUp, signIn, refreshSession, logout, deleteAccount);
+  const fakeAuthMiddleware: RequestHandler = (req, _res, next) => {
+    req.auth = { userId: req.header('x-user-id') ?? '' };
+    next();
+  };
 
   const app = express();
   app.use(express.json());
   app.post('/sign-up', controller.handleSignUp);
   app.post('/sign-in', controller.handleSignIn);
   app.post('/refresh', controller.handleRefresh);
+  app.post('/logout', controller.handleLogout);
+  app.delete('/account', fakeAuthMiddleware, controller.handleDeleteAccount);
   app.use(errorMapperMiddleware);
 
   return app;
@@ -143,6 +159,43 @@ describe('IdentityController', () => {
 
       expect(res.status).toBe(400);
       expect(res.body.code).toBe('INVALID_REQUEST_BODY');
+    });
+  });
+
+  describe('POST /logout', () => {
+    test('204s and revokes the presented refresh token', async () => {
+      const app = buildApp();
+      const signUpRes = await request(app)
+        .post('/sign-up')
+        .send({ email: 'logout@example.com', password: 'correctPassword1' });
+
+      const logoutRes = await request(app).post('/logout').send({ refreshToken: signUpRes.body.refreshToken });
+      const refreshRes = await request(app).post('/refresh').send({ refreshToken: signUpRes.body.refreshToken });
+
+      expect(logoutRes.status).toBe(204);
+      expect(refreshRes.status).toBe(401);
+      expect(refreshRes.body.code).toBe('REFRESH_TOKEN_REUSE_DETECTED');
+    });
+  });
+
+  describe('DELETE /account', () => {
+    test('204s and removes the user account', async () => {
+      const app = buildApp();
+      const signUpRes = await request(app)
+        .post('/sign-up')
+        .send({ email: 'delete-me@example.com', password: 'correctPassword1' });
+
+      const deleteRes = await request(app)
+        .delete('/account')
+        .set('x-user-id', signUpRes.body.userId);
+
+      const signInRes = await request(app)
+        .post('/sign-in')
+        .send({ email: 'delete-me@example.com', password: 'correctPassword1' });
+
+      expect(deleteRes.status).toBe(204);
+      expect(signInRes.status).toBe(401);
+      expect(signInRes.body.code).toBe('INVALID_CREDENTIALS');
     });
   });
 });

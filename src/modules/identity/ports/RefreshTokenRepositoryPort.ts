@@ -18,4 +18,6 @@ export interface RotatedRefreshToken {
 export interface RefreshTokenRepositoryPort {
   issue(userId: string): Promise<IssuedRefreshToken>;
   rotate(presentedToken: string): Promise<RotatedRefreshToken>;
+  revoke(presentedToken: string): Promise<void>;
+  revokeAllForUser(userId: string): Promise<void>;
 }
