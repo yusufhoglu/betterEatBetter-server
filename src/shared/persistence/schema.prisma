@@ -127,3 +127,41 @@ model OutboxEvent {
 
   @@map("outbox_events")
 }
+
+model BodyMeasurement {
+  id        String   @id @default(uuid())
+  userId    String
+  metric    String
+  value     Float
+  unit      String
+  date      DateTime
+  source    String
+  createdAt DateTime @default(now())
+
+  @@index([userId, metric, date])
+  @@map("body_measurements")
+}
+
+model BodySilhouetteProfile {
+  userId     String   @id
+  neckCm     Float?
+  shoulderCm Float?
+  waistCm    Float?
+  hipCm      Float?
+  updatedAt  DateTime @updatedAt
+
+  @@map("body_silhouette_profiles")
+}
+
+model MealLogReadModel {
+  id       String   @id @default(uuid())
+  userId   String
+  date     DateTime @db.Date
+  mealType String
+  entries  Json
+  loggedAt DateTime @default(now())
+
+  @@unique([userId, date, mealType])
+  @@index([userId, date])
+  @@map("meal_log_read_models")
+}

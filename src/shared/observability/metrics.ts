@@ -43,3 +43,10 @@ export const nutritionLowConfidenceTotal = new Counter({
   labelNames: ['source'] as const,
   registers: [metricsRegistry],
 });
+
+export const llmTokensTotal = new Counter({
+  name: 'llm_tokens_total',
+  help: 'Total LLM tokens consumed, labeled by provider, requesting feature, and token type',
+  labelNames: ['provider', 'feature', 'type'] as const,
+  registers: [metricsRegistry],
+});
