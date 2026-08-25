@@ -10,7 +10,7 @@ import { env } from './shared/config/env';
 import { errorMapperMiddleware } from './shared/errors/errorMapper';
 import { logger } from './shared/observability/logger';
 import { requestLoggingMiddleware } from './shared/observability/requestLoggingMiddleware';
-import { tracingMiddleware } from './shared/observability/tracingMiddleware';
+import { canonicalizeFoodPhotoTraceMiddleware, tracingMiddleware } from './shared/observability/tracingMiddleware';
 import { prisma } from './shared/persistence/db';
 
 const app = express();
@@ -86,6 +86,7 @@ app.use((req, res, next) => {
 
 app.use(tracingMiddleware);
 app.use(express.json());
+app.use(canonicalizeFoodPhotoTraceMiddleware);
 app.use(requestLoggingMiddleware);
 app.use(createRouter());
 app.use(errorMapperMiddleware);

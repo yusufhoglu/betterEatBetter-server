@@ -9,3 +9,28 @@ export function tracingMiddleware(req: Request, res: Response, next: NextFunctio
   res.setHeader(TRACE_ID_HEADER, traceId);
   runWithContext({ traceId }, next);
 }
+
+function resolveCanonicalFoodPhotoTraceId(req: Request): string | undefined {
+  if (req.method === 'POST' && req.path === '/food/photo') {
+    const mealPhotoId = (req.body as { mealPhotoId?: unknown } | undefined)?.mealPhotoId;
+    return typeof mealPhotoId === 'string' && mealPhotoId.length > 0 ? mealPhotoId : undefined;
+  }
+
+  if (req.method === 'GET') {
+    const match = /^\/food\/photo\/([^/]+)$/.exec(req.path);
+    return match?.[1];
+  }
+
+  return undefined;
+}
+
+export function canonicalizeFoodPhotoTraceMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const canonicalTraceId = resolveCanonicalFoodPhotoTraceId(req);
+  if (!canonicalTraceId) {
+    next();
+    return;
+  }
+
+  res.setHeader(TRACE_ID_HEADER, canonicalTraceId);
+  runWithContext({ traceId: canonicalTraceId }, next);
+}

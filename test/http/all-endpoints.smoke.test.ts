@@ -153,15 +153,19 @@ describe('all endpoint smoke tests', () => {
 
   beforeAll(async () => {
     const envFile = loadDotEnv({ path: '.env' }).parsed;
-    const jestFallbackDatabaseUrl = 'postgresql://test:test@localhost:5432/test';
-    const databaseUrl =
-      process.env.SMOKE_TEST_DATABASE_URL ??
-      (process.env.DATABASE_URL && process.env.DATABASE_URL !== jestFallbackDatabaseUrl
-        ? process.env.DATABASE_URL
-        : envFile?.DATABASE_URL);
+    const databaseUrl = process.env.SMOKE_TEST_DATABASE_URL ?? envFile?.SMOKE_TEST_DATABASE_URL;
+    const primaryDatabaseUrl = process.env.DATABASE_URL ?? envFile?.DATABASE_URL;
 
     if (!databaseUrl) {
-      throw new Error('SMOKE_TEST_DATABASE_URL or DATABASE_URL must be set for HTTP smoke tests');
+      throw new Error('SMOKE_TEST_DATABASE_URL must be set for HTTP smoke tests');
+    }
+
+    if (primaryDatabaseUrl && databaseUrl === primaryDatabaseUrl) {
+      throw new Error('SMOKE_TEST_DATABASE_URL must not point to the primary DATABASE_URL');
+    }
+
+    if (!databaseUrl.includes('_smoke')) {
+      throw new Error('SMOKE_TEST_DATABASE_URL must point to a dedicated smoke database');
     }
 
     process.env.DATABASE_URL = databaseUrl;

@@ -1,6 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { ValidationError } from '../../../shared/errors/ValidationError';
+import { createModuleLogger } from '../../../shared/observability/logger';
+import { runWithContext } from '../../../shared/observability/tracer';
+import { TRACE_ID_HEADER } from '../../../shared/observability/tracingMiddleware';
 import { checkRateLimit } from '../../../shared/rateLimiting/rateLimiter';
 import type { RecognizeFromPhoto } from '../use-cases/RecognizeFromPhoto';
 import type { RecognizeFromBarcode } from '../use-cases/RecognizeFromBarcode';
@@ -12,6 +15,17 @@ const photoBodySchema = z.object({ mealPhotoId: z.string().min(1) });
 const barcodeBodySchema = z.object({ barcode: z.string().min(1) });
 const textBodySchema = z.object({ text: z.string().min(1).max(500) });
 const searchQuerySchema = z.object({ q: z.string().min(1), limit: z.coerce.number().int().min(1).max(100).optional() });
+const logger = createModuleLogger('food-recognition');
+
+function warnOnTraceMismatch(req: Request, traceId: string): void {
+  const incomingTraceId = req.header(TRACE_ID_HEADER);
+  if (incomingTraceId && incomingTraceId !== traceId) {
+    logger.warn(
+      { incomingTraceId, traceId },
+      'x-trace-id does not match mealPhotoId; using mealPhotoId as trace_id',
+    );
+  }
+}
 
 export class FoodRecognitionController {
   constructor(
@@ -22,49 +36,62 @@ export class FoodRecognitionController {
     private readonly repository: FoodEntryRepositoryPort,
   ) {}
 
-  /** POST /food/photo — async, returns 202 */
+  /** POST /food/photo - async, returns 202 */
   async handlePhoto(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.auth!.userId;
-      await checkRateLimit(`photo:${userId}`, 5, 60);
-
       const parsed = photoBodySchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('INVALID_BODY', 'mealPhotoId is required');
       }
 
-      const result = await this.recognizeFromPhoto.execute({
-        mealPhotoId: parsed.data.mealPhotoId,
-        userId,
-      });
+      const { mealPhotoId } = parsed.data;
+      warnOnTraceMismatch(req, mealPhotoId);
+      res.setHeader(TRACE_ID_HEADER, mealPhotoId);
 
-      res.status(202).json({ mealPhotoId: result.mealPhotoId });
+      await runWithContext({ traceId: mealPhotoId, userId }, async () => {
+        await checkRateLimit(`photo:${userId}`, 5, 60);
+
+        const result = await this.recognizeFromPhoto.execute({
+          mealPhotoId,
+          userId,
+        });
+
+        res.status(202).json({ mealPhotoId: result.mealPhotoId });
+      });
     } catch (err) {
       next(err);
     }
   }
 
-  /** GET /food/photo/:mealPhotoId — polling endpoint */
+  /** GET /food/photo/:mealPhotoId - polling endpoint */
   async handleGetPhotoStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { mealPhotoId } = req.params;
       if (!mealPhotoId) {
         throw new ValidationError('INVALID_PARAMS', 'mealPhotoId is required');
       }
-      const entry = await this.repository.findById(mealPhotoId);
 
-      if (!entry) {
-        res.status(404).json({ code: 'FOOD_ENTRY_NOT_FOUND' });
-        return;
-      }
+      const userId = req.auth!.userId;
+      warnOnTraceMismatch(req, mealPhotoId);
+      res.setHeader(TRACE_ID_HEADER, mealPhotoId);
 
-      res.status(200).json(entry);
+      await runWithContext({ traceId: mealPhotoId, userId }, async () => {
+        const entry = await this.repository.findById(mealPhotoId);
+
+        if (!entry) {
+          res.status(404).json({ code: 'FOOD_ENTRY_NOT_FOUND' });
+          return;
+        }
+
+        res.status(200).json(entry);
+      });
     } catch (err) {
       next(err);
     }
   }
 
-  /** POST /food/barcode — synchronous, returns 200 */
+  /** POST /food/barcode - synchronous, returns 200 */
   async handleBarcode(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.auth!.userId;
@@ -82,7 +109,7 @@ export class FoodRecognitionController {
     }
   }
 
-  /** POST /food/text — synchronous, returns 200 */
+  /** POST /food/text - synchronous, returns 200 */
   async handleText(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.auth!.userId;
@@ -100,7 +127,7 @@ export class FoodRecognitionController {
     }
   }
 
-  /** GET /food/search — synchronous, no rate limit */
+  /** GET /food/search - synchronous, no rate limit */
   async handleSearch(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const parsed = searchQuerySchema.safeParse(req.query);

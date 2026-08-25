@@ -1,97 +1,126 @@
-# Identity Modülü — Neden Böyle Kurduk
+# Identity Modulu Developer Doc
 
-Bu doküman `identity` modülündeki kararların **neden** böyle alındığını anlatır.
-Kod detayları için `identity-rule.md`'ye bakın.
+Bu modul kullanici kimligini dogrular, session token uretir, refresh token rotation yapar ve hesabi siler. Kod yapisi klasik `http -> use-case -> port -> adapter` zincirini izler.
 
----
+## Mimari Ozeti
 
-## Neden "hibrit" kapsam — tam iskelet, tek provider
+- `http/IdentityController.ts` request validation ve HTTP mapping yapar.
+- `use-cases/` altinda `SignUp`, `SignIn`, `RefreshSession`, `Logout`, `DeleteAccount` bulunur.
+- `ports/` katmani token uretimi, refresh token saklama ve identity provider sozlesmelerini tanimlar.
+- `adapters/repository/` Prisma ile kaliciligi; `adapters/token/` JWT uretimini; `adapters/provider/` provider bazli kimlik dogrulamayi uygular.
 
-İki uç seçenek vardı: sadece basit bir "dev login" yapıp sonra tamamen unutmak, ya da
-Apple/Google entegrasyonunu da şimdi bitirmek. İkisi de yanlış hissettirdi. İlki, refresh
-token rotation gibi güvenlik-kritik bir mekanizmayı "sonra eklerim" deyip unutma riski
-taşıyordu — bu tür şeyler genelde bir daha hiç eklenmiyor. İkincisi ise asıl önceliğiniz olan
-`food-recognition`'ı gereksiz yere geciktirecekti (Apple/Google SDK entegrasyonu, test
-hesapları, sertifikalar zaman alan işler).
+## Endpointler
 
-Bu yüzden ortada bir yol seçtik: **güvenlik mimarisinin tamamını şimdi doğru kurun** (rotation,
-reuse detection, Port soyutlaması), ama **sadece bir provider'ı** (email+şifre) implemente
-edin. Apple/Google eklemek istediğinizde, tek yapmanız gereken `IdentityProviderPort`'un yeni
-bir implementasyonunu (`AppleSignInAdapter.ts`) yazmak — `SignIn`, `RefreshSession` gibi
-use-case'lerin hiçbiri değişmeyecek.
+| Method | Path | Aciklama |
+| --- | --- | --- |
+| `POST` | `/auth/sign-up` | Email+sifre ile hesap acip ilk session'i uretir |
+| `POST` | `/auth/sign-in` | Email+sifre ile oturum acar |
+| `POST` | `/auth/refresh` | Refresh token rotation ile yeni session verir |
+| `POST` | `/auth/logout` | Refresh token'i iptal eder |
+| `DELETE` | `/auth/account` | Authenticated kullanicinin hesabini ve sessionlarini siler |
 
-## Neden email+şifre, OTP/magic-link değil
+## Sequence Diagramlari
 
-OTP (tek kullanımlık kod) yaklaşımı şifre yönetimini ortadan kaldırıyor, kulağa daha modern
-geliyor. Ama bir email gönderim servisine (Resend, SendGrid gibi) bağımlılık ekliyor — yeni
-bir Port, yeni bir Adapter, yeni bir 3. parti hesap/API key yönetimi. Şu an asıl önceliğiniz
-food-recognition olduğu için, bu ek entegrasyon yükünü şimdilik almak istemedik. Email+şifre,
-`argon2` dışında hiçbir dış bağımlılık gerektirmiyor — bugün yazıp bugün test edebilirsiniz.
+### `POST /auth/sign-up`
 
-## "Email var mı yok mu" bilgisi neden sign-up'ta serbest, sign-in'de gizli
+```mermaid
+sequenceDiagram
+    actor Client
+    participant Controller as IdentityController
+    participant UseCase as SignUp
+    participant Provider as EmailPasswordAdapter
+    participant UserRepo as PrismaUserRepository
+    participant TokenPort as JwtSessionTokenAdapter
+    participant RefreshRepo as PrismaRefreshTokenRepository
 
-Bu ayrımın arkasındaki mantık şu: sign-up'ta zaten kullanıcı deneyimi gereği bu bilgiyi
-paylaşmak ZORUNDASINIZ ("bu email zaten kayıtlı, giriş yapmayı dener misiniz?" demeden
-kullanıcı neden başarısız olduğunu anlayamaz). Sign-in'de ise bu bilginin hiçbir kullanıcı
-deneyimi faydası yok — sadece bir saldırganın "bu email sistemde var mı" diye deneme yapmasını
-kolaylaştırıyor. Bu yüzden sign-up'ta açık, sign-in'de kapalı bıraktık; ikisi de kendi
-bağlamında doğru davranış.
+    Client->>Controller: sign-up body
+    Controller->>UseCase: execute(credentials)
+    UseCase->>Provider: createIdentity(credentials)
+    Provider->>UserRepo: create user + hash password
+    UserRepo-->>Provider: user
+    Provider-->>UseCase: identity
+    UseCase->>TokenPort: issue access/refresh tokens
+    UseCase->>RefreshRepo: store rotated refresh token
+    UseCase-->>Controller: session
+    Controller-->>Client: 201 session payload
+```
 
-**Not:** Bu, food-tracking gibi düşük-hassasiyetli bir uygulamada "mükemmel güvenlik" değil,
-"makul, orantılı güvenlik" kararı. Bankacılık ya da sağlık verisi taşıyan bir sistemde çok
-daha sıkı önlemler (örn. sign-up'ta bile enumeration'ı tamamen kapatmak) gerekebilirdi.
+### `POST /auth/sign-in` ve `POST /auth/refresh`
 
-## Neden argon2, bcrypt değil
+```mermaid
+sequenceDiagram
+    actor Client
+    participant Controller as IdentityController
+    participant SignIn as SignIn
+    participant Refresh as RefreshSession
+    participant Provider as EmailPasswordAdapter
+    participant TokenPort as JwtSessionTokenAdapter
+    participant RefreshRepo as PrismaRefreshTokenRepository
 
-İkisi de "yeterince iyi" — ama argon2, Password Hashing Competition'ın kazananı ve modern
-güvenlik tavsiyelerinin (OWASP dahil) varsayılan önerisi haline geldi. bcrypt'in tek gerçek
-avantajı biraz daha yaygın olması, ama argon2'nin Node paketleri de olgun. Sizin projeniz
-zaten Docker'da çalışacağı için (Python servisi için de aynı yaklaşımı konuşmuştuk), argon2'nin
-native binding gerektirmesi pratikte hiç sorun çıkarmaz.
+    alt POST /auth/sign-in
+        Client->>Controller: credentials
+        Controller->>SignIn: execute(credentials)
+        SignIn->>Provider: verify(credentials)
+        Provider-->>SignIn: user identity
+        SignIn->>TokenPort: create session tokens
+        SignIn->>RefreshRepo: persist refresh token
+        SignIn-->>Controller: session
+        Controller-->>Client: 200 session
+    else POST /auth/refresh
+        Client->>Controller: refreshToken
+        Controller->>Refresh: execute(refreshToken)
+        Refresh->>RefreshRepo: validate current token
+        Refresh->>TokenPort: mint new tokens
+        Refresh->>RefreshRepo: rotate token family
+        Refresh-->>Controller: new session
+        Controller-->>Client: 200 session
+    end
+```
 
-## Refresh token rotation — bunu neden atlamadık
+### `POST /auth/logout` ve `DELETE /auth/account`
 
-Bunu daha önce `shared-doc.md`'de detaylıca anlatmıştık ama identity modülü özelinde tekrar
-vurgulamakta fayda var: burası mimarinin **en çok "basitleştireyim" cazibesine kapılınan**
-yeri. "Refresh token'ı sabit tutsam ne olur ki" demek kolay, ama mobil bir uygulamada bu
-token'lar cihazda 30-90 gün yaşıyor — bir cihaz kaybı/çalıntısı durumunda, rotation olmadan
-bu süre boyunca hiç fark edilmeden istismar edilebilir. Rotation + reuse detection, ekstra
-birkaç saat kod yazmak karşılığında bu riski neredeyse sıfıra indiriyor. Bu, "nice to have"
-değil, mobil auth'un temel bir güvenlik pratiği.
+```mermaid
+sequenceDiagram
+    actor Client
+    participant Controller as IdentityController
+    participant Logout as Logout
+    participant Delete as DeleteAccount
+    participant RefreshRepo as PrismaRefreshTokenRepository
+    participant UserRepo as PrismaUserRepository
 
-**Somut örnek:** Kullanıcının telefonu çalınıyor, saldırgan uygulamayı açık buluyor,
-refresh token'ı çıkarıp kendi cihazında kullanmaya başlıyor. Rotation olmadan, gerçek
-kullanıcı yeni bir cihaz alıp tekrar login olana kadar (belki hiç olmayacak, sadece
-uygulamayı silecek) saldırgan sınırsız erişime sahip. Rotation ile: gerçek kullanıcı
-bir sonraki normal kullanımında (token yenilendiğinde) saldırganın elindeki token
-otomatik geçersiz kalıyor — ve eğer saldırgan hâlâ eski (artık geçersiz) token'ı
-kullanmaya çalışırsa, bu "reuse" olarak yakalanıp tüm oturumlar iptal ediliyor.
+    alt POST /auth/logout
+        Client->>Controller: refreshToken
+        Controller->>Logout: execute(refreshToken)
+        Logout->>RefreshRepo: revoke token
+        Logout-->>Controller: ok
+        Controller-->>Client: 204
+    else DELETE /auth/account
+        Client->>Controller: authenticated request
+        Controller->>Delete: execute(userId)
+        Delete->>RefreshRepo: revoke all refresh tokens
+        Delete->>UserRepo: delete user account
+        Delete-->>Controller: ok
+        Controller-->>Client: 204
+    end
+```
 
-## Access/refresh token süreleri — bunlar kesin mi
+## Gelistirme Rehberi
 
-Rule dosyasında 15 dakika / 30 gün olarak belirledik ama bunlar **varsayım**, kesinleşmiş
-bir ürün kararı değil — konuşmamızda bu rakamlara özel olarak karar vermedik, makul
-endüstri standardı değerler olarak seçildi. Env değişkeni üzerinden kolayca
-değiştirilebilir bırakıldı, koda sabit yazılmadı. Kullanıcı davranışınızı (uygulamayı ne
-sıklıkla açıyorlar) gözlemledikçe bu süreleri ayarlamanız normal ve beklenen.
+- Yeni provider ekleyecekseniz `IdentityProviderPort` implement edin; `SignIn` veya `RefreshSession` icine provider ozel kod koymayin.
+- Refresh token akisini atlamayin. Session ile ilgili her yeni davranis `RefreshTokenRepositoryPort` uzerinden revoke/rotate mantigina uymali.
+- Request validation controller'da `zod` ile yapiliyor. Use-case icine ham `req.body` tasimayin.
+- Hesap silme, cikis ve refresh gibi kritik akislarda repository bypass etmeyin; tum silme/iptal islemleri use-case uzerinden gecmeli.
 
-## Port tasarımı: neden "provider-agnostic" olmalı
+## Ornek Best Practice
 
-`IdentityProviderPort`'u email+şifreye özel dar bir arayüz olarak tasarlarsak (örneğin
-`verifyPassword(email, password)`), Apple/Google eklemek istediğinizde bu arayüz işe
-yaramaz, yeni bir Port daha açmanız gerekir — bu da `SignIn` use-case'inin Apple/Google
-için ayrı bir versiyonu anlamına gelir. Bunun yerine daha soyut bir sözleşme
-(`verify(credentials): Promise<{ externalId, email }>`) kurarsak, email+şifre de
-Apple/Google de aynı şekli döndürüyor — use-case'ler provider'dan habersiz kalıyor.
-Bu, tam olarak Port/Adapter ayrımının kazandırması gereken şey: bugünkü kod, yarınki
-genişlemeyi zaten öngörüyor.
+Yeni bir social login eklerken dogru pattern:
 
----
+```ts
+class AppleSignInAdapter implements IdentityProviderPort {
+  async verify(credentials: AppleCredentials) {
+    return { externalId, email };
+  }
+}
+```
 
-## Bu modülde kod yazarken genel prensip
-
-`identity`, sistemin **güven temeli** — burada yapılan bir gevşeklik (enumeration,
-zayıf hashleme, rotation'sız refresh token) tüm diğer modüllerin güvenliğini de baltalar,
-çünkü hepsi "kullanıcı gerçekten kim olduğunu kanıtladı" varsayımına dayanıyor. Diğer
-modüllerde "şimdilik basit tutalım, sonra düzeltiriz" demek daha kabul edilebilirken,
-burada bu tavrı önerilmiyoruz.
+Yanlis pattern: controller icinde provider SDK cagirmak veya `PrismaUserRepository`'yi dogrudan route dosyasindan degistirmek.

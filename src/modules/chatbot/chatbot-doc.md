@@ -1,67 +1,115 @@
-# Chatbot Modülü — Neden Böyle Kurduk
+# Chatbot Modulu Developer Doc
 
----
+Bu modul LLM tabanli konusma deneyimini, tool-calling ile repo icindeki diger modullere baglayarak sunar. Maliyet ve kontrol riskleri nedeniyle en sik guardrail gerektiren modul budur.
 
-## Neden `complete()` ile loop, `streamComplete()` ile sadece son yanıt
+## Mimari Ozeti
 
-Chatbot'un "araç kullanma" yeteneği (kullanıcının yemek geçmişine bakıp cevap verme)
-ile "kullanıcıya akıcı yazıyormuş gibi yanıt gösterme" (streaming) aslında iki ayrı
-ihtiyaç ve aynı anda gerçekleşmiyorlar. Model önce "bu soruyu cevaplamak için
-`MealDataTool`'u çağırmam lazım" diye karar veriyor — bu ara adımı kullanıcıya
-token-token göstermenin bir anlamı yok (kullanıcı "tool çağırıyorum" diye bir metin
-görmek istemiyor). Bu yüzden tool-calling turları senkron (`complete()`) yürüyor, model
-"artık elimde yeterli bilgi var, cevap yazıyorum" dediği an devreye giren SON tur
-streaming oluyor. Bu, hem OpenAI hem Anthropic'in kendi agent pattern'lerinde de
-önerilen yaklaşım — bizim tasarımımız bunu genel bir prensibe çeviriyor.
+- `http/ChatController.ts` chat endpointlerini expose eder.
+- `use-cases/SendMessage.ts` ana orchestration akisidir; conversation history okur, tool loop yapar ve son cevabi uretir.
+- `use-cases/tools/` altindaki kopruler chatbot'un diger modullere hangi sinirdan erisecegini belirler.
+- `ports/LlmChatPort.ts` ve `adapters/llm/SharedLlmChatAdapter.ts` provider-agnostic LLM erisimini saglar.
+- `adapters/repository/PrismaConversationRepository.ts` mesaj gecmisini ve meal proposal durumunu saklar.
 
-## `MAX_TOOL_TURNS` neden zorunlu
+## Endpointler
 
-Bir LLM'in "bir tool'u çağır, sonucu beğenme, tekrar çağır" döngüsüne girmesi nadir
-ama gerçek bir risk — özellikle tool sonucu modelin beklediği formatta değilse. Bu
-sınır olmadan, tek bir kullanıcı mesajı teorik olarak sonsuz sayıda (ya da çok yüksek
-sayıda) LLM çağrısı tetikleyebilir — hem maliyet patlamasına hem kullanıcının sonsuza
-kadar "yazıyor..." görmesine yol açar. 5 turluk bir sınır, neredeyse hiçbir meşru
-senaryoyu etkilemeden (gerçek sorular 1-2 tool çağrısıyla çözülür) bu riski ortadan
-kaldırıyor.
+| Method | Path | Aciklama |
+| --- | --- | --- |
+| `POST` | `/chat/:conversationId/messages` | Mesaj gonderir, gerekirse tool kullanarak cevap uretir |
+| `GET` | `/chat/:conversationId` | Konusma gecmisini getirir |
+| `POST` | `/chat/:conversationId/proposals/photo` | Food photo sonucundan meal proposal seed eder |
+| `POST` | `/chat/:conversationId/proposals/confirm` | Meal proposal'i nutrition logging'e yazar |
 
-## Neden `tools/` köprüleri var, chatbot doğrudan diğer modüllere erişmiyor
+## Sequence Diagramlari
 
-Bu, tüm mimari boyunca tekrarladığımız "kullanan tanımlar" prensibinin chatbot'taki
-karşılığı. Chatbot'un "kullanıcının bugün ne yediğini bilmesi" ihtiyacı var, ama bu
-`nutrition-logging`'in iç detaylarını (tablosunu, repository'sini) bilmesi gerektiği
-anlamına gelmiyor — sadece `GetDaySummary`'nin genel sözleşmesini bilmesi yeterli.
-Köprü dosyaları, bu sınırı kod seviyesinde zorluyor: `MealDataTool.ts` dışında hiçbir
-chatbot dosyası `nutrition-logging`'i import edemez (bunu bir lint kuralıyla da
-pekiştirebilirsiniz ileride).
+### `POST /chat/:conversationId/messages`
 
-## `shared/llm/`'in getirdiği asıl kazanç — somut bir senaryo
+```mermaid
+sequenceDiagram
+    actor Client
+    participant Controller as ChatController
+    participant UseCase as SendMessage
+    participant Repo as PrismaConversationRepository
+    participant LLM as SharedLlmChatAdapter
+    participant Tools as MealDataTool / AnalyticsSummaryTool / ProposeMealLogTool
 
-Diyelim ki altı ay sonra OpenAI'ın fiyatı arttı, Anthropic'e geçmek istiyorsunuz.
-`shared/llm/`'siz bir dünyada bu, chatbot'un `SendMessage`'ından `food-recognition`'ın
-`LlmTextEstimator`'ına kadar her yeri tek tek bulup değiştirmek demek — her birinin
-kendi OpenAI-özel kodu olurdu. Bizim tasarımımızda bu, **tek bir env değişkeni**
-(`LLM_PROVIDER=anthropic`) — hiçbir modül kodu değişmiyor, çünkü hiçbiri zaten hangi
-sağlayıcıyı kullandığını bilmiyordu. Bu, mimarinin başından beri savunduğumuz
-Port/Adapter felsefesinin en somut kazanımlarından biri.
+    Client->>Controller: user message
+    Controller->>UseCase: execute(conversationId, message)
+    UseCase->>Repo: load conversation history
+    UseCase->>UseCase: trim context
+    loop max tool turns
+        UseCase->>LLM: complete(history, tools)
+        alt model requests tool
+            LLM-->>UseCase: tool call
+            UseCase->>Tools: execute requested tool
+            Tools-->>UseCase: structured tool result
+            UseCase->>Repo: append tool result/messages
+        else final response
+            LLM-->>UseCase: assistant response
+            UseCase->>Repo: persist assistant message
+            UseCase-->>Controller: response payload
+            Controller-->>Client: 200 response
+        end
+    end
+```
 
-## Structured output'ta neden "zorla tool çağrısı" hilesi, native JSON mode değil
+### `GET /chat/:conversationId`
 
-Bunun nedeni pratik: sağlayıcıların "JSON döndür" garantisi birbirinden farklı
-güvenilirlikte. Ama "tool çağır" kabiliyeti, hemen hemen her modern LLM API'sinde
-çok daha olgun ve tutarlı — çünkü bu, agent/tool-use kullanım paterninin çekirdeği,
-sağlayıcılar bunu en çok test ettikleri özellik. Sahte bir "sonucu bildir" tool'u
-tanımlayıp modeli onu çağırmaya zorlamak, aslında "JSON iste" demenin, sağlayıcı
-farkı gözetmeyen, daha güvenilir bir yolu — ve bu teknik zaten `tools/` köprülerinde
-kullandığımız mekanizmanın (`LlmToolDefinition`) bir uzantısı, yeni bir kavram
-öğrenmiyoruz.
+```mermaid
+sequenceDiagram
+    actor Client
+    participant Controller as ChatController
+    participant UseCase as GetConversationHistory
+    participant Repo as PrismaConversationRepository
 
----
+    Client->>Controller: history request
+    Controller->>UseCase: execute(conversationId)
+    UseCase->>Repo: fetch messages
+    UseCase-->>Controller: history
+    Controller-->>Client: 200 messages
+```
 
-## Bu modülde kod yazarken genel prensip
+### Proposal endpointleri
 
-Chatbot, sisteminizdeki **en pahalı** (token maliyeti) ve **en az öngörülebilir**
-(LLM'in ne yapacağı tam kontrol edilemez) modül. Bu yüzden burada iki şeye özellikle
-dikkat edin: **maliyeti sınırlayan mekanizmalar** (rate limit, `MAX_TOOL_TURNS`,
-context kırpma) hiçbir zaman gevşetilmemeli, ve **modelin döndürdüğü hiçbir şeye
-körü körüne güvenilmemeli** (tool çağrıları, structured output hepsi validate edilir,
-`shared/errors/` taksonomisiyle).
+```mermaid
+sequenceDiagram
+    actor Client
+    participant Controller as ChatController
+    participant Seed as SeedPhotoMealProposal
+    participant Confirm as ConfirmMealProposal
+    participant ConvRepo as PrismaConversationRepository
+    participant FoodRepo as PrismaFoodEntryRepository
+    participant Nutrition as LogMealEntries / ReplaceMealSlotEntries
+
+    alt POST /chat/:conversationId/proposals/photo
+        Client->>Controller: mealPhotoId
+        Controller->>Seed: execute(conversationId, mealPhotoId)
+        Seed->>FoodRepo: read recognized photo result
+        Seed->>ConvRepo: persist proposal message
+        Seed-->>Controller: seeded proposal
+        Controller-->>Client: 200
+    else POST /chat/:conversationId/proposals/confirm
+        Client->>Controller: proposal confirmation
+        Controller->>Confirm: execute(conversationId, selection)
+        Confirm->>ConvRepo: load proposal state
+        Confirm->>Nutrition: write confirmed meal log
+        Confirm->>ConvRepo: mark proposal confirmed
+        Confirm-->>Controller: confirmation result
+        Controller-->>Client: 200
+    end
+```
+
+## Gelistirme Rehberi
+
+- Yeni tool ekleyecekseniz once `use-cases/tools/` altinda net input/output sozlesmesi olan bir bridge yazin; chatbot dosyalarindan diger modullerin repository'lerini direkt import etmeyin.
+- `MAX_TOOL_TURNS`, rate limit ve context trimming guardrail'lerini gevsetmeyin. Bu modulde maliyet ve latency kontrolu is mantigi kadar onemli.
+- LLM sonucunu her zaman validate edin. Structured output veya tool response parse islemini adapter/use-case sinirinda tutun.
+
+## Ornek Best Practice
+
+Dogru:
+
+```ts
+const sendMessage = new SendMessage(llmChatPort, conversationRepo, [toolA, toolB], maxTurns, maxContext);
+```
+
+Yanlis: controller icinde LLM client cagirip tool orkestrasyonunu orada yapmak.

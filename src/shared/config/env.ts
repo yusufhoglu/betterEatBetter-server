@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+const LOKI_PUSH_ENDPOINT_SUFFIX = '/loki/api/v1/push';
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -29,6 +31,8 @@ const envSchema = z.object({
   OPEN_FOOD_FACTS_URL: z.string().url().default('https://world.openfoodfacts.org'),
   MAX_PHOTO_SIZE_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
   PHOTO_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
+  TIMEOUTS_ENABLED: z.coerce.boolean().default(true),
+  PHOTO_ESTIMATOR_TIMEOUT_MS: z.coerce.number().int().positive().default(60 * 1000),
   FOOD_ENTRY_CLEANUP_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 60 * 1000),
   FOOD_ENTRY_CLEANUP_MAX_AGE_HOURS: z.coerce.number().int().positive().default(24),
   FOOD_ENTRY_CLEANUP_BATCH_SIZE: z.coerce.number().int().positive().default(100),
@@ -44,6 +48,7 @@ const envSchema = z.object({
   LLM_PROVIDER: z.enum(['openai', 'anthropic']),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().optional().default('gpt-4o'),
+  OPENAI_TIMEOUT_MS: z.coerce.number().int().positive().default(60 * 1000),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().optional().default('claude-sonnet-4-6'),
 }).superRefine((data, ctx) => {
@@ -62,6 +67,29 @@ const envSchema = z.object({
       path: ['ANTHROPIC_API_KEY'],
       message: "ANTHROPIC_API_KEY is required when LLM_PROVIDER='anthropic'",
     });
+  }
+  if (data.LOKI_URL) {
+    if (data.LOKI_URL.endsWith(LOKI_PUSH_ENDPOINT_SUFFIX)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['LOKI_URL'],
+        message: `LOKI_URL must be the Loki base host, not end with '${LOKI_PUSH_ENDPOINT_SUFFIX}'`,
+      });
+    }
+    if (!data.LOKI_USER_ID) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['LOKI_USER_ID'],
+        message: 'LOKI_USER_ID is required when LOKI_URL is set',
+      });
+    }
+    if (!data.LOKI_API_TOKEN) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['LOKI_API_TOKEN'],
+        message: 'LOKI_API_TOKEN is required when LOKI_URL is set',
+      });
+    }
   }
 });
 

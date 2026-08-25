@@ -1,6 +1,7 @@
 import { buildResiliencePolicy } from '../../../../shared/resilience/policies';
 import { createModuleLogger } from '../../../../shared/observability/logger';
 import { IntegrationError } from '../../../../shared/errors/IntegrationError';
+import { env } from '../../../../shared/config/env';
 import type { PhotoEstimatorPort, PhotoEstimateResult } from '../../ports/PhotoEstimatorPort';
 import type { IPolicy } from 'cockatiel';
 
@@ -23,7 +24,7 @@ export class ResilientPhotoEstimator implements PhotoEstimatorPort {
     policy?: IPolicy,
   ) {
     this.policy = policy ?? buildResiliencePolicy({
-      timeoutMs: 60_000,
+      timeoutMs: env.PHOTO_ESTIMATOR_TIMEOUT_MS,
       circuitBreakerThreshold: 5,
       circuitBreakerHalfOpenAfterMs: 30_000,
       retryAttempts: 2,

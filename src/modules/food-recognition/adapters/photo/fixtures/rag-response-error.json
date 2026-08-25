@@ -1,4 +1,9 @@
 {
-  "error": "IMAGE_PROCESSING_FAILED",
-  "message": "Could not process the provided image"
+  "requestId": "req-error-1",
+  "status": "failed",
+  "error": {
+    "code": "IMAGE_UNREADABLE",
+    "message": "Could not process the provided image"
+  },
+  "processingTimeMs": 73
 }

@@ -1,10 +1,10 @@
 {
-  "status": "insufficient_data",
-  "items": [],
-  "macros": {
-    "totalCalories": 0,
-    "totalProteinGrams": 0,
-    "totalCarbsGrams": 0,
-    "totalFatGrams": 0
-  }
+  "requestId": "req-insufficient-1",
+  "status": "completed",
+  "estimate": {
+    "confidenceStatus": "insufficient_data",
+    "items": []
+  },
+  "modelVersion": "rag-v1",
+  "processingTimeMs": 188
 }

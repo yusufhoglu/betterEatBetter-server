@@ -191,6 +191,12 @@ describe('SendMessage', () => {
       expect(textOf(chunks)).toBe('Iste bulduklarim, onaylarsan kaydedebilirsin.');
       expect(tool.calls).toEqual([{ userId: 'user-1', input: { description: 'tavuklu sandvic' } }]);
       expect(llmChatPort.sendTurnCalls).toHaveLength(2);
+      expect(llmChatPort.streamFinalReplyCalls[0]?.at(-1)).toEqual(
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('plain Turkish'),
+        }),
+      );
     });
 
     it('persists the proposal for history replay while keeping the final assistant text separate', async () => {
@@ -229,3 +235,4 @@ describe('SendMessage', () => {
     });
   });
 });
+

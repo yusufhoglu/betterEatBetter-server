@@ -42,7 +42,18 @@ export function createWorker<PayloadT extends BaseJobPayload, ResultT = void>(
         return result;
       } catch (err) {
         stopTimer({ status: 'failure' });
-        logger.error({ err, jobId: job.id }, 'job processing failed');
+        const errorContext =
+          err instanceof IntegrationError
+            ? {
+                err,
+                jobId: job.id,
+                integrationCode: err.code,
+                integrationMessage: err.message,
+                integrationRetryable: err.retryable,
+                integrationHttpStatus: err.httpStatus,
+              }
+            : { err, jobId: job.id };
+        logger.error(errorContext, 'job processing failed');
 
         if (err instanceof IntegrationError && !err.retryable) {
           throw new UnrecoverableError(err.message);

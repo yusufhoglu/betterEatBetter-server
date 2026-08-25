@@ -168,6 +168,22 @@ describe('OpenAiProvider', () => {
     );
   });
 
+  it('maps wrapped OpenAI connection timeouts to IntegrationError', async () => {
+    const timeoutError = new Error('Request timed out.: fetch failed: Connect Timeout Error');
+    timeoutError.name = 'OuterSdkError';
+    (timeoutError as Error & { cause?: Error }).cause = Object.assign(new Error('Connect Timeout Error'), {
+      name: 'APIConnectionTimeoutError',
+    });
+    createMock.mockRejectedValue(timeoutError);
+
+    const provider = new OpenAiProvider({ apiKey: 'test-key', model: 'gpt-4o' });
+
+    await expect(provider.complete({ messages: [{ role: 'user', content: 'hi' }] })).rejects.toMatchObject({
+      code: 'LLM_NETWORK_TIMEOUT',
+      httpStatus: 503,
+    });
+  });
+
   it('throws a taxonomy error when a tool message is missing toolCallId', async () => {
     const provider = new OpenAiProvider({ apiKey: 'test-key', model: 'gpt-4o' });
 

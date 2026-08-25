@@ -10,6 +10,7 @@ import {
   timeout,
   wrap,
 } from 'cockatiel';
+import { env } from '../config/env';
 import { IntegrationError } from '../errors/IntegrationError';
 
 export interface ResiliencePolicyOptions {
@@ -56,9 +57,11 @@ export function buildResiliencePolicy(options: ResiliencePolicyOptions): IPolicy
     breaker: new ConsecutiveBreaker(circuitBreakerThreshold),
   });
 
-  const timeoutPolicy = timeout(timeoutMs, TimeoutStrategy.Aggressive);
+  if (env.TIMEOUTS_ENABLED) {
+    return wrap(retryPolicy, circuitBreakerPolicy, timeout(timeoutMs, TimeoutStrategy.Aggressive));
+  }
 
-  return wrap(retryPolicy, circuitBreakerPolicy, timeoutPolicy);
+  return wrap(retryPolicy, circuitBreakerPolicy);
 }
 
 export { CircuitState } from 'cockatiel';

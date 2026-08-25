@@ -1,4 +1,24 @@
 import sharp from 'sharp';
+
+jest.mock('../../../shared/queue/queueConnection', () => ({
+  createWorker: jest.fn(() => ({ close: jest.fn() })),
+}));
+
+jest.mock('../../../shared/observability/logger', () => ({
+  createModuleLogger: jest.fn(() => ({
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  })),
+  logger: {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 import { standardizeImage } from './standardizeAndCopyJob';
 
 describe('standardizeImage', () => {

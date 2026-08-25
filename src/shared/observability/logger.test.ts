@@ -72,4 +72,74 @@ describe('logger', () => {
       expect(pinoMock).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('configures Loki transport with explicit auth and batching when LOKI_URL is set', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.LOKI_URL = 'https://logs-prod-us-central1.grafana.net';
+    process.env.LOKI_USER_ID = '123456';
+    process.env.LOKI_API_TOKEN = 'secret-token';
+
+    const childLogger = { info: jest.fn() };
+    const childMock = jest.fn(() => childLogger);
+    const transportInstance = { flushSync: jest.fn(), end: jest.fn() };
+    const transportMock = jest.fn(() => transportInstance);
+    const pinoInstance = { child: childMock, flush: jest.fn() };
+    const pinoMock = Object.assign(jest.fn(() => pinoInstance), {
+      transport: transportMock,
+    });
+
+    jest.doMock('pino', () => ({
+      __esModule: true,
+      default: pinoMock,
+    }));
+
+    jest.isolateModules(() => {
+      require('./logger');
+
+      expect(transportMock).toHaveBeenCalledWith({
+        targets: [
+          {
+            target: 'pino/file',
+            options: { destination: 1 },
+          },
+          {
+            target: 'pino-loki',
+            options: {
+              host: 'https://logs-prod-us-central1.grafana.net',
+              basicAuth: {
+                username: '123456',
+                password: 'secret-token',
+              },
+              labels: {
+                service: 'node-backend',
+                environment: 'production',
+              },
+              batching: {
+                interval: 5,
+                maxBufferSize: 10000,
+              },
+              timeout: 30000,
+              silenceErrors: false,
+            },
+          },
+        ],
+      });
+      expect(pinoMock).toHaveBeenCalledWith(
+        expect.objectContaining({ level: expect.any(String), redact: expect.any(Object), mixin: expect.any(Function) }),
+        transportInstance,
+      );
+    });
+  });
+
+  it('fails fast when LOKI_URL is set without auth or with push endpoint suffix', () => {
+    process.env.LOKI_URL = 'https://logs-prod-us-central1.grafana.net/loki/api/v1/push';
+    delete process.env.LOKI_USER_ID;
+    delete process.env.LOKI_API_TOKEN;
+
+    expect(() => {
+      jest.isolateModules(() => {
+        require('../config/env');
+      });
+    }).toThrow(/LOKI_URL must be the Loki base host|LOKI_USER_ID is required when LOKI_URL is set|LOKI_API_TOKEN is required when LOKI_URL is set/);
+  });
 });

@@ -16,7 +16,9 @@ const REDACT_PATHS = [
   'headers.authorization',
 ];
 
-function createTransport() {
+type ManagedTransport = ReturnType<typeof pino.transport>;
+
+function createTransport(): ManagedTransport {
   const targets: pino.TransportTargetOptions[] = [
     env.NODE_ENV === 'production'
       ? {
@@ -46,12 +48,20 @@ function createTransport() {
           service: 'node-backend',
           environment: process.env.NODE_ENV || 'development',
         },
+        batching: {
+          interval: 5,
+          maxBufferSize: 10_000,
+        },
+        timeout: 30_000,
+        silenceErrors: false,
       },
     });
   }
 
   return pino.transport({ targets });
 }
+
+const transport = createTransport();
 
 const rootLogger = pino(
   {
@@ -69,8 +79,28 @@ const rootLogger = pino(
       };
     },
   },
-  createTransport(),
+  transport,
 );
+
+let transportClosed = false;
+
+function closeTransport() {
+  if (transportClosed) {
+    return;
+  }
+
+  transportClosed = true;
+  rootLogger.flush();
+
+  try {
+    transport.flushSync?.();
+  } finally {
+    transport.end?.();
+  }
+}
+
+process.once('SIGINT', closeTransport);
+process.once('SIGTERM', closeTransport);
 
 /** Every module gets its own child logger so `module` never has to be typed by hand. */
 export function createModuleLogger(moduleName: string): pino.Logger {

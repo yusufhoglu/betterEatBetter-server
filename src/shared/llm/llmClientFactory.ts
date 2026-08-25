@@ -24,7 +24,11 @@ registerLlmProvider('openai', () => {
   if (!env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is required when LLM_PROVIDER=openai');
   }
-  return new OpenAiProvider({ apiKey: env.OPENAI_API_KEY, model: env.OPENAI_MODEL });
+  return new OpenAiProvider({
+    apiKey: env.OPENAI_API_KEY,
+    model: env.OPENAI_MODEL,
+    timeoutMs: env.TIMEOUTS_ENABLED ? env.OPENAI_TIMEOUT_MS : undefined,
+  });
 });
 
 registerLlmProvider('anthropic', () => {

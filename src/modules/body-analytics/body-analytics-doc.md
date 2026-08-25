@@ -1,75 +1,131 @@
-# Body Analytics Modülü — Neden Böyle Kurduk
+# Body Analytics Modulu Developer Doc
 
----
+Bu modul vucut olcumleri, silhouette profili ve meal read-model uzerinden analitik endpointler sunar. Yogun okumaya optimize edilmis bir read-model ve moduller arasi adaptorler uzerinden calisir.
 
-## Neden `BodyMeasurement` ile `BodySilhouetteProfile` iki ayrı tablo
+## Mimari Ozeti
 
-Spec'te ikisi de `waistCm` taşıyor, bu yüzden "tek tablo yeter" gibi görünebilir. Ama
-anlamsal olarak çok farklı iki şey: biri **zaman serisi** (kullanıcı haftada bir kilosunu
-tartıp kaydediyor, trend grafiği için geçmiş lazım), diğeri **anlık görüntü** (silüet
-diyagramındaki güncel ölçüler, geçmişi önemli değil, sadece "şu an ne"). Bunları tek
-tabloda tutmaya çalışsaydık, "hangi kaydın 'güncel profil', hangisinin 'geçmiş log'
-olduğu" sorusuna suni bir cevap uydurmamız gerekirdi (örn. "en son eklenen = profil"
-gibi kırılgan bir kural). İki ayrı tablo, iki ayrı sorumluluğu doğal şekilde ayırıyor —
-biri güncellenince diğerinin otomatik değişmesi de gerekmiyor, çünkü kullanıcı bilinçli
-olarak ikisini farklı zamanlarda, farklı amaçlarla güncelleyebilir (silüet diyagramını
-ayarlarken oynayabilir, gerçek bir "ölçüm kaydı" oluşturmadan).
+- `http/BodyAnalyticsController.ts` body stats, trend ve meal analytics endpointlerini expose eder.
+- `use-cases/` altinda iki ana grup vardir: body measurement odakli akislari ve meal analytics odakli akislari.
+- `ports/` katmani profile, plan target, daily tracking, insight generator ve read-model bagimliliklarini soyutlar.
+- `adapters/repository/` Prisma ile `BodyMeasurement`, `BodySilhouetteProfile` ve `MealLogReadModel` tablolarini okur/yazar.
+- `jobs/consumeOutboxEventsJob.ts` nutrition logging outbox event'lerinden analytic read-model'i besler.
 
-## Neden `heightCm`/`gender` burada tekrar tutulmuyor
+## Endpointler
 
-Bu, sizin `3-B` kararınızın doğal sonucu. Alternatifi (kendi kopyasını tutmak) daha
-basit görünürdü ama iki modülün aynı bilgiyi farklı zamanlarda güncelleyip
-birbirinden sapması riski gerçek — biri güncellenip diğeri unutulursa, "boyunuz kaç"
-sorusuna iki farklı cevap veren bir sistem ortaya çıkar. Tek kaynak (`onboarding-plan`),
-bu riski kökünden kaldırıyor; bedeli sadece bir in-process fonksiyon çağrısı (zaten
-ucuz, aynı process içinde).
+| Method | Path | Aciklama |
+| --- | --- | --- |
+| `GET` | `/analytics/body-stats` | Son olcumler ve ozet body stats |
+| `GET` | `/analytics/body-profile` | Silhouette profili |
+| `PATCH` | `/analytics/body-profile` | Silhouette profilini gunceller |
+| `GET` | `/analytics/waist-height-ratio` | Bel-boy oranini hesaplar |
+| `GET` | `/analytics/goal-progress` | Goal progress ozeti |
+| `GET` | `/analytics/goal/progress` | Goal progress alias endpoint'i |
+| `GET` | `/analytics/meals/averages` | Ortalama meal macros |
+| `GET` | `/analytics/meals/weekly` | Haftalik meal trendi |
+| `GET` | `/analytics/meals/breakdown` | Macro/meal dagilimi |
+| `GET` | `/analytics/meals/top-foods` | En sik yiyecekler |
+| `GET` | `/analytics/meals/insights` | Insight uretimi |
+| `GET` | `/analytics/meals/correlation` | Meal ve body olcum korelasyonu |
+| `GET` | `/body-measurements` | Olcum listesi |
+| `POST` | `/body-measurements` | Yeni olcum ekler |
+| `GET` | `/body-measurements/trend` | Trend hesabi |
+| `PATCH` | `/body-measurements/:id` | Olcumu gunceller |
+| `DELETE` | `/body-measurements/:id` | Olcumu siler |
 
-## Neden outbox tüketimi polling ile, `nutrition-logging`'e geri sorgu atmak yerine
+## Sequence Diagramlari
 
-Bunu `shared-doc.md`'de genel olarak anlattık ama burada özellikle önemli çünkü
-`body-analytics`'in ihtiyaç duyduğu veri (yemek isimleri, makrolar) hacimli olabilir —
-her `top-foods` sorgusunda `nutrition-logging`'e gidip binlerce kaydı taşımak yerine,
-event geldiğinde bir kez kendi (analitik sorgulara göre optimize edilmiş)
-`MealLogReadModel`'ine yazıp sonrasında SADECE kendi tablosunu okumak çok daha verimli.
-Bu aynı zamanda modül izolasyonunu da güçlendiriyor: `nutrition-logging` şu an yavaşsa/
-kesintideyse, `body-analytics`'in trend grafiği göstermesi hiç etkilenmiyor — kendi
-verisiyle çalışıyor.
+### Body profile ve measurement endpointleri
 
-## `trendIsGood`'un `goal`'e göre değişmesi — neden bu kadar önemli
+```mermaid
+sequenceDiagram
+    actor Client
+    participant Controller as BodyAnalyticsController
+    participant UseCase as Body Measurement UseCase
+    participant Repo as Body repositories
+    participant Profile as OnboardingPlanProfileAdapter
 
-Bunu spec doğrudan söylemiyordu ama atlarsak ciddi bir kullanıcı deneyimi hatası
-olurdu: kilo almaya çalışan bir kullanıcıya, kilosu arttığında "bu kötü bir trend"
-göstermek anlamsız, hatta zararlı (kullanıcıyı yanlış yönde motive eder/demotive
-eder). `weight`/`bmi` özelinde `goal`'ü okuyup yönü buna göre çevirmek, ürünün asıl
-amacına (kullanıcının kendi hedefine göre anlamlı geri bildirim) sadık kalmak için
-gerekli. `bodyFat`/`waist`/`muscleMass`'ta bu ayrım yok çünkü bunlar için "azalması/
-artması kötü" evrensel olarak sabit (kimse daha yüksek vücut yağı hedeflemiyor,
-kas kütlesi hariç).
+    alt GET /analytics/body-stats
+        Client->>Controller: request
+        Controller->>UseCase: GetBodyStats.execute
+        UseCase->>Repo: read latest measurements
+        UseCase->>Profile: read profile fields
+        UseCase-->>Controller: stats
+        Controller-->>Client: 200
+    else GET/PATCH /analytics/body-profile
+        Client->>Controller: body profile request
+        Controller->>UseCase: GetBodySilhouetteProfile / UpdateBodySilhouetteProfile
+        UseCase->>Repo: read or write silhouette profile
+        UseCase->>Profile: fallback/read supporting data
+        UseCase-->>Controller: profile payload
+        Controller-->>Client: 200
+    else CRUD /body-measurements*
+        Client->>Controller: measurement request
+        Controller->>UseCase: Add/List/Update/Delete/GetTrend
+        UseCase->>Repo: operate on BodyMeasurement table
+        UseCase-->>Controller: result
+        Controller-->>Client: 200/201/204
+    end
+```
 
-## `fraction: null` — neden sahte bir hedef uydurmuyoruz
+### Goal progress ve meal analytics endpointleri
 
-`bodyFat`/`waist` için kullanıcı bir hedef sayısı girmiyor sisteminizde (spec'te de
-böyle bir alan yok). "Bir sayı göstermek zorundayız" diye rastgele bir varsayılan
-aralık (örn. "%15-20 ideal" gibi) uydurmak, kullanıcıya **görünürde kesin ama aslında
-temelsiz** bir bilgi vermek olurdu — bu, "doğru olmayan ama kesin görünen" bir UI
-elemanı üretir, ki bu güven kırıcı bir tasarım hatası olabilir. `null` dönmek dürüst:
-mobil taraf bu durumda dial'ı boş/nötr gösterebilir, "hedef belirlenmedi" diyebilir —
-gerçek durumu yansıtıyor.
+```mermaid
+sequenceDiagram
+    actor Client
+    participant Controller as BodyAnalyticsController
+    participant UseCase as Analytics UseCase
+    participant MealRM as PrismaMealLogReadModelRepository
+    participant Profile as OnboardingPlanProfileAdapter
+    participant Tracking as DailyTrackingAdapter
+    participant Plan as GetActivePlan
 
-## Insights'ın neden şimdilik kural tabanlı
+    alt GET /analytics/goal-progress or /analytics/goal/progress
+        Client->>Controller: request
+        Controller->>UseCase: GetGoalProgress.execute
+        UseCase->>Profile: read profile
+        UseCase->>Tracking: read streak/today status
+        UseCase-->>Controller: progress summary
+        Controller-->>Client: 200
+    else GET /analytics/meals/*
+        Client->>Controller: request
+        Controller->>UseCase: meal analytics execute
+        UseCase->>MealRM: query analytic read-model
+        opt weekly trend
+            UseCase->>Plan: read active plan targets
+        end
+        UseCase-->>Controller: analytics payload
+        Controller-->>Client: 200
+    end
+```
 
-`shared-doc.md`'de zaten bu prensibi koymuştuk: LLM entegrasyonu (maliyet, gecikme,
-güvenilirlik) eklemeden önce, basit kural tabanlı bir sürümle başlayıp değeri
-kanıtlamak daha güvenli. `InsightGeneratorPort` soyutlaması sayesinde, ileride
-`LlmInsightGenerator`'a geçmek tek bir adapter dosyasını değiştirmek — use-case'ler
-hiç etkilenmiyor.
+### Read-model besleme akisi
 
----
+```mermaid
+sequenceDiagram
+    participant Nutrition as nutrition-logging
+    participant Outbox as shared/outbox
+    participant Job as consumeOutboxEventsJob
+    participant MealRM as PrismaMealLogReadModelRepository
 
-## Bu modülde kod yazarken genel prensip
+    Nutrition->>Outbox: write meal logged event
+    Job->>Outbox: poll unprocessed events
+    Outbox-->>Job: event batch
+    Job->>MealRM: upsert analytic rows
+    Job->>Outbox: mark processed
+```
 
-`body-analytics`, sisteme **yeni bir gerçek** eklemiyor — sadece var olan veriyi
-(vücut ölçümleri, öğün logları) farklı açılardan yorumluyor. Yeni bir hesaplama
-eklemek isterseniz, önce "bu veri zaten bir yerde var mı, yoksa gerçekten yeni bir
-girdi mi gerektiriyor" diye sorun — `daily-tracking`'de benimsediğimiz aynı disiplin
-burada da geçerli.
+## Gelistirme Rehberi
+
+- Yeni analytics endpoint'i ekliyorsaniz once bunun transactional source of truth'tan mi yoksa read-model'den mi okunmasi gerektigini secin. Tekrarlanan toplu sorgular icin read-model tercih edin.
+- `body-analytics` diger modullerin tablolarina direkt gitmemeli. `ProfilePort`, `DailyTrackingPort`, `PlanTargetPort` gibi portlar uzerinden gidin.
+- Insight uretimi adapter uzerinden soyutlanmis. LLM tabanli generator eklerken use-case imzasini degistirmeyin; `InsightGeneratorPort` implement edin.
+
+## Ornek Best Practice
+
+Dogru:
+
+```ts
+const insights = await insightGenerator.generate(summary);
+```
+
+Yanlis: `GetMealInsights` icinde dogrudan LLM client olusturmak veya `nutrition-logging` repository import etmek.

@@ -83,7 +83,10 @@ recognizePhotoWorker.on('failed', async (job, err) => {
   if (!job) return;
   const { mealPhotoId } = job.data;
 
-  logger.error({ mealPhotoId, err }, 'photo recognition job permanently failed');
+  logger.error(
+    { mealPhotoId, jobId: job.id, failedReason: job.failedReason, attemptsMade: job.attemptsMade, err },
+    'photo recognition job permanently failed',
+  );
 
   try {
     await repository.updateResult(mealPhotoId, {

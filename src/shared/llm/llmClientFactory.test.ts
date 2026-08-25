@@ -3,6 +3,8 @@ jest.mock('../config/env', () => ({
     LLM_PROVIDER: 'openai' as 'openai' | 'anthropic',
     OPENAI_API_KEY: undefined as string | undefined,
     OPENAI_MODEL: 'gpt-4o',
+    OPENAI_TIMEOUT_MS: 60000,
+    TIMEOUTS_ENABLED: true,
     ANTHROPIC_API_KEY: undefined as string | undefined,
     ANTHROPIC_MODEL: 'claude-sonnet-4-6',
   },

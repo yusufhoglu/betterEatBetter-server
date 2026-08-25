@@ -10,7 +10,7 @@ function resolveSmokeDatabaseUrl() {
   }
 
   if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL or SMOKE_TEST_DATABASE_URL must be set');
+    throw new Error('DATABASE_URL must be set to derive SMOKE_TEST_DATABASE_URL');
   }
 
   const databaseUrl = new URL(process.env.DATABASE_URL);
@@ -44,11 +44,20 @@ function runDockerExec(args) {
 
 const postgresContainer = process.env.SMOKE_TEST_POSTGRES_CONTAINER || 'food-tracking-postgres';
 const smokeDatabaseUrl = new URL(resolveSmokeDatabaseUrl());
+const primaryDatabaseUrl = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL) : null;
 const smokeDatabaseName = smokeDatabaseUrl.pathname.replace(/^\//, '');
 const smokeDatabaseOwner = decodeURIComponent(smokeDatabaseUrl.username || 'app');
 
 if (!smokeDatabaseName) {
   throw new Error('Resolved smoke database URL does not include a database name');
+}
+
+if (!smokeDatabaseName.endsWith('_smoke')) {
+  throw new Error('Smoke database name must end with "_smoke"');
+}
+
+if (primaryDatabaseUrl && smokeDatabaseUrl.toString() === primaryDatabaseUrl.toString()) {
+  throw new Error('SMOKE_TEST_DATABASE_URL must not match DATABASE_URL');
 }
 
 const existing = runDockerExec([

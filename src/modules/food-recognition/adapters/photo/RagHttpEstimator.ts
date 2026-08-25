@@ -50,6 +50,10 @@ export const ragResponseSchema = z.union([
 
 export type RagResponse = z.infer<typeof ragResponseSchema>;
 
+function formatRagFailureMessage(data: Extract<RagResponse, { status: 'failed' }>): string {
+  return `[${data.error.code}] ${data.error.message} (requestId: ${data.requestId})`;
+}
+
 /**
  * Sends the pending photo URL to the Python RAG service.
  * Forwards the x-trace-id header from AsyncLocalStorage — no parameter passing needed.
@@ -110,7 +114,16 @@ export class RagHttpEstimator implements PhotoEstimatorPort {
     const data = parsed.data;
 
     if (data.status === 'failed') {
-      throw new IntegrationError('RAG_PROCESSING_ERROR', data.error.message, false);
+      logger.error(
+        {
+          requestId: data.requestId,
+          ragErrorCode: data.error.code,
+          processingTimeMs: data.processingTimeMs,
+          ragResponse: body,
+        },
+        'RAG service reported processing failure',
+      );
+      throw new IntegrationError('RAG_PROCESSING_ERROR', formatRagFailureMessage(data), false);
     }
 
     return {

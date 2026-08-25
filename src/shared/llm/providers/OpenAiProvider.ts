@@ -23,6 +23,7 @@ const DEFAULT_FEATURE = 'unknown';
 export interface OpenAiProviderOptions {
   readonly apiKey: string;
   readonly model: string;
+  readonly timeoutMs?: number;
 }
 
 /** Translates the canonical LLM format to/from the OpenAI Chat Completions API. */
@@ -31,19 +32,27 @@ export class OpenAiProvider implements LlmClient {
   private readonly model: string;
 
   constructor(options: OpenAiProviderOptions) {
-    this.client = new OpenAI({ apiKey: options.apiKey });
+    this.client = new OpenAI({
+      apiKey: options.apiKey,
+      timeout: options.timeoutMs,
+    });
     this.model = options.model;
   }
 
   async complete(request: LlmCompleteRequest): Promise<LlmCompleteResponse> {
-    const response = await this.client.chat.completions.create({
-      model: request.model ?? this.model,
-      messages: toOpenAiMessages(request),
-      tools: request.tools?.map(toOpenAiTool),
-      tool_choice: toOpenAiToolChoice(request),
-      max_tokens: request.maxTokens,
-      temperature: request.temperature,
-    });
+    let response;
+    try {
+      response = await this.client.chat.completions.create({
+        model: request.model ?? this.model,
+        messages: toOpenAiMessages(request),
+        tools: request.tools?.map(toOpenAiTool),
+        tool_choice: toOpenAiToolChoice(request),
+        max_tokens: request.maxTokens,
+        temperature: request.temperature,
+      });
+    } catch (err) {
+      throw mapOpenAiError(err);
+    }
 
     const choice = response.choices[0];
     if (!choice) {
@@ -64,14 +73,19 @@ export class OpenAiProvider implements LlmClient {
   }
 
   async *streamComplete(request: LlmStreamCompleteRequest): AsyncIterable<string> {
-    const stream = await this.client.chat.completions.create({
-      model: request.model ?? this.model,
-      messages: toOpenAiMessages(request),
-      max_tokens: request.maxTokens,
-      temperature: request.temperature,
-      stream: true,
-      stream_options: { include_usage: true },
-    });
+    let stream;
+    try {
+      stream = await this.client.chat.completions.create({
+        model: request.model ?? this.model,
+        messages: toOpenAiMessages(request),
+        max_tokens: request.maxTokens,
+        temperature: request.temperature,
+        stream: true,
+        stream_options: { include_usage: true },
+      });
+    } catch (err) {
+      throw mapOpenAiError(err);
+    }
 
     let usage: LlmUsage = { inputTokens: 0, outputTokens: 0 };
     for await (const chunk of stream) {
@@ -87,6 +101,72 @@ export class OpenAiProvider implements LlmClient {
       }
     }
     recordUsage(request.feature, usage);
+  }
+}
+
+function mapOpenAiError(err: unknown): Error {
+  if (err instanceof IntegrationError) {
+    return err;
+  }
+
+  if (isOpenAiConnectionTimeoutError(err)) {
+    return new IntegrationError('LLM_NETWORK_TIMEOUT', 'OpenAI connection timed out', true, 503);
+  }
+
+  if (isOpenAiConnectionError(err)) {
+    return new IntegrationError('LLM_NETWORK_ERROR', 'Could not reach OpenAI', true, 503);
+  }
+
+  return err instanceof Error ? err : new Error(String(err));
+}
+
+function isOpenAiConnectionTimeoutError(err: unknown): boolean {
+  return hasErrorName(err, 'APIConnectionTimeoutError') || hasErrorMessage(err, 'connect timeout error');
+}
+
+function isOpenAiConnectionError(err: unknown): boolean {
+  return hasErrorName(err, 'APIConnectionError') || hasErrorMessage(err, 'fetch failed');
+}
+
+function hasErrorName(err: unknown, expectedName: string): boolean {
+  for (const current of iterateErrorChain(err)) {
+    if (typeof current === 'object' && current !== null && 'name' in current && current.name === expectedName) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasErrorMessage(err: unknown, expectedFragment: string): boolean {
+  const normalizedFragment = expectedFragment.toLowerCase();
+  for (const current of iterateErrorChain(err)) {
+    if (
+      typeof current === 'object' &&
+      current !== null &&
+      'message' in current &&
+      typeof current.message === 'string' &&
+      current.message.toLowerCase().includes(normalizedFragment)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function* iterateErrorChain(err: unknown): Iterable<unknown> {
+  let current = err;
+  const visited = new Set<unknown>();
+
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    yield current;
+
+    if (typeof current === 'object' && current !== null && 'cause' in current) {
+      current = current.cause;
+      continue;
+    }
+
+    break;
   }
 }
 
