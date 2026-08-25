@@ -32,8 +32,10 @@ describe('GetDaySummary', () => {
 
     expect(summary.consumed).toEqual({ calories: 180, proteinG: 14, carbsG: 2, fatG: 12 });
     expect(summary.mealItems[0]?.photoUrl).toBe('https://photos.example/entry-1.jpg');
+    expect(summary.mealItems[0]?.imageUrl).toBe('https://photos.example/entry-1.jpg');
     expect(summary.mealItems[0]?.photoUrls).toEqual(['https://photos.example/entry-1.jpg']);
     expect(summary.mealItems[0]?.entries[0]?.photoUrl).toBe('https://photos.example/entry-1.jpg');
+    expect(summary.mealItems[0]?.entries[0]?.imageUrl).toBe('https://photos.example/entry-1.jpg');
     expect(summary.dailyCalorieGoal).toBeNull();
     expect(summary.remainingCalories).toBeNull();
     expect(summary.progress.protein.goal).toBeNull();
@@ -68,11 +70,13 @@ describe('GetDaySummary', () => {
     const summary = await useCase.execute({ userId: 'user-1', date: today });
 
     expect(summary.mealItems[0]?.photoUrl).toBe('https://cdn.example.com/meals/abc.jpg');
+    expect(summary.mealItems[0]?.imageUrl).toBe('https://cdn.example.com/meals/abc.jpg');
     expect(summary.mealItems[0]?.entries[0]).toEqual(
       expect.objectContaining({
         id: 'entry-1',
         mealPhotoId: 'photo-1',
         photoUrl: 'https://cdn.example.com/meals/abc.jpg',
+        imageUrl: 'https://cdn.example.com/meals/abc.jpg',
       }),
     );
     expect(photoUrlResolver).not.toHaveBeenCalled();
@@ -105,8 +109,10 @@ describe('GetDaySummary', () => {
     const summary = await useCase.execute({ userId: 'user-1', date: today });
 
     expect(summary.mealItems[0]?.photoUrl).toBe('https://photos.example/photo-1.jpg');
+    expect(summary.mealItems[0]?.imageUrl).toBe('https://photos.example/photo-1.jpg');
     expect(summary.mealItems[0]?.photoUrls).toEqual(['https://photos.example/photo-1.jpg']);
     expect(summary.mealItems[0]?.entries[0]?.photoUrl).toBe('https://photos.example/photo-1.jpg');
+    expect(summary.mealItems[0]?.entries[0]?.imageUrl).toBe('https://photos.example/photo-1.jpg');
     expect(photoUrlResolver).toHaveBeenCalledWith('user-1', 'photo-1');
   });
 
@@ -138,7 +144,13 @@ describe('GetDaySummary', () => {
     expect(summary.mealItems[0]?.photoUrl).toBe(
       'https://photos.example/57978c2c-f626-485e-b65b-4398bcae2b95.jpg',
     );
+    expect(summary.mealItems[0]?.imageUrl).toBe(
+      'https://photos.example/57978c2c-f626-485e-b65b-4398bcae2b95.jpg',
+    );
     expect(summary.mealItems[0]?.entries[0]?.photoUrl).toBe(
+      'https://photos.example/57978c2c-f626-485e-b65b-4398bcae2b95.jpg',
+    );
+    expect(summary.mealItems[0]?.entries[0]?.imageUrl).toBe(
       'https://photos.example/57978c2c-f626-485e-b65b-4398bcae2b95.jpg',
     );
     expect(photoUrlResolver).toHaveBeenCalledWith('user-1', '57978c2c-f626-485e-b65b-4398bcae2b95');

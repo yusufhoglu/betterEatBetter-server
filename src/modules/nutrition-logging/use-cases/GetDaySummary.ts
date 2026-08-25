@@ -29,11 +29,13 @@ export interface DaySummary {
 
 export type DaySummaryMealEntry = LoggedMealEntry & {
   photoUrl?: string;
+  imageUrl?: string;
 };
 
 export interface DaySummaryMealItem extends Omit<MealItem, 'entries'> {
   entries: DaySummaryMealEntry[];
   photoUrl?: string;
+  imageUrl?: string;
   photoUrls: string[];
 }
 
@@ -93,6 +95,7 @@ export class GetDaySummary {
           return {
             ...entry,
             photoUrl: persistedPhotoUrl,
+            imageUrl: persistedPhotoUrl,
           };
         }
 
@@ -104,7 +107,7 @@ export class GetDaySummary {
         const photoUrl = await this.photoUrlResolver(mealItem.userId, mealPhotoId);
         return {
           ...entry,
-          ...(photoUrl ? { photoUrl } : {}),
+          ...(photoUrl ? { photoUrl, imageUrl: photoUrl } : {}),
         };
       }),
     );
@@ -118,6 +121,7 @@ export class GetDaySummary {
       ...mealItem,
       entries,
       photoUrl: firstPhotoEntry?.photoUrl,
+      imageUrl: firstPhotoEntry?.photoUrl,
       photoUrls,
     };
   }
