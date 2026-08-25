@@ -97,6 +97,7 @@ describe('ChatController', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('text/event-stream');
     expect(res.headers['x-trace-id']).toBe('conv-1');
+    expect(res.text).toContain('event: thinking');
     expect(res.text).toContain('event: proposal');
     expect(res.text).toContain('"rawDescription":"tavuklu sandvic"');
     expect(res.text).toContain('event: text');
@@ -118,7 +119,28 @@ describe('ChatController', () => {
       .send({ content: 'selam' });
 
     expect(res.status).toBe(200);
+    expect(res.text).toContain('event: thinking');
     expect(res.text).toContain('event: text');
+    expect(res.text).toContain('event: error');
+    expect(res.text).toContain('"code":"STREAM_INTERRUPTED"');
+  });
+
+  it('starts SSE immediately before the first chunk arrives', async () => {
+    const app = createApp(
+      new FakeSendMessage(
+        [],
+        new FakeDomainError('STREAM_INTERRUPTED', 'The response stream was interrupted before completion'),
+      ),
+    );
+
+    const res = await request(app)
+      .post('/chat/conv-1/messages')
+      .send({ content: 'selam' });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/event-stream');
+    expect(res.text).toContain(': connected');
+    expect(res.text).toContain('event: thinking');
     expect(res.text).toContain('event: error');
     expect(res.text).toContain('"code":"STREAM_INTERRUPTED"');
   });

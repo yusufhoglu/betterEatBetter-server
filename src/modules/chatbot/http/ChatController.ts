@@ -29,6 +29,8 @@ const confirmProposalBodySchema = z.object({
   applyMode: z.enum(['append', 'replace_meal_slot']).optional().default('append'),
 });
 
+const THINKING_EVENT_INTERVAL_MS = 2000;
+
 function parseOrThrow<T>(schema: z.ZodType<T>, value: unknown): T {
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
@@ -90,6 +92,10 @@ function writeSseChunk(res: Response, chunk: ChatStreamChunk): void {
   }
 }
 
+function writeThinkingEvent(res: Response): void {
+  res.write(`event: thinking\ndata: ${JSON.stringify({ status: 'thinking' })}\n\n`);
+}
+
 /** SSE endpoint for chat — trace_id = conversationId for the whole request. */
 export class ChatController {
   constructor(
@@ -124,16 +130,23 @@ export class ChatController {
         // DomainError there. Only once we've got a chunk to send do we commit to
         // the SSE response; any failure from that point on (including inside
         // streamFinalReply) becomes an `error` event instead of a JSON response.
-        let result = await iterator.next();
-
         res.writeHead(200, {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive',
           'x-trace-id': conversationId,
         });
+        res.flushHeaders?.();
+        // Emit an immediate SSE frame so clients can treat the stream as open
+        // while the first model/tool chunk is still being prepared.
+        res.write(': connected\n\n');
+        writeThinkingEvent(res);
+        const heartbeat = setInterval(() => {
+          writeThinkingEvent(res);
+        }, THINKING_EVENT_INTERVAL_MS);
 
         try {
+          let result = await iterator.next();
           while (!result.done) {
             writeSseChunk(res, result.value);
             result = await iterator.next();
@@ -143,6 +156,7 @@ export class ChatController {
           const code = err instanceof DomainError ? err.code : 'STREAM_INTERRUPTED';
           res.write(`event: error\ndata: ${JSON.stringify({ code })}\n\n`);
         } finally {
+          clearInterval(heartbeat);
           res.end();
         }
       });

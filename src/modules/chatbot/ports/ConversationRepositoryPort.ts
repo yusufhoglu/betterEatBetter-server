@@ -8,8 +8,8 @@ export interface ConversationRepositoryPort {
   /**
    * Loads the conversation if it exists (must be owned by userId), otherwise
    * creates a new, empty one under the given id — conversationId is
-   * client/trace-supplied and stays fixed for the whole chat, so the first
-   * message of a chat implicitly creates its conversation row.
+   * client-supplied and stays fixed for the whole chat, so either the first
+   * history fetch or the first message can materialize the conversation row.
    */
   findOrCreate(userId: string, conversationId: string): Promise<Conversation>;
 

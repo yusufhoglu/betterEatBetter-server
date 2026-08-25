@@ -21,7 +21,7 @@ okuyor. Bunu düzelt:
    - LLM_PROVIDER: z.enum(['openai', 'anthropic']) (mock/test provider'lar env
      şemasına eklenmez, sadece test dosyalarında registerLlmProvider ile kullanılır)
    - OPENAI_API_KEY: z.string().optional() (LLM_PROVIDER='openai' değilse gerekmeyebilir)
-   - OPENAI_MODEL: z.string().optional().default('gpt-4o')
+   - OPENAI_MODEL: z.string().optional().default('gpt-5-mini')
    - ANTHROPIC_API_KEY: z.string().optional()
    - ANTHROPIC_MODEL: z.string().optional().default('claude-sonnet-4-6')
    NOT: envSchema.parse() zaten uygulama başlangıcında (fail-fast) çalışıyor —

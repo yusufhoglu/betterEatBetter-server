@@ -21,11 +21,17 @@ describe('GetConversationHistory', () => {
     ]);
   });
 
-  it('throws NotFoundError when the conversation does not exist', async () => {
+  it('creates and returns an empty conversation when it does not exist yet', async () => {
     const repository = new InMemoryConversationRepository();
     const useCase = new GetConversationHistory(repository);
 
-    await expect(useCase.execute('user-1', 'does-not-exist')).rejects.toThrow('Conversation was not found');
+    const conversation = await useCase.execute('user-1', 'does-not-exist');
+
+    expect(conversation).toMatchObject({
+      id: 'does-not-exist',
+      userId: 'user-1',
+      messages: [],
+    });
   });
 
   it('throws NotFoundError when the conversation belongs to a different user', async () => {

@@ -31,6 +31,7 @@ export function proposalToLoggedMealEntries(proposal: MealLogProposal): LoggedMe
   return proposal.entries.flatMap((entry) =>
     entry.items.map((item) => ({
       id: randomUUID(),
+      ...(entry.source === 'photo' ? { mealPhotoId: entry.id } : {}),
       name: item.name,
       source: entry.source,
       portionGrams: item.portionGrams,

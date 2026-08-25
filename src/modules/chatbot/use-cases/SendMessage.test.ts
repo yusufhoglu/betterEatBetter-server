@@ -194,7 +194,7 @@ describe('SendMessage', () => {
       expect(llmChatPort.streamFinalReplyCalls[0]?.at(-1)).toEqual(
         expect.objectContaining({
           role: 'system',
-          content: expect.stringContaining('plain Turkish'),
+          content: expect.stringContaining('plain English'),
         }),
       );
     });
