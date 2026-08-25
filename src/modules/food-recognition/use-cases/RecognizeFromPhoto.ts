@@ -38,6 +38,29 @@ const IMAGE_SIGNATURES = [
   { mime: 'image/webp', bytes: [0x52, 0x49, 0x46, 0x46] }, // RIFF....WEBP
 ];
 
+function serializeStorageError(err: unknown): Record<string, unknown> {
+  if (!(err instanceof Error)) {
+    return { err };
+  }
+
+  const candidate = err as Error & {
+    name?: string;
+    message?: string;
+    Code?: string;
+    code?: string;
+    $metadata?: { httpStatusCode?: number; requestId?: string; extendedRequestId?: string };
+  };
+
+  return {
+    errorName: candidate.name,
+    errorMessage: candidate.message,
+    errorCode: candidate.Code ?? candidate.code,
+    httpStatusCode: candidate.$metadata?.httpStatusCode,
+    requestId: candidate.$metadata?.requestId,
+    extendedRequestId: candidate.$metadata?.extendedRequestId,
+  };
+}
+
 function detectImageMime(buffer: Buffer): string | null {
   for (const sig of IMAGE_SIGNATURES) {
     if (sig.bytes.every((b, i) => buffer[i] === b)) {
@@ -73,6 +96,7 @@ export class RecognizeFromPhoto {
   async execute(input: RecognizeFromPhotoInput): Promise<RecognizeFromPhotoOutput> {
     const { mealPhotoId, userId } = input;
     const objectKey = pendingObjectKey(mealPhotoId);
+    logger.info({ mealPhotoId, userId, objectKey, bucket: OBJECT_STORAGE_BUCKET }, 'validating pending meal photo');
 
     // Step 1a: Check file size via HeadObject (no binary transfer)
     let contentLength: number;
@@ -81,7 +105,23 @@ export class RecognizeFromPhoto {
         new HeadObjectCommand({ Bucket: OBJECT_STORAGE_BUCKET, Key: objectKey }),
       );
       contentLength = head.ContentLength ?? 0;
-    } catch {
+      logger.info(
+        {
+          mealPhotoId,
+          objectKey,
+          bucket: OBJECT_STORAGE_BUCKET,
+          contentLength,
+          contentType: head.ContentType,
+          eTag: head.ETag,
+          lastModified: head.LastModified?.toISOString(),
+        },
+        'pending meal photo head-object succeeded',
+      );
+    } catch (err) {
+      logger.error(
+        { mealPhotoId, userId, objectKey, bucket: OBJECT_STORAGE_BUCKET, ...serializeStorageError(err) },
+        'pending meal photo head-object failed',
+      );
       throw new ValidationError('PHOTO_NOT_FOUND', 'Photo not found in pending storage');
     }
 
@@ -113,6 +153,7 @@ export class RecognizeFromPhoto {
     if (!detectedMime) {
       throw new ValidationError('INVALID_IMAGE_FORMAT', 'File is not a valid JPEG, PNG, or WebP image');
     }
+    logger.info({ mealPhotoId, objectKey, detectedMime, headerBytesRead: headerBuffer.length }, 'pending meal photo header validated');
 
     // Resolution check: use sharp on the first bytes (enough for most headers)
     // Import sharp lazily to avoid issues in environments without native bindings during unit tests
@@ -143,9 +184,11 @@ export class RecognizeFromPhoto {
         `Image dimensions exceed ${MAX_PHOTO_DIMENSION_PX}x${MAX_PHOTO_DIMENSION_PX} px`,
       );
     }
+    logger.info({ mealPhotoId, objectKey, imageWidth, imageHeight }, 'pending meal photo dimensions validated');
 
     // Step 2: Persist with status='processing'
     await this.repository.create({ id: mealPhotoId, userId, status: 'processing' });
+    logger.info({ mealPhotoId, userId }, 'food entry created with processing status');
 
     const traceId = getTraceId() ?? mealPhotoId;
 
@@ -177,7 +220,17 @@ export class RecognizeFromPhoto {
       ),
     ]);
 
-    logger.info({ mealPhotoId, userId }, 'photo recognition jobs enqueued');
+    logger.info(
+      {
+        mealPhotoId,
+        userId,
+        objectKey,
+        traceId,
+        recognizeQueue: 'recognize-photo',
+        standardizeQueue: 'standardize-and-copy',
+      },
+      'photo recognition jobs enqueued',
+    );
 
     return { mealPhotoId };
   }

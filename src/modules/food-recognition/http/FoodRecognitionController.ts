@@ -50,6 +50,7 @@ export class FoodRecognitionController {
       res.setHeader(TRACE_ID_HEADER, mealPhotoId);
 
       await runWithContext({ traceId: mealPhotoId, userId }, async () => {
+        logger.info({ mealPhotoId, userId }, 'photo recognition request received');
         await checkRateLimit(`photo:${userId}`, 5, 60);
 
         const result = await this.recognizeFromPhoto.execute({
@@ -57,9 +58,11 @@ export class FoodRecognitionController {
           userId,
         });
 
+        logger.info({ mealPhotoId: result.mealPhotoId, userId }, 'photo recognition request accepted');
         res.status(202).json({ mealPhotoId: result.mealPhotoId });
       });
     } catch (err) {
+      logger.error({ err, body: req.body, userId: req.auth?.userId }, 'photo recognition request failed');
       next(err);
     }
   }

@@ -1,4 +1,4 @@
-import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { createWorker } from '../../../shared/queue/queueConnection';
 import { createModuleLogger } from '../../../shared/observability/logger';
@@ -13,6 +13,29 @@ const QUEUE_NAME = 'standardize-and-copy';
 const MAX_WIDTH = 2048;
 const MAX_HEIGHT = 2048;
 const JPEG_QUALITY = 85;
+
+function serializeStorageError(err: unknown): Record<string, unknown> {
+  if (!(err instanceof Error)) {
+    return { err };
+  }
+
+  const candidate = err as Error & {
+    name?: string;
+    message?: string;
+    Code?: string;
+    code?: string;
+    $metadata?: { httpStatusCode?: number; requestId?: string; extendedRequestId?: string };
+  };
+
+  return {
+    errorName: candidate.name,
+    errorMessage: candidate.message,
+    errorCode: candidate.Code ?? candidate.code,
+    httpStatusCode: candidate.$metadata?.httpStatusCode,
+    requestId: candidate.$metadata?.requestId,
+    extendedRequestId: candidate.$metadata?.extendedRequestId,
+  };
+}
 
 export async function standardizeImage(imageBuffer: Buffer): Promise<Buffer> {
   return sharp(imageBuffer)
@@ -48,6 +71,30 @@ export const standardizeAndCopyWorker = createWorker<StandardizeAndCopyJobPayloa
       return;
     }
 
+    try {
+      const head = await objectStorageClient.send(
+        new HeadObjectCommand({ Bucket: OBJECT_STORAGE_BUCKET, Key: sourceKey }),
+      );
+      logger.info(
+        {
+          mealPhotoId,
+          sourceKey,
+          bucket: OBJECT_STORAGE_BUCKET,
+          contentLength: head.ContentLength ?? 0,
+          contentType: head.ContentType,
+          eTag: head.ETag,
+          lastModified: head.LastModified?.toISOString(),
+        },
+        'standardize-and-copy pending photo head-object succeeded',
+      );
+    } catch (err) {
+      logger.error(
+        { mealPhotoId, userId, sourceKey, bucket: OBJECT_STORAGE_BUCKET, ...serializeStorageError(err) },
+        'standardize-and-copy pending photo head-object failed',
+      );
+      throw new IntegrationError('STORAGE_DOWNLOAD_ERROR', `Could not download pending photo: ${sourceKey}`, true);
+    }
+
     // Download the pending photo
     let imageBuffer: Buffer;
     try {
@@ -60,7 +107,12 @@ export const standardizeAndCopyWorker = createWorker<StandardizeAndCopyJobPayloa
         chunks.push(chunk);
       }
       imageBuffer = Buffer.concat(chunks);
+      logger.info({ mealPhotoId, sourceKey, downloadedBytes: imageBuffer.length }, 'standardize-and-copy pending photo downloaded');
     } catch (err) {
+      logger.error(
+        { mealPhotoId, userId, sourceKey, bucket: OBJECT_STORAGE_BUCKET, ...serializeStorageError(err) },
+        'standardize-and-copy pending photo download failed',
+      );
       throw new IntegrationError('STORAGE_DOWNLOAD_ERROR', `Could not download pending photo: ${sourceKey}`, true);
     }
 
@@ -68,7 +120,12 @@ export const standardizeAndCopyWorker = createWorker<StandardizeAndCopyJobPayloa
     let processedBuffer: Buffer;
     try {
       processedBuffer = await standardizeImage(imageBuffer);
+      logger.info(
+        { mealPhotoId, sourceKey, originalBytes: imageBuffer.length, processedBytes: processedBuffer.length },
+        'standardize-and-copy image standardized',
+      );
     } catch (err) {
+      logger.error({ mealPhotoId, sourceKey, err }, 'standardize-and-copy image processing failed');
       throw new IntegrationError('IMAGE_PROCESSING_ERROR', 'Failed to process image with sharp', false);
     }
 
@@ -89,7 +146,15 @@ export const standardizeAndCopyWorker = createWorker<StandardizeAndCopyJobPayloa
           ContentType: 'image/jpeg',
         }),
       );
+      logger.info(
+        { mealPhotoId, destKey, bucket: OBJECT_STORAGE_BUCKET, uploadedBytes: processedBuffer.length },
+        'standardize-and-copy final photo uploaded',
+      );
     } catch (err) {
+      logger.error(
+        { mealPhotoId, userId, destKey, bucket: OBJECT_STORAGE_BUCKET, ...serializeStorageError(err) },
+        'standardize-and-copy final photo upload failed',
+      );
       throw new IntegrationError('STORAGE_UPLOAD_ERROR', `Could not upload processed photo to ${destKey}`, true);
     }
 
@@ -100,3 +165,33 @@ export const standardizeAndCopyWorker = createWorker<StandardizeAndCopyJobPayloa
     logger.info({ mealPhotoId, destKey }, 'standardize-and-copy completed');
   },
 );
+
+standardizeAndCopyWorker.on('completed', (job) => {
+  logger.info(
+    {
+      mealPhotoId: job.data.mealPhotoId,
+      jobId: job.id,
+      attemptsMade: job.attemptsMade,
+    },
+    'standardize-and-copy job completed',
+  );
+});
+
+standardizeAndCopyWorker.on('failed', (job, err) => {
+  if (!job) {
+    logger.error({ err }, 'standardize-and-copy job failed before BullMQ provided a job reference');
+    return;
+  }
+
+  logger.error(
+    {
+      mealPhotoId: job.data.mealPhotoId,
+      userId: job.data.userId,
+      jobId: job.id,
+      attemptsMade: job.attemptsMade,
+      failedReason: job.failedReason,
+      err,
+    },
+    'standardize-and-copy job permanently failed',
+  );
+});
