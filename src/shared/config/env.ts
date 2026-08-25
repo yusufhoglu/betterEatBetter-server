@@ -26,8 +26,8 @@ const envSchema = z.object({
 
   // food-recognition module settings
   LLM_SERVICE_URL: z.string().url().default('http://localhost:11434'),
-  CHATBOT_MODEL: z.string().optional().default('gpt-4o'),
-  FOOD_TEXT_MODEL: z.string().optional().default('gpt-4o-mini'),
+  CHATBOT_MODEL: z.string().optional().default('gpt-5-mini'),
+  FOOD_TEXT_MODEL: z.string().optional().default('gpt-5-mini'),
   OPEN_FOOD_FACTS_URL: z.string().url().default('https://world.openfoodfacts.org'),
   MAX_PHOTO_SIZE_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
   PHOTO_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
@@ -36,6 +36,7 @@ const envSchema = z.object({
   FOOD_ENTRY_CLEANUP_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 60 * 1000),
   FOOD_ENTRY_CLEANUP_MAX_AGE_HOURS: z.coerce.number().int().positive().default(24),
   FOOD_ENTRY_CLEANUP_BATCH_SIZE: z.coerce.number().int().positive().default(100),
+  RATE_LIMIT_ENABLED: z.coerce.boolean().default(true),
   MAX_TOOL_TURNS: z.coerce.number().int().positive().default(5),
   MAX_CONTEXT_MESSAGES: z.coerce.number().int().positive().default(20),
 
@@ -47,7 +48,7 @@ const envSchema = z.object({
   // shared/llm — provider-agnostic LLM client (see shared/llm/llmClientFactory.ts).
   LLM_PROVIDER: z.enum(['openai', 'anthropic']),
   OPENAI_API_KEY: z.string().optional(),
-  OPENAI_MODEL: z.string().optional().default('gpt-4o'),
+  OPENAI_MODEL: z.string().optional().default('gpt-5-mini'),
   OPENAI_TIMEOUT_MS: z.coerce.number().int().positive().default(60 * 1000),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().optional().default('claude-sonnet-4-6'),

@@ -1,4 +1,5 @@
 import { cacheRedisClient } from '../cache/redisCacheClient';
+import { env } from '../config/env';
 import { RateLimitError } from '../errors/RateLimitError';
 
 /**
@@ -7,6 +8,10 @@ import { RateLimitError } from '../errors/RateLimitError';
  * about modules, only key/limit/window.
  */
 export async function checkRateLimit(key: string, limit: number, windowSeconds: number): Promise<void> {
+  if (!env.RATE_LIMIT_ENABLED) {
+    return;
+  }
+
   const redisKey = `ratelimit:${key}`;
   const now = Date.now();
   const windowStart = now - windowSeconds * 1000;

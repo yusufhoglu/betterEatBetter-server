@@ -19,8 +19,8 @@ food-recognition/, chatbot/ zaten kurulu ve çalışıyor. Bu turda üç değiş
 yapacağız, mevcut davranışı BOZMADAN.
 
 1. shared/config/env.ts'e İKİ yeni alan ekle:
-   - CHATBOT_MODEL: z.string().optional().default('gpt-4o')
-   - FOOD_TEXT_MODEL: z.string().optional().default('gpt-4o-mini')
+   - CHATBOT_MODEL: z.string().optional().default('gpt-5-mini')
+   - FOOD_TEXT_MODEL: z.string().optional().default('gpt-5-mini')
 
 2. src/modules/food-recognition/adapters/text/LlmTextEstimator.ts dosyasını İNCELE.
    ÖNCE raporla: şu an nasıl implemente edilmiş (doğrudan bir SDK/API çağrısı mı

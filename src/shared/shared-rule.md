@@ -181,8 +181,8 @@ Referans: `backend-architecture.md` §3 ve §6.
   `streamComplete()` çağrısında `model` parametresini KENDİ özellik-bazlı env
   değişkeninden geçirir — sağlayıcıdan BAĞIMSIZ isimlendirilir (`OPENAI_`/`ANTHROPIC_`
   öneki YOK), çünkü sağlayıcı değişse bile bu değişkenin anlamı aynı kalmalı:
-  - `CHATBOT_MODEL` (varsayılan `gpt-4o`) — kullanıcıyla doğrudan sohbet, kalite öncelikli
-  - `FOOD_TEXT_MODEL` (varsayılan `gpt-4o-mini`) — yapılandırılmış/basit metin
+  - `CHATBOT_MODEL` (varsayılan `gpt-5-mini`) — kullanıcıyla doğrudan sohbet, kalite öncelikli
+  - `FOOD_TEXT_MODEL` (varsayılan `gpt-5-mini`) — yapılandırılmış/basit metin
     tahmini (`food-recognition/RecognizeFromText`), maliyet öncelikli
   Yeni bir LLM-tüketen özellik eklendiğinde, aynı desenle kendi
   `{ÖZELLİK}_MODEL` değişkenini tanımlar — `shared/config/env.ts`'e eklenir.
