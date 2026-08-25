@@ -4,8 +4,11 @@ export type MealType = (typeof mealTypes)[number];
 
 export interface LoggedMealEntry {
   id: string;
+  mealPhotoId?: string;
   name: string;
   source?: string;
+  photoUrl?: string;
+  imageUrl?: string;
   portionGrams: number;
   calories: number;
   proteinG: number;

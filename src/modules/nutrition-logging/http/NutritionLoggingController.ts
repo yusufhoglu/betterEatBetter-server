@@ -7,17 +7,7 @@ import type { GetDaySummary } from '../use-cases/GetDaySummary';
 import type { LogMealEntries } from '../use-cases/LogMealEntries';
 import type { ReplaceMealSlotEntries } from '../use-cases/ReplaceMealSlotEntries';
 import type { UpdateMealEntry } from '../use-cases/UpdateMealEntry';
-
-const loggedMealEntrySchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1).max(200),
-  source: z.string().min(1).max(50).optional(),
-  portionGrams: z.number().positive(),
-  calories: z.number().min(0),
-  proteinG: z.number().min(0),
-  carbsG: z.number().min(0),
-  fatG: z.number().min(0),
-});
+import { loggedMealEntrySchema } from '../domain/loggedMealEntrySchema';
 
 const logMealEntriesSchema = z.object({
   mealType: z.enum(mealTypes),
@@ -48,7 +38,7 @@ const summaryQuerySchema = z.object({
   date: z.string().date().optional(),
 });
 
-function parseOrThrow<T>(schema: z.ZodType<T>, value: unknown): T {
+function parseOrThrow<TSchema extends z.ZodTypeAny>(schema: TSchema, value: unknown): z.output<TSchema> {
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
     throw new ValidationError('INVALID_REQUEST_BODY', parsed.error.issues[0]?.message ?? 'Invalid request');

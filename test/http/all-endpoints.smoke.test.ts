@@ -531,7 +531,15 @@ describe('all endpoint smoke tests', () => {
         .send({
           mealType: 'breakfast',
           timeZone: 'UTC',
-          entries: [mealEntry('entry-b', 'Toast')],
+          entries: [
+            {
+              ...mealEntry('entry-b', 'Toast'),
+              source: 'photo',
+              mealPhotoId: 'photo-entry-b',
+              photoUrl: null,
+              imageUrl: '',
+            },
+          ],
         });
       expect(replaceRes.status).toBe(200);
 

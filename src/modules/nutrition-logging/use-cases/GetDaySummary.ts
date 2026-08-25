@@ -6,6 +6,9 @@ import type { DailyTargetsPort } from '../ports/DailyTargetsPort';
 import type { MealItemRepositoryPort } from '../ports/MealItemRepositoryPort';
 import { createFinalDownloadUrl, finalObjectExists } from '../../../shared/storage/presignedUrl';
 
+const UUID_LIKE_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export interface GetDaySummaryInput {
   userId: string;
   date: Date;
@@ -32,6 +35,18 @@ export interface DaySummaryMealItem extends Omit<MealItem, 'entries'> {
   entries: DaySummaryMealEntry[];
   photoUrl?: string;
   photoUrls: string[];
+}
+
+function inferMealPhotoId(entry: LoggedMealEntry): string | undefined {
+  if (entry.mealPhotoId) {
+    return entry.mealPhotoId;
+  }
+
+  if (entry.source === 'photo') {
+    return entry.id;
+  }
+
+  return UUID_LIKE_PATTERN.test(entry.id) ? entry.id : undefined;
 }
 
 export class GetDaySummary {
@@ -73,11 +88,20 @@ export class GetDaySummary {
   private async enrichMealItem(mealItem: MealItem): Promise<DaySummaryMealItem> {
     const entries = await Promise.all(
       mealItem.entries.map(async (entry): Promise<DaySummaryMealEntry> => {
-        if (entry.source !== 'photo') {
+        const persistedPhotoUrl = entry.photoUrl ?? entry.imageUrl;
+        if (persistedPhotoUrl) {
+          return {
+            ...entry,
+            photoUrl: persistedPhotoUrl,
+          };
+        }
+
+        const mealPhotoId = inferMealPhotoId(entry);
+        if (!mealPhotoId) {
           return entry;
         }
 
-        const photoUrl = await this.photoUrlResolver(mealItem.userId, entry.id);
+        const photoUrl = await this.photoUrlResolver(mealItem.userId, mealPhotoId);
         return {
           ...entry,
           ...(photoUrl ? { photoUrl } : {}),

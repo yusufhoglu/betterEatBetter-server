@@ -54,4 +54,45 @@ describe('ReplaceMealSlotEntries', () => {
     expect(eventPublisher.publishLogged).not.toHaveBeenCalled();
     expect(eventPublisher.publishUpdated).toHaveBeenCalledTimes(1);
   });
+
+  test('keeps photo metadata when replacing a meal slot', async () => {
+    const repository = new InMemoryMealItemRepository();
+    const eventPublisher = buildEventPublisher();
+    const useCase = new ReplaceMealSlotEntries(repository, eventPublisher, async (fn) => fn({} as never));
+
+    const mealItem = await useCase.execute({
+      userId: 'user-1',
+      date: today,
+      mealType: 'breakfast',
+      entries: [
+        {
+          id: 'entry-2',
+          mealPhotoId: 'photo-2',
+          name: 'Oats',
+          source: 'photo',
+          photoUrl: 'https://cdn.example.com/meals/oats.jpg',
+          portionGrams: 80,
+          calories: 300,
+          proteinG: 10,
+          carbsG: 52,
+          fatG: 5,
+        },
+      ],
+    });
+
+    expect(mealItem.entries).toEqual([
+      {
+        id: 'entry-2',
+        mealPhotoId: 'photo-2',
+        name: 'Oats',
+        source: 'photo',
+        photoUrl: 'https://cdn.example.com/meals/oats.jpg',
+        portionGrams: 80,
+        calories: 300,
+        proteinG: 10,
+        carbsG: 52,
+        fatG: 5,
+      },
+    ]);
+  });
 });

@@ -39,6 +39,111 @@ describe('GetDaySummary', () => {
     expect(summary.progress.protein.goal).toBeNull();
   });
 
+  it('returns persisted photoUrl values from meal slot entries', async () => {
+    const repository = new InMemoryMealItemRepository();
+    const targets = new FakeDailyTargetsPort();
+    const photoUrlResolver = jest.fn(async () => 'https://photos.example/should-not-be-used.jpg');
+    const useCase = new GetDaySummary(repository, targets, photoUrlResolver);
+
+    await repository.appendEntries({
+      userId: 'user-1',
+      date: today,
+      mealType: 'breakfast',
+      entries: [
+        {
+          id: 'entry-1',
+          mealPhotoId: 'photo-1',
+          name: 'Omelette',
+          source: 'photo',
+          photoUrl: 'https://cdn.example.com/meals/abc.jpg',
+          portionGrams: 150,
+          calories: 320,
+          proteinG: 22,
+          carbsG: 8,
+          fatG: 21,
+        },
+      ],
+    });
+
+    const summary = await useCase.execute({ userId: 'user-1', date: today });
+
+    expect(summary.mealItems[0]?.photoUrl).toBe('https://cdn.example.com/meals/abc.jpg');
+    expect(summary.mealItems[0]?.entries[0]).toEqual(
+      expect.objectContaining({
+        id: 'entry-1',
+        mealPhotoId: 'photo-1',
+        photoUrl: 'https://cdn.example.com/meals/abc.jpg',
+      }),
+    );
+    expect(photoUrlResolver).not.toHaveBeenCalled();
+  });
+
+  it('resolves photoUrl from mealPhotoId for replaced meal-slot entries', async () => {
+    const repository = new InMemoryMealItemRepository();
+    const targets = new FakeDailyTargetsPort();
+    const photoUrlResolver = jest.fn(async (_userId: string, mealPhotoId: string) => `https://photos.example/${mealPhotoId}.jpg`);
+    const useCase = new GetDaySummary(repository, targets, photoUrlResolver);
+
+    await repository.appendEntries({
+      userId: 'user-1',
+      date: today,
+      mealType: 'breakfast',
+      entries: [
+        {
+          id: 'entry-1',
+          mealPhotoId: 'photo-1',
+          name: 'Omelette',
+          portionGrams: 150,
+          calories: 320,
+          proteinG: 22,
+          carbsG: 8,
+          fatG: 21,
+        },
+      ],
+    });
+
+    const summary = await useCase.execute({ userId: 'user-1', date: today });
+
+    expect(summary.mealItems[0]?.photoUrl).toBe('https://photos.example/photo-1.jpg');
+    expect(summary.mealItems[0]?.photoUrls).toEqual(['https://photos.example/photo-1.jpg']);
+    expect(summary.mealItems[0]?.entries[0]?.photoUrl).toBe('https://photos.example/photo-1.jpg');
+    expect(photoUrlResolver).toHaveBeenCalledWith('user-1', 'photo-1');
+  });
+
+  it('falls back to a UUID entry id when source metadata is missing', async () => {
+    const repository = new InMemoryMealItemRepository();
+    const targets = new FakeDailyTargetsPort();
+    const photoUrlResolver = jest.fn(async (_userId: string, mealPhotoId: string) => `https://photos.example/${mealPhotoId}.jpg`);
+    const useCase = new GetDaySummary(repository, targets, photoUrlResolver);
+
+    await repository.appendEntries({
+      userId: 'user-1',
+      date: today,
+      mealType: 'breakfast',
+      entries: [
+        {
+          id: '57978c2c-f626-485e-b65b-4398bcae2b95',
+          name: 'Omelette',
+          portionGrams: 150,
+          calories: 320,
+          proteinG: 22,
+          carbsG: 8,
+          fatG: 21,
+        },
+      ],
+    });
+
+    const summary = await useCase.execute({ userId: 'user-1', date: today });
+
+    expect(summary.mealItems[0]?.photoUrl).toBe(
+      'https://photos.example/57978c2c-f626-485e-b65b-4398bcae2b95.jpg',
+    );
+    expect(summary.mealItems[0]?.entries[0]?.photoUrl).toBe(
+      'https://photos.example/57978c2c-f626-485e-b65b-4398bcae2b95.jpg',
+    );
+    expect(photoUrlResolver).toHaveBeenCalledWith('user-1', '57978c2c-f626-485e-b65b-4398bcae2b95');
+  });
+
   it('recomputes totals from all meal items for the day', async () => {
     const repository = new InMemoryMealItemRepository();
     const targets = new FakeDailyTargetsPort();

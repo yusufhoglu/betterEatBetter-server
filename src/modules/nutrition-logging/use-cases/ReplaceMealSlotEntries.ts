@@ -2,26 +2,26 @@ import { z } from 'zod';
 import { ValidationError } from '../../../shared/errors/ValidationError';
 import { withTransaction, type TransactionClient } from '../../../shared/persistence/transaction';
 import type { LoggedMealEntry, MealItem, MealType } from '../domain/MealItem';
+import { loggedMealEntrySchema } from '../domain/loggedMealEntrySchema';
 import { mealTypes } from '../domain/MealItem';
 import { toMealEventEntries, type MealLoggedEventPublisher } from '../events/publishers/MealLoggedEventPublisher';
 import type { MealItemRepositoryPort } from '../ports/MealItemRepositoryPort';
-
-const loggedMealEntrySchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1).max(200),
-  source: z.string().min(1).max(50).optional(),
-  portionGrams: z.number().positive().max(5000),
-  calories: z.number().min(0).max(5000),
-  proteinG: z.number().min(0).max(500),
-  carbsG: z.number().min(0).max(1000),
-  fatG: z.number().min(0).max(500),
-});
 
 const replaceMealSlotEntriesSchema = z.object({
   userId: z.string().min(1),
   date: z.date(),
   mealType: z.enum(mealTypes),
-  entries: z.array(loggedMealEntrySchema).min(1),
+  entries: z
+    .array(
+      loggedMealEntrySchema.extend({
+        portionGrams: z.number().positive().max(5000),
+        calories: z.number().min(0).max(5000),
+        proteinG: z.number().min(0).max(500),
+        carbsG: z.number().min(0).max(1000),
+        fatG: z.number().min(0).max(500),
+      }),
+    )
+    .min(1),
 });
 
 export interface ReplaceMealSlotEntriesInput {
