@@ -13,6 +13,8 @@ Impact:
 - simpler unit testing because core logic is isolated
 
 ### Food Recognition
+<img width="43441" height="5234" alt="food-recognition_approach" src="https://github.com/user-attachments/assets/7cb5a0b6-ebab-4463-9e09-459b68e3a84a" />
+
 
 Food recognition uses a hybrid approach that separates single-ingredient foods from mixed-ingredient meals.
 Single items can be estimated more deterministically, while mixed dishes need more contextual inference.
