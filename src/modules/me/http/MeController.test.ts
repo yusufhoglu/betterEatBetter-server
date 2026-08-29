@@ -11,7 +11,11 @@ function buildApp() {
     imageUrl: string | null;
     emoji: string | null;
     kcal: number;
-    prepTimeMinutes: number;
+    prepTimeMinutes: number | null;
+    proteinG: number | null;
+    carbsG: number | null;
+    fatG: number | null;
+    mealPhotoId: string | null;
   }> = [
     {
       id: 'fav-1',
@@ -20,6 +24,10 @@ function buildApp() {
       emoji: 'pasta',
       kcal: 420,
       prepTimeMinutes: 25,
+      proteinG: null,
+      carbsG: null,
+      fatG: null,
+      mealPhotoId: null,
     },
   ];
   const myMeals: Array<{
@@ -29,6 +37,9 @@ function buildApp() {
     emoji: string | null;
     kcal: number;
     proteinG: number;
+    carbsG: number | null;
+    fatG: number | null;
+    mealPhotoId: string | null;
   }> = [
     {
       id: 'meal-1',
@@ -37,6 +48,9 @@ function buildApp() {
       emoji: 'omelette',
       kcal: 340,
       proteinG: 32,
+      carbsG: null,
+      fatG: null,
+      mealPhotoId: null,
     },
   ];
 
@@ -102,15 +116,29 @@ function buildApp() {
         imageUrl?: string | null;
         emoji?: string | null;
         kcal: number;
-        prepTimeMinutes: number;
+        prepTimeMinutes?: number | null;
+        proteinG?: number | null;
+        carbsG?: number | null;
+        fatG?: number | null;
+        mealPhotoId?: string | null;
       }) => {
+        const existing = input.mealPhotoId
+          ? favoriteRecipes.find((f) => f.mealPhotoId === input.mealPhotoId)
+          : undefined;
+        if (existing) {
+          return existing;
+        }
         const created = {
           id: 'fav-2',
           title: input.title,
           imageUrl: input.imageUrl ?? null,
           emoji: input.emoji ?? null,
           kcal: input.kcal,
-          prepTimeMinutes: input.prepTimeMinutes,
+          prepTimeMinutes: input.prepTimeMinutes ?? null,
+          proteinG: input.proteinG ?? null,
+          carbsG: input.carbsG ?? null,
+          fatG: input.fatG ?? null,
+          mealPhotoId: input.mealPhotoId ?? null,
         };
         favoriteRecipes.push(created);
         return created;
@@ -129,7 +157,16 @@ function buildApp() {
         emoji?: string | null;
         kcal: number;
         proteinG: number;
+        carbsG?: number | null;
+        fatG?: number | null;
+        mealPhotoId?: string | null;
       }) => {
+        const existing = input.mealPhotoId
+          ? myMeals.find((m) => m.mealPhotoId === input.mealPhotoId)
+          : undefined;
+        if (existing) {
+          return existing;
+        }
         const created = {
           id: 'meal-2',
           title: input.title,
@@ -137,6 +174,9 @@ function buildApp() {
           emoji: input.emoji ?? null,
           kcal: input.kcal,
           proteinG: input.proteinG,
+          carbsG: input.carbsG ?? null,
+          fatG: input.fatG ?? null,
+          mealPhotoId: input.mealPhotoId ?? null,
         };
         myMeals.push(created);
         return created;
@@ -277,17 +317,23 @@ describe('MeController', () => {
         emoji: 'pasta',
         kcal: 420,
         prepTimeMinutes: 25,
+        proteinG: null,
+        carbsG: null,
+        fatG: null,
+        mealPhotoId: null,
       },
     ]);
   });
 
-  test('POST /favorite-recipes creates a new favorite recipe card', async () => {
+  test('POST /favorite-recipes creates a favorite meal (macros, no prep time)', async () => {
     const app = buildApp();
 
     const res = await request(app).post('/favorite-recipes').send({
       title: 'Greek Yogurt Bowl',
       kcal: 280,
-      prepTimeMinutes: 5,
+      proteinG: 22,
+      carbsG: 24,
+      fatG: 9,
     });
 
     expect(res.status).toBe(201);
@@ -297,7 +343,11 @@ describe('MeController', () => {
       imageUrl: null,
       emoji: null,
       kcal: 280,
-      prepTimeMinutes: 5,
+      prepTimeMinutes: null,
+      proteinG: 22,
+      carbsG: 24,
+      fatG: 9,
+      mealPhotoId: null,
     });
   });
 
@@ -323,6 +373,9 @@ describe('MeController', () => {
         emoji: 'omelette',
         kcal: 340,
         proteinG: 32,
+        carbsG: null,
+        fatG: null,
+        mealPhotoId: null,
       },
     ]);
   });
@@ -334,6 +387,8 @@ describe('MeController', () => {
       title: 'Turkey Wrap',
       kcal: 410,
       proteinG: 29,
+      carbsG: 38,
+      fatG: 14,
     });
 
     expect(res.status).toBe(201);
@@ -344,6 +399,9 @@ describe('MeController', () => {
       emoji: null,
       kcal: 410,
       proteinG: 29,
+      carbsG: 38,
+      fatG: 14,
+      mealPhotoId: null,
     });
   });
 
@@ -363,6 +421,9 @@ describe('MeController', () => {
       emoji: 'omelette',
       kcal: 340,
       proteinG: 35,
+      carbsG: null,
+      fatG: null,
+      mealPhotoId: null,
     });
   });
 

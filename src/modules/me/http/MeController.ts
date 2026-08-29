@@ -84,7 +84,13 @@ const favoriteRecipeSchema = z.object({
   imageUrl: z.string().url().nullable().optional(),
   emoji: z.string().trim().min(1).nullable().optional(),
   kcal: z.number().int().positive(),
-  prepTimeMinutes: z.number().int().positive(),
+  prepTimeMinutes: z.number().int().positive().nullable().optional(),
+  proteinG: z.number().int().nonnegative().nullable().optional(),
+  carbsG: z.number().int().nonnegative().nullable().optional(),
+  fatG: z.number().int().nonnegative().nullable().optional(),
+  // Set when saving a meal from the Social feed.
+  mealPhotoId: z.string().uuid().nullable().optional(),
+  mealPhotoOwnerId: z.string().uuid().nullable().optional(),
 });
 
 const myMealCreateSchema = z.object({
@@ -93,6 +99,11 @@ const myMealCreateSchema = z.object({
   emoji: z.string().trim().min(1).nullable().optional(),
   kcal: z.number().int().positive(),
   proteinG: z.number().int().nonnegative(),
+  carbsG: z.number().int().nonnegative().nullable().optional(),
+  fatG: z.number().int().nonnegative().nullable().optional(),
+  // Set when saving a Social post — lets the photo be re-signed on every read.
+  mealPhotoId: z.string().uuid().nullable().optional(),
+  mealPhotoOwnerId: z.string().uuid().nullable().optional(),
 });
 
 const myMealUpdateSchema = z

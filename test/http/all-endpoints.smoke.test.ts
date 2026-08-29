@@ -469,6 +469,42 @@ describe('all endpoint smoke tests', () => {
         });
       expect(createFavoriteRecipeRes.status).toBe(201);
 
+      // A meal saved from the Social feed → a favorite with full macros + a
+      // re-signable photo, idempotent per (user, mealPhotoId).
+      const favPhotoId = randomUUID();
+      const favMealRes = await request(app)
+        .post('/favorite-recipes')
+        .set('Authorization', bearer(session.accessToken))
+        .send({
+          title: 'Lentil Soup',
+          kcal: 420,
+          proteinG: 32,
+          carbsG: 45,
+          fatG: 12,
+          mealPhotoId: favPhotoId,
+          mealPhotoOwnerId: randomUUID(),
+        });
+      expect(favMealRes.status).toBe(201);
+      expect(favMealRes.body.proteinG).toBe(32);
+      expect(favMealRes.body.prepTimeMinutes).toBeNull();
+      expect(favMealRes.body.mealPhotoId).toBe(favPhotoId);
+      expect(typeof favMealRes.body.imageUrl).toBe('string');
+
+      const favDupRes = await request(app)
+        .post('/favorite-recipes')
+        .set('Authorization', bearer(session.accessToken))
+        .send({ title: 'Lentil Soup', kcal: 420, mealPhotoId: favPhotoId });
+      expect(favDupRes.body.id).toBe(favMealRes.body.id);
+
+      const listFavAfter = await request(app)
+        .get('/favorite-recipes')
+        .set('Authorization', bearer(session.accessToken));
+      expect(
+        listFavAfter.body.filter(
+          (f: { mealPhotoId: string | null }) => f.mealPhotoId === favPhotoId,
+        ),
+      ).toHaveLength(1);
+
       const deleteFavoriteRecipeRes = await request(app)
         .delete(`/favorite-recipes/${createFavoriteRecipeRes.body.id}`)
         .set('Authorization', bearer(session.accessToken));
@@ -490,6 +526,45 @@ describe('all endpoint smoke tests', () => {
           proteinG: 40,
         });
       expect(createMyMealRes.status).toBe(201);
+
+      // A meal saved from the Social feed carries full macros + a re-signable
+      // photo reference; `imageUrl` comes back as a fresh signed URL.
+      const soupPhotoId = randomUUID();
+      const photoMealRes = await request(app)
+        .post('/my-meals')
+        .set('Authorization', bearer(session.accessToken))
+        .send({
+          title: 'Lentil Soup',
+          kcal: 420,
+          proteinG: 32,
+          carbsG: 45,
+          fatG: 12,
+          mealPhotoId: soupPhotoId,
+          mealPhotoOwnerId: randomUUID(),
+        });
+      expect(photoMealRes.status).toBe(201);
+      expect(photoMealRes.body.carbsG).toBe(45);
+      expect(photoMealRes.body.fatG).toBe(12);
+      expect(photoMealRes.body.mealPhotoId).toBe(soupPhotoId);
+      expect(typeof photoMealRes.body.imageUrl).toBe('string');
+
+      // Saving the same photo again is idempotent — same row, no duplicate.
+      const dupRes = await request(app)
+        .post('/my-meals')
+        .set('Authorization', bearer(session.accessToken))
+        .send({ title: 'Lentil Soup', kcal: 420, proteinG: 32, mealPhotoId: soupPhotoId });
+      expect(dupRes.status).toBe(201);
+      expect(dupRes.body.id).toBe(photoMealRes.body.id);
+
+      const listWithPhoto = await request(app)
+        .get('/my-meals')
+        .set('Authorization', bearer(session.accessToken));
+      expect(listWithPhoto.status).toBe(200);
+      const soups = listWithPhoto.body.filter(
+        (m: { mealPhotoId: string | null }) => m.mealPhotoId === soupPhotoId,
+      );
+      expect(soups).toHaveLength(1);
+      expect(soups[0].carbsG).toBe(45);
 
       const patchMyMealRes = await request(app)
         .patch(`/my-meals/${createMyMealRes.body.id}`)
@@ -547,6 +622,20 @@ describe('all endpoint smoke tests', () => {
         .get('/nutrition-logs/day-summary?timeZone=UTC')
         .set('Authorization', bearer(session.accessToken));
       expect(summaryRes.status).toBe(200);
+
+      // "My Meals" history — recent logged slots, newest-first.
+      const historyRes = await request(app)
+        .get('/nutrition-logs/history?limit=10')
+        .set('Authorization', bearer(session.accessToken));
+      expect(historyRes.status).toBe(200);
+      expect(Array.isArray(historyRes.body)).toBe(true);
+      const bfast = historyRes.body.find(
+        (s: { mealType: string }) => s.mealType === 'breakfast',
+      );
+      expect(bfast).toBeTruthy();
+      expect(typeof bfast.calories).toBe('number');
+      expect(Array.isArray(bfast.items)).toBe(true);
+      expect(typeof bfast.photoUrl).toBe('string'); // entry-b is source 'photo'
 
       const updateRes = await request(app)
         .patch('/nutrition-logs/entries/entry-b')
@@ -671,6 +760,119 @@ describe('all endpoint smoke tests', () => {
         .set('Authorization', bearer(session.accessToken));
       expect(statusRes.status).toBe(200);
       expect(statusRes.body.isPremium).toBe(true);
+    });
+  });
+
+  describe('social smoke', () => {
+    it('covers post, feed, edit, like, comment, reply, and delete', async () => {
+      const author = await createSession();
+      const viewer = await createSession();
+      const mealPhotoId = randomUUID();
+
+      // A completed photo recognition backs the shared meal's nutrition.
+      await prisma.foodEntry.create({
+        data: {
+          id: mealPhotoId,
+          userId: author.userId,
+          status: 'completed',
+          resultJson: {
+            macros: {
+              totalCalories: 420,
+              totalProteinGrams: 32,
+              totalCarbsGrams: 45,
+              totalFatGrams: 12,
+            },
+          },
+        },
+      });
+
+      const createRes = await request(app)
+        .post('/social/posts')
+        .set('Authorization', bearer(author.accessToken))
+        .send({ mealPhotoId, caption: 'post-lunch bowl' });
+      expect(createRes.status).toBe(201);
+      expect(createRes.body.isMine).toBe(true);
+      expect(createRes.body.nutrition).toEqual({
+        calories: 420,
+        proteinG: 32,
+        carbsG: 45,
+        fatG: 12,
+      });
+      const postId: string = createRes.body.id;
+
+      const feedRes = await request(app)
+        .get('/social/feed')
+        .set('Authorization', bearer(viewer.accessToken));
+      expect(feedRes.status).toBe(200);
+      expect(Array.isArray(feedRes.body)).toBe(true);
+      expect(feedRes.body[0]?.id).toBe(postId);
+      expect(feedRes.body[0]?.isMine).toBe(false);
+      expect(feedRes.body[0]?.nutrition?.calories).toBe(420);
+
+      const editRes = await request(app)
+        .patch(`/social/posts/${postId}`)
+        .set('Authorization', bearer(author.accessToken))
+        .send({ caption: 'edited caption' });
+      expect(editRes.status).toBe(200);
+      expect(editRes.body.edited).toBe(true);
+
+      const forbiddenRes = await request(app)
+        .patch(`/social/posts/${postId}`)
+        .set('Authorization', bearer(viewer.accessToken))
+        .send({ caption: 'not yours' });
+      expect(forbiddenRes.status).toBe(403);
+
+      const likeRes = await request(app)
+        .post(`/social/posts/${postId}/like`)
+        .set('Authorization', bearer(viewer.accessToken))
+        .send({ liked: true });
+      expect(likeRes.status).toBe(200);
+      expect(likeRes.body.likeCount).toBe(1);
+      expect(likeRes.body.likedByMe).toBe(true);
+
+      const commentRes = await request(app)
+        .post(`/social/posts/${postId}/comments`)
+        .set('Authorization', bearer(viewer.accessToken))
+        .send({ text: 'looks great' });
+      expect(commentRes.status).toBe(201);
+      const commentId: string = commentRes.body.id;
+
+      const replyRes = await request(app)
+        .post(`/social/posts/${postId}/comments`)
+        .set('Authorization', bearer(author.accessToken))
+        .send({ text: 'thanks!', parentId: commentId });
+      expect(replyRes.status).toBe(201);
+      expect(replyRes.body.parentId).toBe(commentId);
+
+      const commentsRes = await request(app)
+        .get(`/social/posts/${postId}/comments`)
+        .set('Authorization', bearer(author.accessToken));
+      expect(commentsRes.status).toBe(200);
+      expect(Array.isArray(commentsRes.body)).toBe(true);
+      expect(commentsRes.body).toHaveLength(2);
+
+      const commentLikeRes = await request(app)
+        .post(`/social/comments/${commentId}/like`)
+        .set('Authorization', bearer(author.accessToken))
+        .send({ liked: true });
+      expect(commentLikeRes.status).toBe(200);
+      expect(commentLikeRes.body.likeCount).toBe(1);
+
+      const postRes = await request(app)
+        .get(`/social/posts/${postId}`)
+        .set('Authorization', bearer(author.accessToken));
+      expect(postRes.status).toBe(200);
+      expect(postRes.body.commentCount).toBe(2);
+
+      const deleteRes = await request(app)
+        .delete(`/social/posts/${postId}`)
+        .set('Authorization', bearer(author.accessToken));
+      expect(deleteRes.status).toBe(204);
+
+      const goneRes = await request(app)
+        .get(`/social/posts/${postId}`)
+        .set('Authorization', bearer(author.accessToken));
+      expect(goneRes.status).toBe(404);
     });
   });
 

@@ -134,6 +134,16 @@ export class PrismaMealItemRepository implements MealItemRepositoryPort {
     return rows.map(mapMealItem);
   }
 
+  async findRecentByUserId(userId: string, limit: number): Promise<MealItem[]> {
+    const rows = await this.db.mealItem.findMany({
+      where: { userId },
+      orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
+      take: limit,
+    });
+
+    return rows.map(mapMealItem);
+  }
+
   async findByUserIdDateAndMealType(userId: string, date: Date, mealType: MealType): Promise<MealItem | null> {
     const row = await this.db.mealItem.findUnique({
       where: {

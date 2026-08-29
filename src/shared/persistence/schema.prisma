@@ -30,6 +30,10 @@ model User {
   favoriteRecipes        FavoriteRecipe[]
   savedMeals             SavedMeal[]
   subscriptions          Subscription[]
+  socialPosts            SocialPost[]
+  socialComments         SocialComment[]
+  socialPostLikes        SocialPostLike[]
+  socialCommentLikes     SocialCommentLike[]
 
   @@map("users")
 }
@@ -205,6 +209,9 @@ model NotificationPreference {
   @@map("notification_preferences")
 }
 
+// "Favorite Meals" — the user's bookmarked meals, incl. anything saved from
+// the Social feed (with full macros + a re-signable photo reference).
+// `prepTimeMinutes` is only set for hand-added recipes.
 model FavoriteRecipe {
   id              String   @id @default(uuid())
   userId          String
@@ -213,9 +220,15 @@ model FavoriteRecipe {
   imageUrl        String?
   emoji           String?
   kcal            Int
-  prepTimeMinutes Int
+  prepTimeMinutes Int?
+  proteinG        Int?
+  carbsG          Int?
+  fatG            Int?
+  mealPhotoId      String?
+  mealPhotoOwnerId String?
   createdAt       DateTime @default(now())
 
+  @@unique([userId, mealPhotoId])
   @@index([userId, createdAt])
   @@map("favorite_recipes")
 }
@@ -229,8 +242,17 @@ model SavedMeal {
   emoji     String?
   kcal      Int
   proteinG  Int
+  carbsG    Int?
+  fatG      Int?
+  // When saved from the Social feed: the source meal photo, re-signed on read.
+  // `imageUrl` is derived from these when present.
+  mealPhotoId      String?
+  mealPhotoOwnerId String?
   createdAt DateTime @default(now())
 
+  // A given Social meal photo is saved at most once per user (NULLs don't
+  // collide, so manual saves are unaffected).
+  @@unique([userId, mealPhotoId])
   @@index([userId, createdAt])
   @@map("saved_meals")
 }
@@ -273,4 +295,67 @@ model Message {
 
   @@index([conversationId, createdAt])
   @@map("messages")
+}
+
+// social module: a small reverse-chronological feed of meal photos the user
+// already logged and chose to make public. `mealPhotoId` points at an existing
+// R2 object at users/{authorId}/meals/{mealPhotoId}.jpg — the social module
+// never stores image bytes, it mints a short-lived signed URL on read.
+model SocialPost {
+  id          String   @id @default(uuid())
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  mealPhotoId String
+  caption     String   @default("")
+  edited      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  comments SocialComment[]
+  likes    SocialPostLike[]
+
+  // A given meal photo is shared to the feed at most once.
+  @@unique([authorId, mealPhotoId])
+  @@index([createdAt])
+  @@map("social_posts")
+}
+
+model SocialComment {
+  id        String         @id @default(uuid())
+  postId    String
+  post      SocialPost     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  text      String
+  parentId  String?
+  parent    SocialComment? @relation("SocialCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+
+  replies SocialComment[]     @relation("SocialCommentReplies")
+  likes   SocialCommentLike[]
+
+  @@index([postId, createdAt])
+  @@map("social_comments")
+}
+
+model SocialPostLike {
+  postId    String
+  userId    String
+  post      SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@id([postId, userId])
+  @@map("social_post_likes")
+}
+
+model SocialCommentLike {
+  commentId String
+  userId    String
+  comment   SocialComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@id([commentId, userId])
+  @@map("social_comment_likes")
 }

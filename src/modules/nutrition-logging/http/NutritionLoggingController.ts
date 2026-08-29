@@ -4,6 +4,7 @@ import { ValidationError } from '../../../shared/errors/ValidationError';
 import { mealTypes } from '../domain/MealItem';
 import type { DeleteMealEntry } from '../use-cases/DeleteMealEntry';
 import type { GetDaySummary } from '../use-cases/GetDaySummary';
+import type { GetMealHistory } from '../use-cases/GetMealHistory';
 import type { LogMealEntries } from '../use-cases/LogMealEntries';
 import type { ReplaceMealSlotEntries } from '../use-cases/ReplaceMealSlotEntries';
 import type { UpdateMealEntry } from '../use-cases/UpdateMealEntry';
@@ -89,7 +90,20 @@ export class NutritionLoggingController {
     private readonly getDaySummary: GetDaySummary,
     private readonly updateMealEntry: UpdateMealEntry,
     private readonly deleteMealEntry: DeleteMealEntry,
+    private readonly getMealHistory: GetMealHistory,
   ) {}
+
+  handleGetMealHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const history = await this.getMealHistory.execute({
+        userId: req.auth!.userId,
+        limit: typeof req.query.limit === 'string' ? req.query.limit : undefined,
+      });
+      res.status(200).json(history);
+    } catch (err) {
+      next(err);
+    }
+  };
 
   handleLogMealEntries = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

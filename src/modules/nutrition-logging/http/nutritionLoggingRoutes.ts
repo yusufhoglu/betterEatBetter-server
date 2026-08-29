@@ -6,6 +6,7 @@ import { OnboardingPlanTargetsAdapter } from '../adapters/targets/OnboardingPlan
 import { MealLoggedEventPublisher } from '../events/publishers/MealLoggedEventPublisher';
 import { DeleteMealEntry } from '../use-cases/DeleteMealEntry';
 import { GetDaySummary } from '../use-cases/GetDaySummary';
+import { GetMealHistory } from '../use-cases/GetMealHistory';
 import { LogMealEntries } from '../use-cases/LogMealEntries';
 import { ReplaceMealSlotEntries } from '../use-cases/ReplaceMealSlotEntries';
 import { UpdateMealEntry } from '../use-cases/UpdateMealEntry';
@@ -23,6 +24,7 @@ export function nutritionLoggingRoutes(): Router {
   const getDaySummary = new GetDaySummary(repository, dailyTargetsPort);
   const updateMealEntry = new UpdateMealEntry(repository, eventPublisher);
   const deleteMealEntry = new DeleteMealEntry(repository, eventPublisher);
+  const getMealHistory = new GetMealHistory(repository);
 
   const controller = new NutritionLoggingController(
     logMealEntries,
@@ -30,11 +32,13 @@ export function nutritionLoggingRoutes(): Router {
     getDaySummary,
     updateMealEntry,
     deleteMealEntry,
+    getMealHistory,
   );
 
   router.post('/', authMiddleware, controller.handleLogMealEntries);
   router.put('/meal-slot', authMiddleware, controller.handleReplaceMealSlot);
   router.get('/day-summary', authMiddleware, controller.handleGetDaySummary);
+  router.get('/history', authMiddleware, controller.handleGetMealHistory);
   router.patch('/entries/:entryId', authMiddleware, controller.handleUpdateMealEntry);
   router.delete('/entries/:entryId', authMiddleware, controller.handleDeleteMealEntry);
 

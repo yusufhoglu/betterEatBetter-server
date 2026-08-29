@@ -73,6 +73,18 @@ export class InMemoryMealItemRepository implements MealItemRepositoryPort {
       .map(cloneMealItem);
   }
 
+  async findRecentByUserId(userId: string, limit: number): Promise<MealItem[]> {
+    return Array.from(this.itemsById.values())
+      .filter((item) => item.userId === userId)
+      .sort(
+        (a, b) =>
+          b.date.getTime() - a.date.getTime() ||
+          b.updatedAt.getTime() - a.updatedAt.getTime(),
+      )
+      .slice(0, limit)
+      .map(cloneMealItem);
+  }
+
   async findByUserIdDateAndMealType(userId: string, date: Date, mealType: MealItem['mealType']): Promise<MealItem | null> {
     const id = this.idsByKey.get(keyOf(userId, date, mealType));
     if (!id) {

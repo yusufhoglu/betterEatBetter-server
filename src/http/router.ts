@@ -12,6 +12,7 @@ import { chatRoutes } from '../modules/chatbot/http/chatRoutes';
 import { meRoutes } from '../modules/me/http/meRoutes';
 import { notificationsRoutes } from '../modules/notifications/http/notificationsRoutes';
 import { subscriptionRoutes } from '../modules/subscription/http/subscriptionRoutes';
+import { socialRoutes } from '../modules/social/http/socialRoutes';
 
 export function createRouter(): Router {
   const router = Router();
@@ -29,6 +30,7 @@ export function createRouter(): Router {
   router.use('/chat', chatRoutes());
   router.use('/notifications', notificationsRoutes());
   router.use('/subscription', subscriptionRoutes());
+  router.use('/social', socialRoutes());
 
   return router;
 }
