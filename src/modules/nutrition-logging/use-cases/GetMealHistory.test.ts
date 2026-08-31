@@ -40,8 +40,9 @@ describe('GetMealHistory', () => {
   it('returns the user\'s slots newest-first with summed macros', async () => {
     const repo = new InMemoryMealItemRepository();
     await seed(repo);
+    const photoUrlResolver = jest.fn(async (_userId: string, mealPhotoId: string) => `https://photos.example/${mealPhotoId}.jpg`);
 
-    const history = await new GetMealHistory(repo).execute({ userId: 'u1' });
+    const history = await new GetMealHistory(repo, photoUrlResolver).execute({ userId: 'u1' });
 
     expect(history.map((s) => `${s.date} ${s.mealType}`)).toEqual([
       '2026-08-28 lunch',
@@ -50,16 +51,19 @@ describe('GetMealHistory', () => {
     expect(history[0]).toMatchObject({
       calories: 540,
       items: ['Chicken bowl'],
+      mealPhotoId: 'photo-1',
+      photoUrl: 'https://photos.example/photo-1.jpg',
     });
-    expect(typeof history[0]?.photoUrl).toBe('string'); // photo-scanned item
     expect(history[1]).toMatchObject({
       calories: 260,
       proteinG: 20,
       carbsG: 40,
       fatG: 10,
       items: ['Oatmeal', 'Berries'],
+      mealPhotoId: null,
       photoUrl: null,
     });
+    expect(photoUrlResolver).toHaveBeenCalledWith('u1', 'photo-1');
   });
 
   it('honours the limit', async () => {
@@ -67,5 +71,40 @@ describe('GetMealHistory', () => {
     await seed(repo);
     const history = await new GetMealHistory(repo).execute({ userId: 'u1', limit: 1 });
     expect(history).toHaveLength(1);
+  });
+
+  it('infers mealPhotoId from old photo entries', async () => {
+    const repo = new InMemoryMealItemRepository();
+    await repo.appendEntries({
+      userId: 'u1',
+      date: new Date('2026-08-29T00:00:00.000Z'),
+      mealType: 'dinner',
+      entries: [entry({ id: 'legacy-photo-id', source: 'photo', name: 'Legacy meal' })],
+    });
+    const photoUrlResolver = jest.fn(async (_userId: string, mealPhotoId: string) => `https://photos.example/${mealPhotoId}.jpg`);
+
+    const history = await new GetMealHistory(repo, photoUrlResolver).execute({ userId: 'u1' });
+
+    expect(history[0]).toMatchObject({
+      mealPhotoId: 'legacy-photo-id',
+      photoUrl: 'https://photos.example/legacy-photo-id.jpg',
+    });
+  });
+
+  it('returns null photoUrl only when the asset is missing', async () => {
+    const repo = new InMemoryMealItemRepository();
+    await repo.appendEntries({
+      userId: 'u1',
+      date: new Date('2026-08-29T00:00:00.000Z'),
+      mealType: 'dinner',
+      entries: [entry({ id: 'legacy-photo-id', source: 'photo', name: 'Legacy meal' })],
+    });
+
+    const history = await new GetMealHistory(repo, async () => null).execute({ userId: 'u1' });
+
+    expect(history[0]).toMatchObject({
+      mealPhotoId: 'legacy-photo-id',
+      photoUrl: null,
+    });
   });
 });

@@ -1,6 +1,7 @@
-import { createFinalDownloadUrl } from '../../../shared/storage/presignedUrl';
+import { createFinalDownloadUrl, finalObjectExists } from '../../../shared/storage/presignedUrl';
 import { AggregateMealEntries } from '../domain/AggregateMealEntries';
 import type { MealType } from '../domain/MealItem';
+import { inferMealPhotoId } from '../domain/resolveMealPhoto';
 import type { MealItemRepositoryPort } from '../ports/MealItemRepositoryPort';
 
 const DEFAULT_LIMIT = 30;
@@ -15,6 +16,7 @@ export interface MealHistorySlot {
   carbsG: number;
   fatG: number;
   items: string[];
+  mealPhotoId: string | null;
   /** Signed photo URL when a photo-scanned item is in the slot, else null. */
   photoUrl: string | null;
 }
@@ -29,7 +31,18 @@ export interface GetMealHistoryInput {
  * grouped by (date, meal slot). Read-only; the client groups by date.
  */
 export class GetMealHistory {
-  constructor(private readonly repository: MealItemRepositoryPort) {}
+  constructor(
+    private readonly repository: MealItemRepositoryPort,
+    private readonly photoUrlResolver: (userId: string, mealPhotoId: string) => Promise<string | null> = async (
+      userId,
+      mealPhotoId,
+    ) => {
+      if (!(await finalObjectExists(userId, mealPhotoId))) {
+        return null;
+      }
+      return createFinalDownloadUrl(userId, mealPhotoId);
+    },
+  ) {}
 
   async execute(input: GetMealHistoryInput): Promise<MealHistorySlot[]> {
     const raw = typeof input.limit === 'string' ? Number(input.limit) : input.limit;
@@ -43,10 +56,9 @@ export class GetMealHistory {
     return Promise.all(
       items.map(async (item) => {
         const totals = AggregateMealEntries(item.entries);
-        const photoEntry = item.entries.find((e) => e.mealPhotoId);
-        const photoUrl = photoEntry?.mealPhotoId
-          ? await createFinalDownloadUrl(input.userId, photoEntry.mealPhotoId).catch(() => null)
-          : null;
+        const photoEntry = item.entries.find((entry) => inferMealPhotoId(entry));
+        const mealPhotoId = photoEntry ? inferMealPhotoId(photoEntry) ?? null : null;
+        const photoUrl = mealPhotoId ? await this.photoUrlResolver(input.userId, mealPhotoId) : null;
 
         return {
           date: item.date.toISOString().slice(0, 10),
@@ -56,6 +68,7 @@ export class GetMealHistory {
           carbsG: Math.round(totals.carbsG),
           fatG: Math.round(totals.fatG),
           items: item.entries.map((e) => e.name),
+          mealPhotoId,
           photoUrl,
         };
       }),
