@@ -5,8 +5,10 @@ import { withTransaction, type TransactionClient } from '../../../shared/persist
 import type { LoggedMealEntry, MealItem, MealType } from '../domain/MealItem';
 import { loggedMealEntrySchema } from '../domain/loggedMealEntrySchema';
 import { mealTypes } from '../domain/MealItem';
+import { sharedMealMacrosFromEntries } from '../domain/sharedMealMacros';
 import { toMealEventEntries, type MealLoggedEventPublisher } from '../events/publishers/MealLoggedEventPublisher';
 import type { MealItemRepositoryPort } from '../ports/MealItemRepositoryPort';
+import { noopSharedMealPort, type SharedMealPort } from '../ports/SharedMealPort';
 
 const updateMealEntrySchema = z.object({
   userId: z.string().min(1),
@@ -50,6 +52,7 @@ export class UpdateMealEntry {
     private readonly repository: MealItemRepositoryPort,
     private readonly eventPublisher: Pick<MealLoggedEventPublisher, 'publishUpdated'>,
     private readonly runInTransaction: TransactionRunner = withTransaction,
+    private readonly sharedMeal: SharedMealPort = noopSharedMealPort,
   ) {}
 
   async execute(input: UpdateMealEntryInput): Promise<MealItem> {
@@ -92,6 +95,11 @@ export class UpdateMealEntry {
         mealItemId: updatedMealItem.id,
         entries: toMealEventEntries(updatedMealItem.entries),
       });
+
+      await this.sharedMeal.syncMacros(
+        sharedMealMacrosFromEntries(updatedMealItem.userId, updatedMealItem.entries),
+        tx,
+      );
 
       return updatedMealItem;
     });

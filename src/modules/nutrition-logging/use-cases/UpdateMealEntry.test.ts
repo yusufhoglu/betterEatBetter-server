@@ -55,6 +55,54 @@ describe('UpdateMealEntry', () => {
     );
   });
 
+  it('re-syncs the shared-post macros for a photo entry it edits', async () => {
+    const repository = new InMemoryMealItemRepository();
+    await repository.appendEntries({
+      userId: 'user-1',
+      date: today,
+      mealType: 'lunch',
+      entries: [
+        {
+          id: 'photo-1',
+          mealPhotoId: 'photo-1',
+          source: 'photo',
+          name: 'Bowl',
+          portionGrams: 300,
+          calories: 500,
+          proteinG: 30,
+          carbsG: 50,
+          fatG: 18,
+        },
+      ],
+    });
+    const publisher = { publishUpdated: jest.fn().mockResolvedValue(undefined) };
+    const sharedMeal = { syncMacros: jest.fn().mockResolvedValue(undefined) };
+    const useCase = new UpdateMealEntry(repository, publisher, runInTransaction, sharedMeal);
+
+    await useCase.execute({
+      userId: 'user-1',
+      date: today,
+      mealType: 'lunch',
+      entryId: 'photo-1',
+      entry: {
+        id: 'photo-1',
+        mealPhotoId: 'photo-1',
+        source: 'photo',
+        name: 'Bowl',
+        portionGrams: 260,
+        calories: 400,
+        proteinG: 36,
+        carbsG: 30,
+        fatG: 12,
+      },
+    });
+
+    expect(sharedMeal.syncMacros).toHaveBeenCalledWith(
+      [{ userId: 'user-1', mealPhotoId: 'photo-1', calories: 400, proteinG: 36, carbsG: 30, fatG: 12 }],
+      tx,
+    );
+  });
+
   it('throws NotFoundError when the entry does not exist', async () => {
     const repository = new InMemoryMealItemRepository();
     const publisher = { publishUpdated: jest.fn().mockResolvedValue(undefined) };

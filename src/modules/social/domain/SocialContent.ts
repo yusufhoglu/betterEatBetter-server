@@ -122,3 +122,98 @@ export function resolveFeedLimit(raw: unknown): number {
   }
   return value;
 }
+
+/**
+ * Optional feed narrowing by the shared meal's nutrition and/or when it was
+ * posted. Every bound is inclusive. Ranges run against the denormalized
+ * `social_posts` columns — a post whose relevant value is NULL is dropped
+ * from the result whenever the matching macro bound is set.
+ */
+export interface FeedFilter {
+  minKcal?: number;
+  maxKcal?: number;
+  minProteinG?: number;
+  maxProteinG?: number;
+  minCarbsG?: number;
+  maxCarbsG?: number;
+  minFatG?: number;
+  maxFatG?: number;
+  /** Posts created at or after this instant. */
+  from?: Date;
+  /** Posts created at or before this instant. */
+  to?: Date;
+}
+
+const MACRO_BOUNDS: ReadonlyArray<[keyof FeedFilter, number]> = [
+  ['minKcal', 10000],
+  ['maxKcal', 10000],
+  ['minProteinG', 2000],
+  ['maxProteinG', 2000],
+  ['minCarbsG', 2000],
+  ['maxCarbsG', 2000],
+  ['minFatG', 2000],
+  ['maxFatG', 2000],
+];
+
+function parseMacroBound(raw: unknown, key: string, max: number): number | undefined {
+  if (raw === undefined || raw === null || raw === '') {
+    return undefined;
+  }
+  const value = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > max) {
+    throw new ValidationError('INVALID_FILTER', `${key} must be a number between 0 and ${max}`);
+  }
+  return Math.round(value);
+}
+
+function parseDateBound(raw: unknown, key: string): Date | undefined {
+  if (raw === undefined || raw === null || raw === '') {
+    return undefined;
+  }
+  if (typeof raw !== 'string') {
+    throw new ValidationError('INVALID_FILTER', `${key} must be an ISO-8601 date string`);
+  }
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) {
+    throw new ValidationError('INVALID_FILTER', `${key} must be an ISO-8601 date string`);
+  }
+  return date;
+}
+
+/**
+ * Build a validated [FeedFilter] from raw query params, or `undefined` when no
+ * filter param is present. Throws `INVALID_FILTER` on a malformed value or an
+ * inverted range (min greater than max).
+ */
+export function resolveFeedFilter(query: Record<string, unknown>): FeedFilter | undefined {
+  const filter: FeedFilter = {};
+  for (const [key, max] of MACRO_BOUNDS) {
+    const value = parseMacroBound(query[key], key, max);
+    if (value !== undefined) {
+      (filter as Record<string, number>)[key] = value;
+    }
+  }
+  const from = parseDateBound(query.from, 'from');
+  const to = parseDateBound(query.to, 'to');
+  if (from) filter.from = from;
+  if (to) filter.to = to;
+
+  const pairs: ReadonlyArray<[keyof FeedFilter, keyof FeedFilter]> = [
+    ['minKcal', 'maxKcal'],
+    ['minProteinG', 'maxProteinG'],
+    ['minCarbsG', 'maxCarbsG'],
+    ['minFatG', 'maxFatG'],
+  ];
+  for (const [lo, hi] of pairs) {
+    const a = filter[lo] as number | undefined;
+    const b = filter[hi] as number | undefined;
+    if (a !== undefined && b !== undefined && a > b) {
+      throw new ValidationError('INVALID_FILTER', `${lo} must not exceed ${hi}`);
+    }
+  }
+  if (filter.from && filter.to && filter.from.getTime() > filter.to.getTime()) {
+    throw new ValidationError('INVALID_FILTER', 'from must not be after to');
+  }
+
+  return Object.keys(filter).length > 0 ? filter : undefined;
+}

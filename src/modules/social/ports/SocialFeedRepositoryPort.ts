@@ -1,9 +1,10 @@
-import type { FeedPage, SocialCommentView, SocialPostView } from '../domain/SocialContent';
+import type { FeedFilter, FeedPage, SocialCommentView, SocialPostView } from '../domain/SocialContent';
 
 export interface GetFeedInput {
   viewerId: string;
   limit: number;
   cursor?: string;
+  filter?: FeedFilter;
 }
 
 export interface CreatePostInput {

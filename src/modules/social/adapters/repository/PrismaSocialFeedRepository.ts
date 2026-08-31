@@ -4,6 +4,7 @@ import { ForbiddenError } from '../../../../shared/errors/ForbiddenError';
 import { NotFoundError } from '../../../../shared/errors/NotFoundError';
 import { createFinalDownloadUrl } from '../../../../shared/storage/presignedUrl';
 import type {
+  FeedFilter,
   FeedPage,
   NutritionSummary,
   SocialCommentView,
@@ -45,6 +46,39 @@ type CommentRow = Prisma.SocialCommentGetPayload<{ include: ReturnType<typeof co
 
 function num(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+/** Translate a validated [FeedFilter] into a Prisma `where` on `social_posts`. */
+function feedFilterWhere(filter: FeedFilter | undefined): Prisma.SocialPostWhereInput | undefined {
+  if (!filter) {
+    return undefined;
+  }
+  const where: Prisma.SocialPostWhereInput = {};
+
+  const range = (min?: number, max?: number): Prisma.IntNullableFilter | undefined => {
+    if (min === undefined && max === undefined) {
+      return undefined;
+    }
+    return { ...(min !== undefined ? { gte: min } : {}), ...(max !== undefined ? { lte: max } : {}) };
+  };
+
+  const calories = range(filter.minKcal, filter.maxKcal);
+  const proteinG = range(filter.minProteinG, filter.maxProteinG);
+  const carbsG = range(filter.minCarbsG, filter.maxCarbsG);
+  const fatG = range(filter.minFatG, filter.maxFatG);
+  if (calories) where.calories = calories;
+  if (proteinG) where.proteinG = proteinG;
+  if (carbsG) where.carbsG = carbsG;
+  if (fatG) where.fatG = fatG;
+
+  if (filter.from || filter.to) {
+    where.createdAt = {
+      ...(filter.from ? { gte: filter.from } : {}),
+      ...(filter.to ? { lte: filter.to } : {}),
+    };
+  }
+
+  return where;
 }
 
 /**
@@ -113,11 +147,7 @@ function toCommentView(row: CommentRow, viewerId: string): SocialCommentView {
 export class PrismaSocialFeedRepository implements SocialFeedRepositoryPort {
   constructor(private readonly db: PrismaClient) {}
 
-  private async toPostView(
-    row: PostRow,
-    viewerId: string,
-    nutrition: NutritionSummary | null,
-  ): Promise<SocialPostView> {
+  private async toPostView(row: PostRow, viewerId: string): Promise<SocialPostView> {
     return {
       id: row.id,
       authorName: resolveAuthorName(row.author),
@@ -134,29 +164,67 @@ export class PrismaSocialFeedRepository implements SocialFeedRepositoryPort {
       likedByMe: row.likes.length > 0,
       isMine: row.authorId === viewerId,
       edited: row.edited,
-      nutrition,
+      // Read straight off the denormalized columns — the same values the feed
+      // filter runs against, so what the user filtered on is what they see.
+      nutrition:
+        row.calories === null
+          ? null
+          : {
+              calories: row.calories,
+              proteinG: row.proteinG ?? 0,
+              carbsG: row.carbsG ?? 0,
+              fatG: row.fatG ?? 0,
+            },
     };
   }
 
-  /** Calories + macros for each meal photo, keyed by mealPhotoId (== FoodEntry.id). */
-  private async nutritionFor(
-    mealPhotoIds: readonly string[],
-  ): Promise<Map<string, NutritionSummary>> {
-    const out = new Map<string, NutritionSummary>();
-    if (mealPhotoIds.length === 0) {
-      return out;
+  /** Calories + macros from the meal photo's recognition result, or null. */
+  private async nutritionFromPhoto(mealPhotoId: string): Promise<NutritionSummary | null> {
+    const row = await this.db.foodEntry.findFirst({
+      where: { id: mealPhotoId, status: 'completed' },
+      select: { resultJson: true },
+    });
+    return row ? parseNutrition(row.resultJson) : null;
+  }
+
+  /**
+   * Fill in nutrition for rows whose denormalized columns are still NULL by
+   * re-reading `food_entries`, and persist what's found so the column
+   * self-heals. Covers posts shared before the macros column existed and the
+   * item-list `resultJson` shape the migration backfill skipped. Mutates the
+   * rows in place; a write failure never breaks the read.
+   */
+  private async healMissingNutrition(rows: PostRow[]): Promise<void> {
+    const missing = rows.filter((row) => row.calories === null);
+    if (missing.length === 0) {
+      return;
     }
-    const rows = await this.db.foodEntry.findMany({
-      where: { id: { in: [...mealPhotoIds] }, status: 'completed' },
+    const entries = await this.db.foodEntry.findMany({
+      where: { id: { in: missing.map((row) => row.mealPhotoId) }, status: 'completed' },
       select: { id: true, resultJson: true },
     });
-    for (const row of rows) {
-      const parsed = parseNutrition(row.resultJson);
-      if (parsed) {
-        out.set(row.id, parsed);
+    const byPhoto = new Map(entries.map((e) => [e.id, parseNutrition(e.resultJson)]));
+
+    const writes: Array<Prisma.PrismaPromise<unknown>> = [];
+    for (const row of missing) {
+      const n = byPhoto.get(row.mealPhotoId);
+      if (!n) {
+        continue;
       }
+      row.calories = n.calories;
+      row.proteinG = n.proteinG;
+      row.carbsG = n.carbsG;
+      row.fatG = n.fatG;
+      writes.push(
+        this.db.socialPost.updateMany({
+          where: { id: row.id, calories: null },
+          data: { calories: n.calories, proteinG: n.proteinG, carbsG: n.carbsG, fatG: n.fatG },
+        }),
+      );
     }
-    return out;
+    if (writes.length > 0) {
+      await Promise.all(writes).catch(() => undefined);
+    }
   }
 
   private async loadPostView(postId: string, viewerId: string): Promise<SocialPostView> {
@@ -164,12 +232,13 @@ export class PrismaSocialFeedRepository implements SocialFeedRepositoryPort {
       where: { id: postId },
       include: postInclude(viewerId),
     });
-    const nutrition = (await this.nutritionFor([row.mealPhotoId])).get(row.mealPhotoId) ?? null;
-    return this.toPostView(row, viewerId, nutrition);
+    await this.healMissingNutrition([row]);
+    return this.toPostView(row, viewerId);
   }
 
   async getFeed(input: GetFeedInput): Promise<FeedPage> {
     const rows = await this.db.socialPost.findMany({
+      where: feedFilterWhere(input.filter),
       orderBy: { createdAt: 'desc' },
       take: input.limit + 1,
       ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
@@ -178,14 +247,10 @@ export class PrismaSocialFeedRepository implements SocialFeedRepositoryPort {
 
     const hasMore = rows.length > input.limit;
     const page = hasMore ? rows.slice(0, input.limit) : rows;
-    const nutrition = await this.nutritionFor(page.map((r) => r.mealPhotoId));
+    await this.healMissingNutrition(page);
 
     return {
-      items: await Promise.all(
-        page.map((row) =>
-          this.toPostView(row, input.viewerId, nutrition.get(row.mealPhotoId) ?? null),
-        ),
-      ),
+      items: await Promise.all(page.map((row) => this.toPostView(row, input.viewerId))),
       nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
     };
   }
@@ -198,19 +263,26 @@ export class PrismaSocialFeedRepository implements SocialFeedRepositoryPort {
     if (!row) {
       return null;
     }
-    const nutrition = (await this.nutritionFor([row.mealPhotoId])).get(row.mealPhotoId) ?? null;
-    return this.toPostView(row, viewerId, nutrition);
+    await this.healMissingNutrition([row]);
+    return this.toPostView(row, viewerId);
   }
 
   async createPost(input: CreatePostInput): Promise<SocialPostView> {
     try {
+      const nutrition = await this.nutritionFromPhoto(input.mealPhotoId);
       const row = await this.db.socialPost.create({
-        data: { authorId: input.authorId, mealPhotoId: input.mealPhotoId, caption: input.caption },
+        data: {
+          authorId: input.authorId,
+          mealPhotoId: input.mealPhotoId,
+          caption: input.caption,
+          calories: nutrition?.calories ?? null,
+          proteinG: nutrition?.proteinG ?? null,
+          carbsG: nutrition?.carbsG ?? null,
+          fatG: nutrition?.fatG ?? null,
+        },
         include: postInclude(input.authorId),
       });
-      const nutrition =
-        (await this.nutritionFor([row.mealPhotoId])).get(row.mealPhotoId) ?? null;
-      return this.toPostView(row, input.authorId, nutrition);
+      return this.toPostView(row, input.authorId);
     } catch (err) {
       if (isKnownPrismaError(err) && err.code === 'P2002') {
         throw new ForbiddenError('MEAL_PHOTO_ALREADY_SHARED', 'That meal is already on your feed');

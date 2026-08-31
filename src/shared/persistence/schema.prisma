@@ -311,12 +311,21 @@ model SocialPost {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Denormalized meal nutrition, so the feed can filter by calorie / macro
+  // range at the DB level. Populated at share time from the recognised result
+  // and re-synced when the author edits the logged meal. NULL = unknown.
+  calories Int?
+  proteinG Int?
+  carbsG   Int?
+  fatG     Int?
+
   comments SocialComment[]
   likes    SocialPostLike[]
 
   // A given meal photo is shared to the feed at most once.
   @@unique([authorId, mealPhotoId])
   @@index([createdAt])
+  @@index([calories, createdAt])
   @@map("social_posts")
 }
 

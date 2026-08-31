@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ForbiddenError } from '../../../../shared/errors/ForbiddenError';
 import { NotFoundError } from '../../../../shared/errors/NotFoundError';
 import type {
+  FeedFilter,
   FeedPage,
   NutritionSummary,
   SocialCommentView,
@@ -22,6 +23,8 @@ interface PostRow extends CreatePostInput {
   id: string;
   edited: boolean;
   seq: number;
+  createdAt: Date;
+  nutrition: NutritionSummary | null;
 }
 
 interface CommentRow {
@@ -31,6 +34,31 @@ interface CommentRow {
   text: string;
   parentId: string | null;
   seq: number;
+}
+
+function inRange(value: number | null | undefined, min?: number, max?: number): boolean {
+  if (min === undefined && max === undefined) {
+    return true;
+  }
+  if (value === null || value === undefined) {
+    return false;
+  }
+  return (min === undefined || value >= min) && (max === undefined || value <= max);
+}
+
+function matchesFilter(row: PostRow, filter: FeedFilter | undefined): boolean {
+  if (!filter) {
+    return true;
+  }
+  const n = row.nutrition;
+  return (
+    inRange(n?.calories, filter.minKcal, filter.maxKcal) &&
+    inRange(n?.proteinG, filter.minProteinG, filter.maxProteinG) &&
+    inRange(n?.carbsG, filter.minCarbsG, filter.maxCarbsG) &&
+    inRange(n?.fatG, filter.minFatG, filter.maxFatG) &&
+    (!filter.from || row.createdAt.getTime() >= filter.from.getTime()) &&
+    (!filter.to || row.createdAt.getTime() <= filter.to.getTime())
+  );
 }
 
 /** In-memory `SocialFeedRepositoryPort` for use-case tests. `seq` breaks same-tick ties. */
@@ -44,9 +72,23 @@ export class InMemorySocialFeedRepository implements SocialFeedRepositoryPort {
 
   constructor(private readonly names = new Map<string, string>()) {}
 
-  /** Test seam: attach nutrition to a meal photo id. */
+  /** Test seam: attach nutrition to a meal photo id (read at `createPost`). */
   setNutrition(mealPhotoId: string, summary: NutritionSummary): this {
     this.nutritionByPhoto.set(mealPhotoId, summary);
+    return this;
+  }
+
+  /** Test seam: override a post's created-at for date-filter tests. */
+  setCreatedAt(postId: string, createdAt: Date): this {
+    const row = this.posts.find((p) => p.id === postId);
+    if (row) row.createdAt = createdAt;
+    return this;
+  }
+
+  /** Test seam: mimic the feed sync writing fresh macros onto a shared post. */
+  setPostNutrition(postId: string, summary: NutritionSummary | null): this {
+    const row = this.posts.find((p) => p.id === postId);
+    if (row) row.nutrition = summary;
     return this;
   }
 
@@ -65,13 +107,13 @@ export class InMemorySocialFeedRepository implements SocialFeedRepositoryPort {
       mealPhotoId: row.mealPhotoId,
       photoOwnerId: row.authorId,
       caption: row.caption,
-      createdAt: new Date(row.seq).toISOString(),
+      createdAt: row.createdAt.toISOString(),
       likeCount: this.countLikes(this.postLikes, row.id),
       commentCount: this.comments.filter((c) => c.postId === row.id).length,
       likedByMe: this.postLikes.has(`${row.id}/${viewerId}`),
       isMine: row.authorId === viewerId,
       edited: row.edited,
-      nutrition: this.nutritionByPhoto.get(row.mealPhotoId) ?? null,
+      nutrition: row.nutrition,
     };
   }
 
@@ -97,7 +139,9 @@ export class InMemorySocialFeedRepository implements SocialFeedRepositoryPort {
   }
 
   async getFeed(input: GetFeedInput): Promise<FeedPage> {
-    const ordered = [...this.posts].sort((a, b) => b.seq - a.seq);
+    const ordered = [...this.posts]
+      .filter((p) => matchesFilter(p, input.filter))
+      .sort((a, b) => b.seq - a.seq);
     const start = input.cursor ? ordered.findIndex((p) => p.id === input.cursor) + 1 : 0;
     const slice = ordered.slice(start, start + input.limit);
     return {
@@ -115,7 +159,15 @@ export class InMemorySocialFeedRepository implements SocialFeedRepositoryPort {
     if (this.posts.some((p) => p.authorId === input.authorId && p.mealPhotoId === input.mealPhotoId)) {
       throw new ForbiddenError('MEAL_PHOTO_ALREADY_SHARED', 'That meal is already on your feed');
     }
-    const row: PostRow = { ...input, id: randomUUID(), edited: false, seq: (this.seq += 1) };
+    const seq = (this.seq += 1);
+    const row: PostRow = {
+      ...input,
+      id: randomUUID(),
+      edited: false,
+      seq,
+      createdAt: new Date(seq),
+      nutrition: this.nutritionByPhoto.get(input.mealPhotoId) ?? null,
+    };
     this.posts.push(row);
     return this.postView(row, input.authorId);
   }

@@ -19,9 +19,28 @@ mevcut objeye referans verir.
 - Fotograf henuz islenmediyse / silindiyse imzali URL 404 verir; mobil placeholder
   gosterir ve sonraki feed refresh'te toparlar. `photoUrl` view'da `string | null`.
 - **Beslenme**: `SocialPostView.nutrition` = paylasilan ogunun kalori + makro toplami
-  (`{calories, proteinG, carbsG, fatG}` veya `null`). `mealPhotoId == FoodEntry.id`
-  oldugu icin adapter `food_entries.resultJson`'i (status `completed`) okuyup
-  `parseNutrition` ile toplar. Feed'de tek batch sorgu (`nutritionFor(ids)`).
+  (`{calories, proteinG, carbsG, fatG}` veya `null`). Artik `social_posts` uzerinde
+  **denormalize kolonlar** (`calories/proteinG/carbsG/fatG`):
+  - `createPost` paylasim aninda `food_entries.resultJson`'i (`parseNutrition`,
+    status `completed`) okuyup kolonlara yazar.
+  - Yazar sonradan logladigi ogunu duzenlerse (`nutrition-logging`
+    `UpdateMealEntry` / `ReplaceMealSlotEntries`), o modul `SharedMealPort` (bkz.
+    `nutrition-logging/ports/SharedMealPort.ts`) uzerinden `PrismaSharedMealSync`
+    adapter'ini cagirir; bu da eslesen `(authorId, mealPhotoId)` postunun
+    kolonlarini gunceller (paylasilmamis ogun icin no-op).
+  - Feed okuma ve filtre **kolonlardan** gider; `food_entries` join'i kalkti.
+    `nutrition: null` = paylasim aninda taninan sonuc yoktu → makro filtresi
+    aktifken elenmis.
+
+## Feed filtresi
+
+`GET /social/feed` query paramlari (`resolveFeedFilter`, `domain/SocialContent.ts`):
+`minKcal/maxKcal` (0..10000), `minProteinG/maxProteinG`, `minCarbsG/maxCarbsG`,
+`minFatG/maxFatG` (0..2000), `from`/`to` (ISO-8601, `createdAt` sinirlari).
+Ters aralik (min > max, `from > to`) → `400 INVALID_FILTER`. Herhangi bir makro
+siniri varsa `calories` (vb.) `NULL` olan post elenir (Prisma `gte/lte` NULL'lari
+dislar); sadece tarih filtresi bunlari korur. `feedFilterWhere` bunu
+`Prisma.SocialPostWhereInput`'a cevirir, cursor paging bozulmadan calisir.
 
 ## Mimari Ozeti
 
@@ -58,7 +77,7 @@ Hepsi `authMiddleware` arkasinda; `req.auth.userId` viewer/author.
 
 | Method | Path | Aciklama |
 | --- | --- | --- |
-| `GET` | `/social/feed?limit=&cursor=` | Yeniden eskiye post listesi (ciplak array) |
+| `GET` | `/social/feed?limit=&cursor=&minKcal=&maxKcal=&minProteinG=&…&from=&to=` | Yeniden eskiye post listesi (ciplak array), opsiyonel kalori/makro/tarih filtresi |
 | `POST` | `/social/posts` | Bir ogun fotografini paylas — `{ mealPhotoId, caption? }` -> 201 |
 | `GET` | `/social/posts/:postId` | Tek post |
 | `PATCH` | `/social/posts/:postId` | Kendi post'unun notunu duzenle — `{ caption }` |
@@ -73,7 +92,7 @@ Hepsi `authMiddleware` arkasinda; `req.auth.userId` viewer/author.
 | Kod | HTTP | Ne zaman |
 | --- | --- | --- |
 | `INVALID_BODY` / `INVALID_QUERY` | 400 | Zod dogrulamasi basarisiz |
-| `CAPTION_TOO_LONG` / `COMMENT_EMPTY` / `COMMENT_TOO_LONG` / `INVALID_LIMIT` | 400 | Icerik kurallari |
+| `CAPTION_TOO_LONG` / `COMMENT_EMPTY` / `COMMENT_TOO_LONG` / `INVALID_LIMIT` / `INVALID_FILTER` | 400 | Icerik / filtre kurallari |
 | `POST_NOT_FOUND` / `COMMENT_NOT_FOUND` / `PARENT_COMMENT_NOT_FOUND` | 404 | Kayit yok |
 | `NOT_POST_AUTHOR` | 403 | Baskasinin post'unu duzenleme/silme |
 | `MEAL_PHOTO_ALREADY_SHARED` | 403 | Ayni fotograf zaten feed'de (`@@unique`) |
@@ -84,7 +103,11 @@ Hepsi `authMiddleware` arkasinda; `req.auth.userId` viewer/author.
 `social_comment_likes`. Tum FK'lar `ON DELETE CASCADE` (post silinince yorum+like;
 yorum silinince reply+like; user silinince hepsi). Like tablolari composite
 `@@id` ile bir kullanici bir seyi bir kez begenir. `social_posts` uzerinde
-`@@unique([authorId, mealPhotoId])`. Migration: `20260829120000_add_social_tables`.
+`@@unique([authorId, mealPhotoId])`. `social_posts` ayrica denormalize
+`calories/proteinG/carbsG/fatG` (Int?) + `@@index([calories, createdAt])`.
+Migration'lar: `20260829120000_add_social_tables`,
+`20260831120000_add_social_post_macros` (kolonlar + `resultJson.macros` sekli icin
+best-effort backfill; item-list sekli NULL kalir).
 
 ## Sequence Diagramlari
 

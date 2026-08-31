@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { ValidationError } from '../../../shared/errors/ValidationError';
+import { resolveFeedFilter } from '../domain/SocialContent';
 import type { AddComment } from '../use-cases/AddComment';
 import type { CreatePost } from '../use-cases/CreatePost';
 import type { DeletePost } from '../use-cases/DeletePost';
@@ -11,10 +12,22 @@ import type { ToggleCommentLike } from '../use-cases/ToggleCommentLike';
 import type { TogglePostLike } from '../use-cases/TogglePostLike';
 import type { UpdatePostCaption } from '../use-cases/UpdatePostCaption';
 
-const feedQuerySchema = z.object({
-  limit: z.string().regex(/^\d+$/).optional(),
-  cursor: z.string().min(1).optional(),
-});
+const feedQuerySchema = z
+  .object({
+    limit: z.string().regex(/^\d+$/).optional(),
+    cursor: z.string().min(1).optional(),
+    minKcal: z.string().optional(),
+    maxKcal: z.string().optional(),
+    minProteinG: z.string().optional(),
+    maxProteinG: z.string().optional(),
+    minCarbsG: z.string().optional(),
+    maxCarbsG: z.string().optional(),
+    minFatG: z.string().optional(),
+    maxFatG: z.string().optional(),
+    from: z.string().optional(),
+    to: z.string().optional(),
+  })
+  .passthrough();
 
 const createPostSchema = z.object({
   mealPhotoId: z.string().uuid(),
@@ -69,6 +82,7 @@ export class SocialController {
         viewerId: req.auth!.userId,
         limit: query.data.limit,
         cursor: query.data.cursor,
+        filter: resolveFeedFilter(query.data),
       });
       res.status(200).json(page.items);
     } catch (err) {

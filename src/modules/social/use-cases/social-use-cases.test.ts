@@ -1,6 +1,7 @@
 import { ForbiddenError } from '../../../shared/errors/ForbiddenError';
 import { NotFoundError } from '../../../shared/errors/NotFoundError';
 import { ValidationError } from '../../../shared/errors/ValidationError';
+import { resolveFeedFilter } from '../domain/SocialContent';
 import { InMemorySocialFeedRepository } from '../test-utils/fakes/InMemorySocialFeedRepository';
 import { AddComment } from './AddComment';
 import { CreatePost } from './CreatePost';
@@ -182,5 +183,105 @@ describe('social use-cases', () => {
   it('404s a missing post lookup', async () => {
     const { getPost } = setup();
     await expect(getPost.execute({ viewerId: 'alice', postId: 'nope' })).rejects.toThrow(NotFoundError);
+  });
+});
+
+const PHOTO_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+const PHOTO_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+const PHOTO_C = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+
+describe('social feed filter', () => {
+  async function seedFeed() {
+    const { repo, createPost, getFeed } = setup();
+    repo.setNutrition(PHOTO_A, { calories: 350, proteinG: 45, carbsG: 20, fatG: 10 });
+    repo.setNutrition(PHOTO_B, { calories: 700, proteinG: 30, carbsG: 80, fatG: 28 });
+    // PHOTO_C: no recognised nutrition
+    const a = await createPost.execute({ authorId: 'alice', mealPhotoId: PHOTO_A, caption: 'lean' });
+    const b = await createPost.execute({ authorId: 'bob', mealPhotoId: PHOTO_B, caption: 'big' });
+    const c = await createPost.execute({ authorId: 'alice', mealPhotoId: PHOTO_C, caption: 'mystery' });
+    return { repo, getFeed, a, b, c };
+  }
+
+  it('narrows the feed to a calorie range', async () => {
+    const { getFeed, a } = await seedFeed();
+    const page = await getFeed.execute({
+      viewerId: 'bob',
+      filter: { minKcal: 300, maxKcal: 500 },
+    });
+    expect(page.items.map((p) => p.id)).toEqual([a.id]);
+  });
+
+  it('combines a max-fat and min-protein bound', async () => {
+    const { getFeed, a } = await seedFeed();
+    const page = await getFeed.execute({
+      viewerId: 'bob',
+      filter: { maxFatG: 20, minProteinG: 40 },
+    });
+    expect(page.items.map((p) => p.id)).toEqual([a.id]);
+  });
+
+  it('drops posts with unknown nutrition when a macro bound is set', async () => {
+    const { getFeed, c } = await seedFeed();
+    const page = await getFeed.execute({ viewerId: 'bob', filter: { minKcal: 0 } });
+    expect(page.items.map((p) => p.id)).not.toContain(c.id);
+  });
+
+  it('keeps posts with unknown nutrition when only a date bound is set', async () => {
+    const { getFeed, c } = await seedFeed();
+    const page = await getFeed.execute({
+      viewerId: 'bob',
+      filter: { from: new Date(0) },
+    });
+    expect(page.items.map((p) => p.id)).toContain(c.id);
+  });
+
+  it('filters by post date', async () => {
+    const { repo, getFeed, b } = await seedFeed();
+    repo.setCreatedAt(b.id, new Date('2020-01-01T00:00:00.000Z'));
+    const recentOnly = await getFeed.execute({
+      viewerId: 'bob',
+      filter: { from: new Date('2021-01-01T00:00:00.000Z') },
+    });
+    expect(recentOnly.items.map((p) => p.id)).not.toContain(b.id);
+  });
+
+  it('reflects a re-synced macro edit on the shared post', async () => {
+    const { repo, getFeed, a } = await seedFeed();
+    // Author edited the logged meal down to 280 kcal after sharing.
+    repo.setPostNutrition(a.id, { calories: 280, proteinG: 40, carbsG: 12, fatG: 6 });
+    const wide = await getFeed.execute({ viewerId: 'bob', filter: { minKcal: 300 } });
+    expect(wide.items.map((p) => p.id)).not.toContain(a.id);
+    const tight = await getFeed.execute({ viewerId: 'bob', filter: { maxKcal: 300 } });
+    expect(tight.items.map((p) => p.id)).toContain(a.id);
+  });
+});
+
+describe('resolveFeedFilter', () => {
+  it('returns undefined when no filter param is present', () => {
+    expect(resolveFeedFilter({ limit: '20', cursor: 'x' })).toBeUndefined();
+  });
+
+  it('parses macro and date bounds', () => {
+    const filter = resolveFeedFilter({
+      minKcal: '300',
+      maxKcal: '500',
+      maxFatG: '20',
+      from: '2026-08-01T00:00:00.000Z',
+    });
+    expect(filter).toEqual({
+      minKcal: 300,
+      maxKcal: 500,
+      maxFatG: 20,
+      from: new Date('2026-08-01T00:00:00.000Z'),
+    });
+  });
+
+  it('rejects an inverted range', () => {
+    expect(() => resolveFeedFilter({ minKcal: '500', maxKcal: '300' })).toThrow(ValidationError);
+  });
+
+  it('rejects a non-numeric bound and a bad date', () => {
+    expect(() => resolveFeedFilter({ minKcal: 'lots' })).toThrow(ValidationError);
+    expect(() => resolveFeedFilter({ from: 'yesterday' })).toThrow(ValidationError);
   });
 });

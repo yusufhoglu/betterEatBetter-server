@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../../shared/auth/authMiddleware';
 import { prisma } from '../../../shared/persistence/db';
+import { PrismaSharedMealSync } from '../../social/adapters/PrismaSharedMealSync';
 import { PrismaMealItemRepository } from '../adapters/repository/PrismaMealItemRepository';
 import { OnboardingPlanTargetsAdapter } from '../adapters/targets/OnboardingPlanTargetsAdapter';
 import { MealLoggedEventPublisher } from '../events/publishers/MealLoggedEventPublisher';
@@ -18,11 +19,19 @@ export function nutritionLoggingRoutes(): Router {
   const repository = new PrismaMealItemRepository(prisma);
   const dailyTargetsPort = new OnboardingPlanTargetsAdapter();
   const eventPublisher = new MealLoggedEventPublisher();
+  // When an author edits a meal they've shared, keep the feed post's
+  // denormalized macro columns (used by the calorie / macro filter) in sync.
+  const sharedMeal = new PrismaSharedMealSync(prisma);
 
   const logMealEntries = new LogMealEntries(repository, eventPublisher);
-  const replaceMealSlotEntries = new ReplaceMealSlotEntries(repository, eventPublisher);
+  const replaceMealSlotEntries = new ReplaceMealSlotEntries(
+    repository,
+    eventPublisher,
+    undefined,
+    sharedMeal,
+  );
   const getDaySummary = new GetDaySummary(repository, dailyTargetsPort);
-  const updateMealEntry = new UpdateMealEntry(repository, eventPublisher);
+  const updateMealEntry = new UpdateMealEntry(repository, eventPublisher, undefined, sharedMeal);
   const deleteMealEntry = new DeleteMealEntry(repository, eventPublisher);
   const getMealHistory = new GetMealHistory(repository);
 

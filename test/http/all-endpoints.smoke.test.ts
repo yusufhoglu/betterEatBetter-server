@@ -874,6 +874,157 @@ describe('all endpoint smoke tests', () => {
         .set('Authorization', bearer(author.accessToken));
       expect(goneRes.status).toBe(404);
     });
+
+    it('filters the feed by calorie / macro range and re-syncs on a meal edit', async () => {
+      const author = await createOnboardedSession();
+      const viewer = await createSession();
+      const mealPhotoId = randomUUID();
+
+      await prisma.foodEntry.create({
+        data: {
+          id: mealPhotoId,
+          userId: author.userId,
+          status: 'completed',
+          resultJson: {
+            macros: {
+              totalCalories: 400,
+              totalProteinGrams: 40,
+              totalCarbsGrams: 20,
+              totalFatGrams: 12,
+            },
+          },
+        },
+      });
+
+      // Log the meal so the photo entry lives in a slot the author can edit.
+      await request(app)
+        .put('/nutrition-logs/meal-slot')
+        .set('Authorization', bearer(author.accessToken))
+        .send({
+          mealType: 'lunch',
+          timeZone: 'UTC',
+          entries: [
+            {
+              id: mealPhotoId,
+              mealPhotoId,
+              source: 'photo',
+              name: 'Lean bowl',
+              portionGrams: 300,
+              calories: 400,
+              proteinG: 40,
+              carbsG: 20,
+              fatG: 12,
+            },
+          ],
+        });
+
+      const created = await request(app)
+        .post('/social/posts')
+        .set('Authorization', bearer(author.accessToken))
+        .send({ mealPhotoId, caption: 'lean bowl' });
+      expect(created.status).toBe(201);
+      const postId: string = created.body.id;
+
+      const inRange = await request(app)
+        .get('/social/feed?minKcal=300&maxKcal=500&minProteinG=35&maxFatG=20')
+        .set('Authorization', bearer(viewer.accessToken));
+      expect(inRange.status).toBe(200);
+      expect(inRange.body.map((p: { id: string }) => p.id)).toContain(postId);
+
+      const outOfRange = await request(app)
+        .get('/social/feed?minKcal=600')
+        .set('Authorization', bearer(viewer.accessToken));
+      expect(outOfRange.body.map((p: { id: string }) => p.id)).not.toContain(postId);
+
+      const badFilter = await request(app)
+        .get('/social/feed?minKcal=500&maxKcal=300')
+        .set('Authorization', bearer(viewer.accessToken));
+      expect(badFilter.status).toBe(400);
+
+      // Author edits the logged meal up to 700 kcal — the shared post follows.
+      const editRes = await request(app)
+        .patch(`/nutrition-logs/entries/${mealPhotoId}`)
+        .set('Authorization', bearer(author.accessToken))
+        .send({
+          mealType: 'lunch',
+          timeZone: 'UTC',
+          entry: {
+            id: mealPhotoId,
+            mealPhotoId,
+            source: 'photo',
+            name: 'Loaded bowl',
+            portionGrams: 500,
+            calories: 700,
+            proteinG: 45,
+            carbsG: 60,
+            fatG: 30,
+          },
+        });
+      expect(editRes.status).toBe(200);
+
+      const afterEdit = await request(app)
+        .get(`/social/posts/${postId}`)
+        .set('Authorization', bearer(viewer.accessToken));
+      expect(afterEdit.body.nutrition).toEqual({
+        calories: 700,
+        proteinG: 45,
+        carbsG: 60,
+        fatG: 30,
+      });
+
+      const nowInRange = await request(app)
+        .get('/social/feed?minKcal=650&maxKcal=750')
+        .set('Authorization', bearer(viewer.accessToken));
+      expect(nowInRange.body.map((p: { id: string }) => p.id)).toContain(postId);
+    });
+
+    it('back-fills a post whose macro columns were never populated', async () => {
+      const author = await createSession();
+      const viewer = await createSession();
+      const mealPhotoId = randomUUID();
+
+      // Item-list resultJson shape — the shape the column migration skipped.
+      await prisma.foodEntry.create({
+        data: {
+          id: mealPhotoId,
+          userId: author.userId,
+          status: 'completed',
+          resultJson: {
+            items: [
+              { name: 'Rice', calories: 220, proteinG: 5, carbsG: 45, fatG: 2 },
+              { name: 'Beans', calories: 180, proteinG: 12, carbsG: 25, fatG: 3 },
+            ],
+          },
+        },
+      });
+
+      const created = await request(app)
+        .post('/social/posts')
+        .set('Authorization', bearer(author.accessToken))
+        .send({ mealPhotoId, caption: 'rice and beans' });
+      const postId: string = created.body.id;
+
+      // Simulate a pre-migration row: wipe the denormalized columns.
+      await prisma.socialPost.update({
+        where: { id: postId },
+        data: { calories: null, proteinG: null, carbsG: null, fatG: null },
+      });
+
+      const feedRes = await request(app)
+        .get('/social/feed')
+        .set('Authorization', bearer(viewer.accessToken));
+      const post = feedRes.body.find((p: { id: string }) => p.id === postId);
+      expect(post.nutrition).toEqual({ calories: 400, proteinG: 17, carbsG: 70, fatG: 5 });
+
+      // The read healed the columns — a macro-filtered query now finds it.
+      const filtered = await request(app)
+        .get('/social/feed?minKcal=350&maxKcal=450')
+        .set('Authorization', bearer(viewer.accessToken));
+      expect(filtered.body.map((p: { id: string }) => p.id)).toContain(postId);
+
+      const stored = await prisma.socialPost.findUnique({ where: { id: postId } });
+      expect(stored?.calories).toBe(400);
+    });
   });
 
   describe('notifications smoke', () => {
