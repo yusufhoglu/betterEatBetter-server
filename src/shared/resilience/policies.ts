@@ -4,8 +4,8 @@ import {
   type IPolicy,
   TimeoutStrategy,
   circuitBreaker,
-  handleAll,
   handleWhen,
+  isTaskCancelledError,
   retry,
   timeout,
   wrap,
@@ -49,13 +49,22 @@ export function buildResiliencePolicy(options: ResiliencePolicyOptions): IPolicy
     backoff: new ExponentialBackoff(),
   });
 
-  // The breaker trips on ANY failure (including timeouts) — unlike retry, it's
-  // not limited to `retryable` IntegrationErrors, since a hung downstream
-  // service should also open the circuit even if its errors aren't retried.
-  const circuitBreakerPolicy = circuitBreaker(handleAll, {
-    halfOpenAfter: circuitBreakerHalfOpenAfterMs,
-    breaker: new ConsecutiveBreaker(circuitBreakerThreshold),
-  });
+  // The breaker trips on any IntegrationError plus cockatiel's own timeout
+  // (TaskCancelledError, thrown by the timeout() policy below) — unlike
+  // retry, it's not limited to `retryable` errors,
+  // since a hung downstream service should open the circuit even if its
+  // errors aren't retried. It must NOT trip on a DomainError that represents
+  // bad caller input (e.g. ValidationError for an invalid token/request) —
+  // that's a fault of the specific call, not the downstream service, and
+  // counting it would let a client tripping input errors take the circuit
+  // down for everyone else.
+  const circuitBreakerPolicy = circuitBreaker(
+    handleWhen((err) => err instanceof IntegrationError || isTaskCancelledError(err)),
+    {
+      halfOpenAfter: circuitBreakerHalfOpenAfterMs,
+      breaker: new ConsecutiveBreaker(circuitBreakerThreshold),
+    },
+  );
 
   if (env.TIMEOUTS_ENABLED) {
     return wrap(retryPolicy, circuitBreakerPolicy, timeout(timeoutMs, TimeoutStrategy.Aggressive));
