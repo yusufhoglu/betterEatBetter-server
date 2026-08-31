@@ -1,18 +1,20 @@
-# Production stack for a shared VPS that already runs Caddy (in its own compose
-# project) owning ports 80/443.
+# Production stack for a shared VPS whose Caddy (a separate compose project)
+# owns ports 80/443 and terminates TLS.
 #
+# This stack publishes the app on 127.0.0.1:3100 only; the host Caddy proxies to
+# it the same way it already proxies the *.dev.yusufhocaoglu.site services:
+#
+#   foodtracker.hembul.com {
+#       encode gzip
+#       reverse_proxy 172.17.0.1:3100
+#   }
+#
+# Setup:
 #   cp .env.production.example .env      # then fill it in
-#   docker network create edge           # once, shared with the existing Caddy
-#   export IMAGE=ghcr.io/<owner>/eatbetter-backend:latest
+#   export IMAGE=ghcr.io/yusufhoglu/bettereatbetter-server:latest
 #   docker compose -f docker-compose.prod.yml pull
 #   docker compose -f docker-compose.prod.yml run --rm migrate
 #   docker compose -f docker-compose.prod.yml up -d
-#
-# The existing Caddy must be attached to the `edge` network and get a site block:
-#
-#   api.yourdomain.tld {
-#       reverse_proxy food-tracker-app:3000
-#   }
 #
 # The CI workflow (.github/workflows/deploy.yml) runs the pull/migrate/up steps over SSH.
 
@@ -39,6 +41,9 @@ services:
         condition: service_healthy
       redis-cache:
         condition: service_healthy
+    # Host Caddy reaches this via the docker0 gateway (172.17.0.1:3100).
+    ports:
+      - "127.0.0.1:3100:3000"
     healthcheck:
       test:
         ["CMD", "node", "-e",
@@ -47,11 +52,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    networks:
-      default: {}
-      edge:
-        aliases:
-          - food-tracker-app
 
   # One-shot: `docker compose -f docker-compose.prod.yml run --rm migrate`
   migrate:
@@ -62,8 +62,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - default
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -79,8 +77,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    networks:
-      - default
 
   redis-queue:
     image: redis:7-alpine
@@ -93,8 +89,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    networks:
-      - default
 
   redis-cache:
     image: redis:7-alpine
@@ -105,15 +99,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    networks:
-      - default
 
 volumes:
   postgres_data:
   redis_queue_data:
-
-networks:
-  default:
-    driver: bridge
-  edge:
-    external: true

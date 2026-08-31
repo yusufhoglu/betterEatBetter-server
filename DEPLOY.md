@@ -2,94 +2,64 @@
 
 The app ships as one Docker image that serves HTTP **and** runs the BullMQ workers
 and polling jobs in-process. Postgres and both Redis instances run as sibling
-containers via `docker-compose.prod.yml`. TLS is handled by the **Caddy that
-already runs on the server** (its own compose project), which reverse-proxies to
-this app over a shared `edge` Docker network. Every push to `main` builds the
-image, pushes it to GHCR, and redeploys over SSH (`.github/workflows/deploy.yml`).
+containers via `docker-compose.prod.yml`. The stack publishes the app on
+`127.0.0.1:3100` only; the **host Caddy** (the `matcher-prod-caddy` container,
+a separate compose project) terminates TLS and reverse-proxies to it. Every push
+to `main` builds the image, pushes it to GHCR, and redeploys over SSH
+(`.github/workflows/deploy.yml`).
 
 ```
-push main ─► test ─► build image ─► push ghcr.io ─► ssh vps:
-                                                      git checkout <sha>
-                                                      docker compose pull
-                                                      compose run --rm migrate
-                                                      docker compose up -d
+push main ─► check ─► build image ─► push ghcr.io ─► ssh vps:
+                                                       git checkout <sha>
+                                                       docker compose pull
+                                                       compose run --rm migrate
+                                                       docker compose up -d
 ```
 
-Compose project name is pinned to `food-tracker`, so containers/volumes/networks
+Compose project name is pinned to `food-tracker`, so containers/volumes
 (`food-tracker-app-1`, `food-tracker_postgres_data`, …) never collide with the
-other stack on the box.
+other stacks on the box. Everything runs as `root`; the repo lives at
+`/app/food-tracker/betterEatBetter-server` (= `DEPLOY_PATH`).
 
 ## One-time server setup
 
-1. **Shared `edge` network** — connect it to the existing Caddy so it can reach
-   this app by name:
+1. **DNS** — add an `A` record `foodtracker.hembul.com` → `161.97.111.192`.
 
-   ```bash
-   docker network create edge
-   docker network connect edge <existing-caddy-container>
-   ```
-
-   Make it permanent in the existing Caddy's compose too:
-
-   ```yaml
-   services:
-     caddy:
-       networks: [default, edge]
-   networks:
-     edge:
-       external: true
-   ```
-
-2. **Caddy site block** — add to the existing `Caddyfile` and reload
-   (`docker exec <caddy> caddy reload --config /etc/caddy/Caddyfile`):
+2. **Caddy site block** — append to `/app/backend/deploy/Caddyfile`:
 
    ```
-   api.yourdomain.tld {
-       reverse_proxy food-tracker-app:3000
+   foodtracker.hembul.com {
+       encode gzip
+       reverse_proxy 172.17.0.1:3100
    }
    ```
 
-3. **DNS** — point an `A` record (e.g. `api.yourdomain.me`) at the server IP.
-   The Namecheap `.me` domain from the GitHub Student Pack works.
+   then reload: `docker exec matcher-prod-caddy caddy reload --config /etc/caddy/Caddyfile`
+   (or restart the caddy container).
 
-4. **Deploy user + repo checkout** (as `root`):
+3. **`.env`** — in the repo dir, `cp .env.production.example .env` and fill in:
+   `DOMAIN` (`foodtracker.hembul.com`), `POSTGRES_PASSWORD`, `JWT_SECRET`, the
+   `R2_*` keys, `RAG_SERVICE_URL`, the selected `LLM_PROVIDER` + its API key, and
+   the `GOOGLE_*` subscription values. `DATABASE_URL` / `REDIS_URL` /
+   `REDIS_CACHE_URL` are injected by compose — leave them out.
 
-   ```bash
-   adduser --disabled-password --gecos "" deploy
-   usermod -aG docker deploy
-   su - deploy
-   git clone https://github.com/yusufhoglu/betterEatBetter-server.git ~/app
-   cd ~/app
-   cp .env.production.example .env    # then edit — see below
-   ```
+4. **GitHub → Settings → Secrets and variables → Actions**:
 
-5. **Fill in `.env`** (stays on the server, never committed). Required:
-   `DOMAIN`, `POSTGRES_PASSWORD`, `JWT_SECRET`, the `R2_*` keys, `RAG_SERVICE_URL`,
-   the selected `LLM_PROVIDER` + its API key, and the `GOOGLE_*` subscription
-   values. `DATABASE_URL` / `REDIS_URL` / `REDIS_CACHE_URL` are injected by
-   compose — leave them out.
-
-6. **Add an SSH key for CI** — generate a keypair, put the public key in
-   `deploy`'s `~/.ssh/authorized_keys`, keep the private key for the secret below.
-
-7. **GitHub → Settings → Secrets and variables → Actions** (or the
-   `production` environment):
-
-   | Secret        | Value                                  |
-   |---------------|----------------------------------------|
-   | `SSH_HOST`    | server IP                              |
-   | `SSH_USER`    | `deploy`                               |
-   | `SSH_KEY`     | the private key from step 6            |
-   | `DEPLOY_PATH` | `/home/deploy/app`                     |
+   | Secret        | Value                                          |
+   |---------------|------------------------------------------------|
+   | `SSH_HOST`    | `161.97.111.192`                               |
+   | `SSH_USER`    | `root`                                          |
+   | `SSH_KEY`     | CI private key (public half in `authorized_keys`) |
+   | `DEPLOY_PATH` | `/app/food-tracker/betterEatBetter-server`      |
 
    `GITHUB_TOKEN` is provided automatically and is used to push/pull the image.
 
-8. **First deploy** — either push to `main`, run the *deploy* workflow manually,
-   or bring it up by hand once:
+5. **First deploy** — push to `main`, run the *deploy* workflow manually, or once
+   by hand from the repo dir:
 
    ```bash
    export IMAGE=ghcr.io/yusufhoglu/bettereatbetter-server:latest
-   echo $CR_PAT | docker login ghcr.io -u yusufhoglu --password-stdin
+   echo "$CR_PAT" | docker login ghcr.io -u yusufhoglu --password-stdin
    docker compose -f docker-compose.prod.yml pull
    docker compose -f docker-compose.prod.yml run --rm migrate
    docker compose -f docker-compose.prod.yml up -d
@@ -104,7 +74,7 @@ starts.
 ## Operating it
 
 ```bash
-cd ~/app
+cd /app/food-tracker/betterEatBetter-server
 docker compose -f docker-compose.prod.yml logs -f app
 docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml restart app
@@ -123,9 +93,13 @@ docker compose -f docker-compose.prod.yml exec -T postgres \
 
 ## Notes / gotchas
 
-- **Shares the box with another stack** — the `food-tracker` project name and the
-  `edge` network keep them isolated. Only Postgres + 2 Redis + Node are added;
+- **Shares the box with other stacks** — the `food-tracker` compose project name
+  keeps containers/volumes isolated. Only Postgres + 2 Redis + Node are added;
   budget ~1–1.5 GB RAM for them.
+- **Caddy reaches the app at `172.17.0.1:3100`** (the docker0 gateway), matching
+  how the existing `*.dev.yusufhocaoglu.site` blocks proxy to host ports. If the
+  Caddy container is recreated without host-gateway access, use
+  `host.docker.internal:3100` with `extra_hosts` instead.
 - **`RAG_SERVICE_URL`** — the Python photo-recognition service is not in this repo.
   Until it is reachable, photo recognition jobs will fail (the rest of the API is fine).
 - **Redis is not externally exposed.** `redis-queue` persists (AOF) so queued jobs
