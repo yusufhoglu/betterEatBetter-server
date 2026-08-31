@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/src/main.js",
     "typecheck": "tsc --noEmit",
-    "test:unit": "jest --testPathIgnorePatterns=\\.integration\\.test\\.ts$ --testPathIgnorePatterns=\\.e2e\\.test\\.ts$",
+    "test:unit": "jest --testPathIgnorePatterns=\\.integration\\.test\\.ts$ --testPathIgnorePatterns=\\.e2e\\.test\\.ts$ --testPathIgnorePatterns=test/http/",
     "test:integration": "jest --testPathPattern=\\.integration\\.test\\.ts$",
     "test:e2e": "jest --testPathPattern=\\.e2e\\.test\\.ts$",
     "test:http": "jest --runInBand --testPathPattern=test/http/.*\\.smoke\\.test\\.ts$",
