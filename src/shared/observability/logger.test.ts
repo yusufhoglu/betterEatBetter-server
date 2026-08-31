@@ -1,3 +1,7 @@
+// Neutralise dotenv so an isolated re-import of ../config/env cannot repopulate
+// LOKI_* from a developer's local .env (CI has no .env, so this only bites locally).
+jest.mock('dotenv/config', () => ({}));
+
 describe('logger', () => {
   const originalNodeEnv = process.env.NODE_ENV;
   const originalLokiUrl = process.env.LOKI_URL;

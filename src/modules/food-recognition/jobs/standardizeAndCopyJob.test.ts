@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 
 jest.mock('../../../shared/queue/queueConnection', () => ({
-  createWorker: jest.fn(() => ({ close: jest.fn() })),
+  createWorker: jest.fn(() => ({ close: jest.fn(), on: jest.fn() })),
 }));
 
 jest.mock('../../../shared/observability/logger', () => ({

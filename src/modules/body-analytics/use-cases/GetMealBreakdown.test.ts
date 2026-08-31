@@ -2,6 +2,15 @@ import { InMemoryMealLogReadModel } from '../test-utils/fakes/InMemoryMealLogRea
 import { GetMealBreakdown } from './GetMealBreakdown';
 
 describe('GetMealBreakdown', () => {
+  // The fixtures below sit in late August 2026; freeze the clock so the
+  // use-case's "last 7 days" window keeps covering them as real time moves on.
+  beforeAll(() => {
+    jest.useFakeTimers({ now: new Date('2026-08-25T12:00:00.000Z'), doNotFake: ['nextTick'] });
+  });
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   it('groups totals by meal slot', async () => {
     const useCase = new GetMealBreakdown(
       new InMemoryMealLogReadModel([

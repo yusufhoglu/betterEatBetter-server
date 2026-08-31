@@ -2,6 +2,15 @@ import { InMemoryMealLogReadModel } from '../test-utils/fakes/InMemoryMealLogRea
 import { GetMealAverages } from './GetMealAverages';
 
 describe('GetMealAverages', () => {
+  // Freeze the clock so the use-case's date-range window keeps covering the
+  // late-August 2026 fixtures as real time moves on.
+  beforeAll(() => {
+    jest.useFakeTimers({ now: new Date('2026-08-25T12:00:00.000Z'), doNotFake: ['nextTick'] });
+  });
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   it('computes per-day meal averages for the selected range', async () => {
     const useCase = new GetMealAverages(
       new InMemoryMealLogReadModel([

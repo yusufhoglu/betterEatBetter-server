@@ -3,11 +3,15 @@ import { getTraceId } from '../../../shared/observability/tracer';
 import { TRACE_ID_HEADER } from '../../../shared/observability/tracingMiddleware';
 
 const mockWarn = jest.fn();
+const mockInfo = jest.fn();
+const mockError = jest.fn();
 const mockCheckRateLimit = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('../../../shared/observability/logger', () => ({
   createModuleLogger: jest.fn(() => ({
+    info: mockInfo,
     warn: mockWarn,
+    error: mockError,
   })),
 }));
 

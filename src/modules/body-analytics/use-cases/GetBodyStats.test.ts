@@ -23,6 +23,15 @@ const silhouetteRepository = {
 };
 
 describe('GetBodyStats', () => {
+  // Freeze the clock so the use-case's trend windows keep covering the
+  // late-August 2026 fixtures as real time moves on.
+  beforeAll(() => {
+    jest.useFakeTimers({ now: new Date('2026-08-25T12:00:00.000Z'), doNotFake: ['nextTick'] });
+  });
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(() => {
     silhouetteRepository.findByUserId.mockReset();
     silhouetteRepository.upsert.mockReset();
