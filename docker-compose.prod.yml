@@ -1,12 +1,13 @@
 # Production stack for a shared VPS whose Caddy (a separate compose project)
 # owns ports 80/443 and terminates TLS.
 #
-# This stack publishes the app on 127.0.0.1:3100 only; the host Caddy proxies to
+# This stack publishes the app on 127.0.0.1:3100 only; the host Caddy
+# (matcher-prod-caddy, which has host.docker.internal -> host-gateway) proxies to
 # it the same way it already proxies the *.dev.yusufhocaoglu.site services:
 #
 #   foodtracker.hembul.com {
 #       encode gzip
-#       reverse_proxy 172.17.0.1:3100
+#       reverse_proxy host.docker.internal:3100
 #   }
 #
 # Setup:

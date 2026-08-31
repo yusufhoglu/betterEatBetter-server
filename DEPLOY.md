@@ -9,11 +9,10 @@ to `main` builds the image, pushes it to GHCR, and redeploys over SSH
 (`.github/workflows/deploy.yml`).
 
 ```
-push main ─► check ─► build image ─► push ghcr.io ─► ssh vps:
-                                                       git checkout <sha>
-                                                       docker compose pull
-                                                       compose run --rm migrate
-                                                       docker compose up -d
+push main ─► check ─► build image ─► push ghcr.io ─► scp docker-compose.prod.yml ─► ssh vps:
+                                                                                     docker compose pull
+                                                                                     compose run --rm migrate
+                                                                                     docker compose up -d
 ```
 
 Compose project name is pinned to `food-tracker`, so containers/volumes
@@ -30,12 +29,11 @@ other stacks on the box. Everything runs as `root`; the repo lives at
    ```
    foodtracker.hembul.com {
        encode gzip
-       reverse_proxy 172.17.0.1:3100
+       reverse_proxy host.docker.internal:3100
    }
    ```
 
    then reload: `docker exec matcher-prod-caddy caddy reload --config /etc/caddy/Caddyfile`
-   (or restart the caddy container).
 
 3. **`.env`** — in the repo dir, `cp .env.production.example .env` and fill in:
    `DOMAIN` (`foodtracker.hembul.com`), `POSTGRES_PASSWORD`, `JWT_SECRET`, the
@@ -96,10 +94,9 @@ docker compose -f docker-compose.prod.yml exec -T postgres \
 - **Shares the box with other stacks** — the `food-tracker` compose project name
   keeps containers/volumes isolated. Only Postgres + 2 Redis + Node are added;
   budget ~1–1.5 GB RAM for them.
-- **Caddy reaches the app at `172.17.0.1:3100`** (the docker0 gateway), matching
-  how the existing `*.dev.yusufhocaoglu.site` blocks proxy to host ports. If the
-  Caddy container is recreated without host-gateway access, use
-  `host.docker.internal:3100` with `extra_hosts` instead.
+- **Caddy reaches the app at `host.docker.internal:3100`** — the caddy container
+  already resolves that to the docker0 gateway, matching how the existing
+  `*.dev.yusufhocaoglu.site` blocks proxy to host ports.
 - **`RAG_SERVICE_URL`** — the Python photo-recognition service is not in this repo.
   Until it is reachable, photo recognition jobs will fail (the rest of the API is fine).
 - **Redis is not externally exposed.** `redis-queue` persists (AOF) so queued jobs
