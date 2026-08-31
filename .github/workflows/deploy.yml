@@ -83,6 +83,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
+          command_timeout: 25m
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
@@ -90,5 +91,5 @@ jobs:
             export IMAGE="${{ needs.build-push.outputs.image }}"
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml run --rm migrate
-            docker compose -f docker-compose.prod.yml up -d
-            docker image prune -f
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f || true
