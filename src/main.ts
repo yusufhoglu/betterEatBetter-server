@@ -6,6 +6,7 @@ import express from 'express';
 import { PrismaMealLogReadModelRepository } from './modules/body-analytics/adapters/repository/PrismaMealLogReadModelRepository';
 import { ConsumeOutboxEventsJob } from './modules/body-analytics/jobs/consumeOutboxEventsJob';
 import { CleanupOrphanedFoodEntriesJob } from './modules/food-recognition/jobs/CleanupOrphanedFoodEntriesJob';
+import { healthRoutes } from './http/healthRoutes';
 import { createRouter } from './http/router';
 import { env } from './shared/config/env';
 import { errorMapperMiddleware } from './shared/errors/errorMapper';
@@ -84,6 +85,8 @@ app.use((req, res, next) => {
     next();
   }
 });
+
+app.use(healthRoutes());
 
 app.use(tracingMiddleware);
 app.use(express.json());

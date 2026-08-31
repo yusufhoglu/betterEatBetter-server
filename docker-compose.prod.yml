@@ -1,0 +1,119 @@
+# Production stack for a shared VPS that already runs Caddy (in its own compose
+# project) owning ports 80/443.
+#
+#   cp .env.production.example .env      # then fill it in
+#   docker network create edge           # once, shared with the existing Caddy
+#   export IMAGE=ghcr.io/<owner>/eatbetter-backend:latest
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml run --rm migrate
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# The existing Caddy must be attached to the `edge` network and get a site block:
+#
+#   api.yourdomain.tld {
+#       reverse_proxy food-tracker-app:3000
+#   }
+#
+# The CI workflow (.github/workflows/deploy.yml) runs the pull/migrate/up steps over SSH.
+
+name: food-tracker
+
+x-app-env: &app-env
+  env_file: .env
+  environment:
+    NODE_ENV: production
+    PORT: 3000
+    DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/food_tracking
+    REDIS_URL: redis://redis-queue:6379
+    REDIS_CACHE_URL: redis://redis-cache:6379
+
+services:
+  app:
+    <<: *app-env
+    image: ${IMAGE:?set IMAGE to the pushed container image}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+    healthcheck:
+      test:
+        ["CMD", "node", "-e",
+         "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      default: {}
+      edge:
+        aliases:
+          - food-tracker-app
+
+  # One-shot: `docker compose -f docker-compose.prod.yml run --rm migrate`
+  migrate:
+    <<: *app-env
+    image: ${IMAGE:?set IMAGE to the pushed container image}
+    restart: "no"
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: food_tracking
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d food_tracking"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - default
+
+  redis-queue:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_queue_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - default
+
+  redis-cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - default
+
+volumes:
+  postgres_data:
+  redis_queue_data:
+
+networks:
+  default:
+    driver: bridge
+  edge:
+    external: true
