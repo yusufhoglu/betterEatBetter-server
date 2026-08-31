@@ -258,15 +258,25 @@ model SavedMeal {
 }
 
 model Subscription {
-  id         String   @id @default(uuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  productId  String
-  provider   String
-  status     String
-  expiresAt  DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId     String
+  provider      String
+  status        String
+  expiresAt     DateTime?
+  // Google Play purchaseToken (or, in future, an Apple originalTransactionId).
+  // RTDN webhook notifications only carry this + productId, not our userId, so
+  // it's the lookup key for reconciling async provider notifications.
+  purchaseToken String?   @unique
+  // Mirrors the mobile-facing Entitlement contract (see
+  // subscription-backend-contract.md) — willRenew/inGracePeriod aren't
+  // derivable from `status` alone (e.g. a canceled-but-unexpired
+  // subscription is still `status: active` but `willRenew: false`).
+  willRenew     Boolean   @default(false)
+  inGracePeriod Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([userId, status, expiresAt])
   @@unique([userId, productId, provider])

@@ -7,12 +7,7 @@ export class ValidateReceipt {
     private readonly googleValidator: ReceiptValidatorPort,
   ) {}
 
-  async execute(input: {
-    provider: 'apple' | 'google';
-    productId: string;
-    receiptToken: string;
-    expiresAt?: Date | null;
-  }) {
+  async execute(input: { provider: 'apple' | 'google'; productId: string; receiptToken: string }) {
     if (input.provider === 'apple') {
       return this.appleValidator.validate(input);
     }

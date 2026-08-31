@@ -17,3 +17,14 @@ process.env.PHOTO_WORKER_CONCURRENCY ??= '2';
 process.env.LLM_PROVIDER ??= 'openai';
 process.env.OPENAI_API_KEY ??= 'test-key-not-real';
 
+// subscription module defaults for test environment
+process.env.GOOGLE_PLAY_PACKAGE_NAME ??= 'com.example.eatbetter.test';
+process.env.GOOGLE_SERVICE_ACCOUNT_JSON ??= JSON.stringify({
+  type: 'service_account',
+  project_id: 'test-project',
+  client_email: 'test-service-account@test-project.iam.gserviceaccount.com',
+  private_key:
+    '-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEINnnHwWH3zzGfV2/2NfDGGjbEcy6mM+RD6z8hi2CrIup\n-----END PRIVATE KEY-----\n',
+});
+process.env.GOOGLE_PLAY_RTDN_AUDIENCE ??= 'http://localhost:3000/subscription/webhook/google-rtdn';
+

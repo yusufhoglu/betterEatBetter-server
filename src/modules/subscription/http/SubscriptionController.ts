@@ -1,15 +1,16 @@
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { ValidationError } from '../../../shared/errors/ValidationError';
-import type { GetSubscriptionEntitlement } from '../use-cases/GetSubscriptionEntitlement';
+import type { EntitlementDetails, GetSubscriptionEntitlement } from '../use-cases/GetSubscriptionEntitlement';
+import type { ProcessGooglePlayRtdn } from '../use-cases/ProcessGooglePlayRtdn';
 import type { PurchaseSubscription } from '../use-cases/PurchaseSubscription';
-import type { SubscriptionRepositoryPort } from '../ports/SubscriptionRepositoryPort';
 
-const purchaseSchema = z.object({
-  provider: z.enum(['apple', 'google']),
+// Wire shape from subscription-backend-contract.md — POST /verify and
+// GET /entitlement both return exactly this.
+const verifySchema = z.object({
+  platform: z.literal('android'),
   productId: z.string().trim().min(1),
-  receiptToken: z.string().trim().min(1),
-  expiresAt: z.string().datetime({ offset: true }).optional(),
+  purchaseToken: z.string().trim().min(1),
 });
 
 function parseOrThrow<T>(schema: z.ZodType<T>, body: unknown): T {
@@ -20,47 +21,60 @@ function parseOrThrow<T>(schema: z.ZodType<T>, body: unknown): T {
   return parsed.data;
 }
 
+function serializeEntitlement(entitlement: EntitlementDetails) {
+  return {
+    isPremium: entitlement.isPremium,
+    productId: entitlement.productId,
+    expiresAt: entitlement.expiresAt ? entitlement.expiresAt.toISOString() : null,
+    willRenew: entitlement.willRenew,
+    inGracePeriod: entitlement.inGracePeriod,
+  };
+}
+
 export class SubscriptionController {
   constructor(
     private readonly purchaseSubscription: PurchaseSubscription,
     private readonly getSubscriptionEntitlement: GetSubscriptionEntitlement,
-    private readonly subscriptionRepository: SubscriptionRepositoryPort,
+    private readonly processGooglePlayRtdn: ProcessGooglePlayRtdn,
   ) {}
 
-  handlePurchase = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  handleVerify = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const input = parseOrThrow(purchaseSchema, req.body);
-      const subscription = await this.purchaseSubscription.execute({
+      const input = parseOrThrow(verifySchema, req.body);
+      await this.purchaseSubscription.execute({
         userId: req.auth!.userId,
-        provider: input.provider,
+        provider: 'google',
         productId: input.productId,
-        receiptToken: input.receiptToken,
-        expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+        receiptToken: input.purchaseToken,
       });
 
-      res.status(200).json({
-        id: subscription.id,
-        provider: subscription.provider,
-        productId: subscription.productId,
-        status: subscription.status,
-        expiresAt: subscription.expiresAt ? subscription.expiresAt.toISOString() : null,
-        isPremium: await this.getSubscriptionEntitlement.execute(req.auth!.userId),
-      });
+      const entitlement = await this.getSubscriptionEntitlement.describe(req.auth!.userId);
+      res.status(200).json(serializeEntitlement(entitlement));
     } catch (error) {
       next(error);
     }
   };
 
-  handleStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  handleEntitlement = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const subscription = await this.subscriptionRepository.findLatestByUserId(req.auth!.userId);
-      res.status(200).json({
-        isPremium: await this.getSubscriptionEntitlement.execute(req.auth!.userId),
-        provider: subscription?.provider ?? null,
-        productId: subscription?.productId ?? null,
-        status: subscription?.status ?? null,
-        expiresAt: subscription?.expiresAt ? subscription.expiresAt.toISOString() : null,
+      const entitlement = await this.getSubscriptionEntitlement.describe(req.auth!.userId);
+      res.status(200).json(serializeEntitlement(entitlement));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // No authMiddleware on this route — the caller is Cloud Pub/Sub, not one of
+  // our users. ProcessGooglePlayRtdn verifies the push request's own bearer
+  // token instead. Kept fast (parse + enqueue only) since Pub/Sub retries on
+  // any non-2xx and expects a quick ack.
+  handlePlayRtdn = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      await this.processGooglePlayRtdn.execute({
+        authorizationHeader: req.header('authorization'),
+        rawBody: req.body,
       });
+      res.status(204).end();
     } catch (error) {
       next(error);
     }

@@ -1,6 +1,7 @@
 // TODO: tum modulleri wiring eder, sunucuyu baslatir
 import './modules/food-recognition/jobs/recognizePhotoJob';
 import './modules/food-recognition/jobs/standardizeAndCopyJob';
+import './modules/subscription/jobs/processPlayRtdnJob';
 import express from 'express';
 import { PrismaMealLogReadModelRepository } from './modules/body-analytics/adapters/repository/PrismaMealLogReadModelRepository';
 import { ConsumeOutboxEventsJob } from './modules/body-analytics/jobs/consumeOutboxEventsJob';

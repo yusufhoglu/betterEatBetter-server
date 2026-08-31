@@ -1,37 +1,10 @@
-import type { SubscriptionRepositoryPort } from '../../ports/SubscriptionRepositoryPort';
+import type { SubscriptionRecord, SubscriptionRepositoryPort } from '../../ports/SubscriptionRepositoryPort';
 
 interface SubscriptionDb {
   subscription: {
-    findFirst(args: unknown): Promise<{
-      id: string;
-      userId: string;
-      productId: string;
-      provider: string;
-      status: string;
-      expiresAt: Date | null;
-      createdAt: Date;
-      updatedAt: Date;
-    } | null>;
-    create(args: unknown): Promise<{
-      id: string;
-      userId: string;
-      productId: string;
-      provider: string;
-      status: string;
-      expiresAt: Date | null;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-    update(args: unknown): Promise<{
-      id: string;
-      userId: string;
-      productId: string;
-      provider: string;
-      status: string;
-      expiresAt: Date | null;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
+    findFirst(args: unknown): Promise<SubscriptionRecord | null>;
+    create(args: unknown): Promise<SubscriptionRecord>;
+    update(args: unknown): Promise<SubscriptionRecord>;
   };
 }
 
@@ -45,12 +18,19 @@ export class PrismaSubscriptionRepository implements SubscriptionRepositoryPort 
     });
   }
 
+  async findByPurchaseToken(purchaseToken: string) {
+    return this.db.subscription.findFirst({ where: { purchaseToken } });
+  }
+
   async upsert(input: {
     userId: string;
     productId: string;
     provider: string;
     status: string;
     expiresAt: Date | null;
+    purchaseToken: string | null;
+    willRenew: boolean;
+    inGracePeriod: boolean;
   }) {
     const existing = await this.db.subscription.findFirst({
       where: {
@@ -69,6 +49,9 @@ export class PrismaSubscriptionRepository implements SubscriptionRepositoryPort 
       data: {
         status: input.status,
         expiresAt: input.expiresAt,
+        purchaseToken: input.purchaseToken,
+        willRenew: input.willRenew,
+        inGracePeriod: input.inGracePeriod,
       },
     });
   }

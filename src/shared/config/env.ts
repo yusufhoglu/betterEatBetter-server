@@ -40,6 +40,11 @@ const envSchema = z.object({
   MAX_TOOL_TURNS: z.coerce.number().int().positive().default(5),
   MAX_CONTEXT_MESSAGES: z.coerce.number().int().positive().default(20),
 
+  // subscription module — Google Play Developer API + Real-time Developer Notifications
+  GOOGLE_PLAY_PACKAGE_NAME: z.string().min(1),
+  GOOGLE_SERVICE_ACCOUNT_JSON: z.string().min(1),
+  GOOGLE_PLAY_RTDN_AUDIENCE: z.string().min(1),
+
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   LOKI_URL: z.string().url().optional(),
   LOKI_USER_ID: z.string().optional(),
