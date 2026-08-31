@@ -42,9 +42,10 @@ services:
         condition: service_healthy
       redis-cache:
         condition: service_healthy
-    # Host Caddy reaches this via the docker0 gateway (172.17.0.1:3100).
+    # Bound to the docker0 gateway IP: reachable by the Caddy container
+    # (host.docker.internal -> 172.17.0.1) but not from the public interface.
     ports:
-      - "127.0.0.1:3100:3000"
+      - "172.17.0.1:3100:3000"
     healthcheck:
       test:
         ["CMD", "node", "-e",
