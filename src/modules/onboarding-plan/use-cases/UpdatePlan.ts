@@ -36,6 +36,8 @@ export class UpdatePlan {
       fatG: changes.fatG,
     });
 
+    const existingPlan = await this.planRepository.findByUserId(userId);
+
     const updatedProfile = await this.userProfileRepository.update({
       userId,
       weightKg: changes.weightKg,
@@ -55,12 +57,27 @@ export class UpdatePlan {
       weeklyPaceKg: updatedProfile.weeklyPaceKg,
     });
 
+    // A goal-parameter change (weight, pace, workouts, goal, target) is an
+    // explicit "recompute my whole plan" signal. A request carrying only macro
+    // fields is a manual tweak — keep the other *stored* macro values instead
+    // of snapping them back to the freshly computed ones, so independent edits
+    // to each macro (e.g. one ring at a time on the plan-ready screen)
+    // accumulate rather than overwriting each other.
+    const goalParamsChanged =
+      changes.weightKg !== undefined ||
+      changes.targetWeightKg !== undefined ||
+      changes.workoutsPerWeek !== undefined ||
+      changes.goal !== undefined ||
+      changes.weeklyPaceKg !== undefined;
+
+    const base = goalParamsChanged || !existingPlan ? recalculatedPlan : existingPlan;
+
     const plan = await this.planRepository.update({
       userId,
-      dailyCalories: changes.dailyCalories ?? recalculatedPlan.dailyCalories,
-      proteinG: changes.proteinG ?? recalculatedPlan.proteinG,
-      carbsG: changes.carbsG ?? recalculatedPlan.carbsG,
-      fatG: changes.fatG ?? recalculatedPlan.fatG,
+      dailyCalories: changes.dailyCalories ?? base.dailyCalories,
+      proteinG: changes.proteinG ?? base.proteinG,
+      carbsG: changes.carbsG ?? base.carbsG,
+      fatG: changes.fatG ?? base.fatG,
     });
 
     return BuildPlanResponse(updatedProfile, plan);

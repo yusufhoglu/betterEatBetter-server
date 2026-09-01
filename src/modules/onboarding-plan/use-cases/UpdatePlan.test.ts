@@ -99,6 +99,52 @@ describe('UpdatePlan', () => {
     });
   });
 
+  test('a single-macro edit keeps the other stored macro values', async () => {
+    const { completeOnboarding, updatePlan } = buildUpdatePlan();
+    await completeOnboarding.execute(buildInput());
+
+    const first = await updatePlan.execute('user-1', {
+      dailyCalories: 2100,
+      proteinG: 180,
+      carbsG: 190,
+      fatG: 62,
+    });
+
+    // Tweak only carbs — protein / fat / calories must stay put, not reset to
+    // whatever `computePlan` would produce.
+    const second = await updatePlan.execute('user-1', { carbsG: 210 });
+
+    expect(second).toMatchObject({
+      dailyCalories: first.dailyCalories,
+      proteinG: first.proteinG,
+      carbsG: 210,
+      fatG: first.fatG,
+    });
+  });
+
+  test('a goal-parameter change still recomputes macros from the profile', async () => {
+    const { completeOnboarding, updatePlan } = buildUpdatePlan();
+    await completeOnboarding.execute(buildInput());
+
+    await updatePlan.execute('user-1', {
+      dailyCalories: 2100,
+      proteinG: 180,
+      carbsG: 190,
+      fatG: 62,
+    });
+
+    // Changing the weekly pace is an explicit "recompute" — the earlier
+    // overrides should not survive it.
+    const recomputed = await updatePlan.execute('user-1', { weeklyPaceKg: 0.75 });
+
+    expect(recomputed).toMatchObject({
+      dailyCalories: 1623,
+      proteinG: 160,
+      carbsG: 123,
+      fatG: 55,
+    });
+  });
+
   test('updates targetWeightKg without changing immutable initialWeightKg', async () => {
     const { completeOnboarding, updatePlan, userProfileRepository } = buildUpdatePlan();
     await completeOnboarding.execute(buildInput());
