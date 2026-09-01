@@ -17,11 +17,21 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     return this.usersById.get(id) ?? null;
   }
 
+  async findByGoogleSub(googleSub: string): Promise<User | null> {
+    for (const user of this.usersById.values()) {
+      if (user.googleSub === googleSub) {
+        return user;
+      }
+    }
+    return null;
+  }
+
   async create(input: CreateUserInput): Promise<User> {
     const user: User = {
       id: randomUUID(),
       email: input.email,
-      passwordHash: input.passwordHash,
+      passwordHash: input.passwordHash ?? null,
+      googleSub: input.googleSub ?? null,
       name: input.name ?? null,
       username: input.username ?? null,
       bio: input.bio ?? null,
@@ -30,6 +40,16 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     };
     this.usersById.set(user.id, user);
     return user;
+  }
+
+  async linkGoogleAccount(id: string, googleSub: string): Promise<User> {
+    const existing = this.usersById.get(id);
+    if (!existing) {
+      throw new Error('User not found');
+    }
+    const updated: User = { ...existing, googleSub };
+    this.usersById.set(id, updated);
+    return updated;
   }
 
   async updateProfile(input: UpdateUserProfileInput): Promise<User> {

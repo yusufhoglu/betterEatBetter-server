@@ -5,6 +5,13 @@ Referans: `backend-architecture.md` §8.1, `shared-rule.md` (auth bölümü).
 
 ---
 
+> **Güncelleme (2026-09-01):** Google Sign-In sonraki bir turda eklendi —
+> `GoogleSignInAdapter` + `SignInWithProvider` + `POST /auth/social`. Aşağıdaki
+> "Apple/Google bu turda YAZILMAZ" ifadesi ilk tur kapsamıydı; artık Google
+> canlıda. Apple hâlâ kapsam dışı. Otomatik hesap birleştirme: doğrulanmış Google
+> email'i mevcut bir email+şifre hesabıyla eşleşirse Google kimliği o hesaba
+> bağlanır (`User.googleSub`).
+
 ## Kapsam — bu turda ne yapılıyor, ne yapılmıyor
 
 - **Tam iskelet kurulur**: tüm domain/use-cases/ports/adapters/http klasörleri, refresh

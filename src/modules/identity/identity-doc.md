@@ -15,6 +15,7 @@ Bu modul kullanici kimligini dogrular, session token uretir, refresh token rotat
 | --- | --- | --- |
 | `POST` | `/auth/sign-up` | Email+sifre ile hesap acip ilk session'i uretir |
 | `POST` | `/auth/sign-in` | Email+sifre ile oturum acar |
+| `POST` | `/auth/social` | Sosyal saglayici (`google`) ID token'i ile oturum acar / hesap olusturur |
 | `POST` | `/auth/refresh` | Refresh token rotation ile yeni session verir |
 | `POST` | `/auth/logout` | Refresh token'i iptal eder |
 | `DELETE` | `/auth/account` | Authenticated kullanicinin hesabini ve sessionlarini siler |
@@ -103,6 +104,20 @@ sequenceDiagram
         Controller-->>Client: 204
     end
 ```
+
+## Sosyal Giris (`POST /auth/social`)
+
+- Istek govdesi: `{ provider: 'google', idToken: '<Google OIDC ID token>' }`. Mobil istemci
+  token'i Google SDK'dan alir; backend `google-auth-library` ile **offline** dogrular
+  (`GoogleSignInAdapter`, audience = `GOOGLE_OAUTH_CLIENT_IDS`).
+- `SignInWithProvider` find-or-create yapar: once `googleSub` ile kullanici aranir, yoksa
+  **dogrulanmis** email ile mevcut hesap aranir ve bulunursa Google kimligi ona baglanir
+  (otomatik hesap birlestirme), o da yoksa yeni sifresiz kullanici olusturulur.
+- Otomatik birlestirme yalnizca adapter email'in provider tarafindan dogrulandigini garanti
+  ettigi icin guvenli — `email_verified !== true` olan token reddedilir.
+- Yeni saglayici (Apple) eklerken: `IdentityProviderPort<SocialIdTokenCredentials>` implement
+  edin ve `identityRoutes.ts`'te `SignInWithProvider`'a `{ google, apple }` seklinde gecin;
+  controller/use-case degismez.
 
 ## Gelistirme Rehberi
 

@@ -6,6 +6,7 @@ import type { DeleteAccount } from '../use-cases/DeleteAccount';
 import type { Logout } from '../use-cases/Logout';
 import type { RefreshSession } from '../use-cases/RefreshSession';
 import type { SignIn } from '../use-cases/SignIn';
+import type { SignInWithProvider } from '../use-cases/SignInWithProvider';
 import type { SignUp } from '../use-cases/SignUp';
 
 const logger = createModuleLogger('identity-controller');
@@ -17,6 +18,11 @@ const credentialsSchema = z.object({
 
 const refreshSchema = z.object({
   refreshToken: z.string().min(1),
+});
+
+const socialSignInSchema = z.object({
+  provider: z.string().min(1),
+  idToken: z.string().min(1),
 });
 
 function parseOrThrow<T>(schema: z.ZodType<T>, body: unknown): T {
@@ -32,6 +38,7 @@ export class IdentityController {
   constructor(
     private readonly signUp: SignUp,
     private readonly signIn: SignIn,
+    private readonly signInWithProvider: SignInWithProvider,
     private readonly refreshSession: RefreshSession,
     private readonly logout: Logout,
     private readonly deleteAccount: DeleteAccount,
@@ -59,6 +66,19 @@ export class IdentityController {
       res.status(200).json(session);
     } catch (err) {
       logger.error({ err }, 'sign-in request failed');
+      next(err);
+    }
+  };
+
+  handleSocialSignIn = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const input = parseOrThrow(socialSignInSchema, req.body);
+      logger.info({ provider: input.provider }, 'social sign-in request received');
+      const session = await this.signInWithProvider.execute(input);
+      logger.info({ userId: session.userId, provider: input.provider }, 'social sign-in request succeeded');
+      res.status(200).json(session);
+    } catch (err) {
+      logger.error({ err }, 'social sign-in request failed');
       next(err);
     }
   };

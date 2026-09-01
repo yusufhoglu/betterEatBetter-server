@@ -14,7 +14,12 @@ datasource db {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
-  passwordHash String
+  // Nullable: a user who only ever signed in with Google has no password.
+  // Google's `sub` claim — stable per Google account, set when a Google
+  // sign-in first links to this user (either a brand-new user or an existing
+  // email+password account matched by verified email; see identity-rule.md).
+  passwordHash String?
+  googleSub    String?  @unique
   name         String?
   username     String?  @unique
   bio          String?

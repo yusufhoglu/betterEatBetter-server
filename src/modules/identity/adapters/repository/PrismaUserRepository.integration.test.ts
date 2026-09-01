@@ -71,4 +71,30 @@ describe('PrismaUserRepository (integration)', () => {
 
     await expect(repository.create({ email: 'dup@example.com', passwordHash: 'hash-two' })).rejects.toThrow();
   });
+
+  it('creates a passwordless social user and finds it by googleSub', async () => {
+    const created = await repository.create({ email: 'social@example.com', googleSub: 'google-sub-1' });
+
+    expect(created.passwordHash).toBeNull();
+    expect(created.googleSub).toBe('google-sub-1');
+
+    const found = await repository.findByGoogleSub('google-sub-1');
+    expect(found?.id).toBe(created.id);
+    expect(await repository.findByGoogleSub('nope')).toBeNull();
+  });
+
+  it('links a googleSub onto an existing email+password account', async () => {
+    const created = await repository.create({ email: 'linkme@example.com', passwordHash: 'argon2-hash' });
+
+    const linked = await repository.linkGoogleAccount(created.id, 'google-sub-9');
+
+    expect(linked.googleSub).toBe('google-sub-9');
+    expect(linked.passwordHash).toBe('argon2-hash');
+  });
+
+  it('enforces the googleSub unique constraint', async () => {
+    await repository.create({ email: 'a@example.com', googleSub: 'shared-sub' });
+
+    await expect(repository.create({ email: 'b@example.com', googleSub: 'shared-sub' })).rejects.toThrow();
+  });
 });

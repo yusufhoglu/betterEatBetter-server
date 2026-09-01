@@ -22,7 +22,10 @@ export class EmailPasswordAdapter implements IdentityProviderPort<EmailPasswordC
 
   async verify(credentials: EmailPasswordCredentials): Promise<VerifiedIdentity> {
     const user = await this.userRepository.findByEmail(credentials.email);
-    if (!user) {
+    // A user with no passwordHash signed up through a social provider only —
+    // collapsed into the same error so it stays indistinguishable from "wrong
+    // password" / "no such email" (identity-rule.md enumeration balance).
+    if (!user || !user.passwordHash) {
       throw new UnauthorizedError('INVALID_CREDENTIALS', 'email veya şifre hatalı');
     }
 

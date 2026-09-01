@@ -7,6 +7,7 @@ import { DeleteAccount } from '../use-cases/DeleteAccount';
 import { Logout } from '../use-cases/Logout';
 import { RefreshSession } from '../use-cases/RefreshSession';
 import { SignIn } from '../use-cases/SignIn';
+import { SignInWithProvider } from '../use-cases/SignInWithProvider';
 import { SignUp } from '../use-cases/SignUp';
 import { FakeSessionTokenPort } from '../test-utils/fakes/FakeSessionTokenPort';
 import { InMemoryRefreshTokenRepository } from '../test-utils/fakes/InMemoryRefreshTokenRepository';
@@ -30,10 +31,17 @@ function buildApp() {
 
   const signUp = new SignUp(userRepository, emailPasswordAdapter, sessionTokenPort, refreshTokenRepository);
   const signIn = new SignIn(emailPasswordAdapter, sessionTokenPort, refreshTokenRepository);
+  const googleAdapter = { verify: jest.fn().mockResolvedValue({ externalId: 'google-sub-1', email: 'social@example.com' }) };
+  const signInWithProvider = new SignInWithProvider(
+    { google: googleAdapter },
+    userRepository,
+    sessionTokenPort,
+    refreshTokenRepository,
+  );
   const refreshSession = new RefreshSession(refreshTokenRepository, sessionTokenPort);
   const logout = new Logout(refreshTokenRepository);
   const deleteAccount = new DeleteAccount(userRepository, refreshTokenRepository);
-  const controller = new IdentityController(signUp, signIn, refreshSession, logout, deleteAccount);
+  const controller = new IdentityController(signUp, signIn, signInWithProvider, refreshSession, logout, deleteAccount);
   const fakeAuthMiddleware: RequestHandler = (req, _res, next) => {
     req.auth = { userId: req.header('x-user-id') ?? '' };
     next();
@@ -43,6 +51,7 @@ function buildApp() {
   app.use(express.json());
   app.post('/sign-up', controller.handleSignUp);
   app.post('/sign-in', controller.handleSignIn);
+  app.post('/social', controller.handleSocialSignIn);
   app.post('/refresh', controller.handleRefresh);
   app.post('/logout', controller.handleLogout);
   app.delete('/account', fakeAuthMiddleware, controller.handleDeleteAccount);
@@ -122,6 +131,47 @@ describe('IdentityController', () => {
       expect(wrongPasswordRes.status).toBe(401);
       expect(unknownEmailRes.body).toEqual(wrongPasswordRes.body);
       expect(unknownEmailRes.body.code).toBe('INVALID_CREDENTIALS');
+    });
+  });
+
+  describe('POST /social', () => {
+    test('200s with a session and creates the account on first Google sign-in', async () => {
+      const app = buildApp();
+
+      const res = await request(app).post('/social').send({ provider: 'google', idToken: 'google-id-token' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ userId: expect.any(String), accessToken: expect.any(String) });
+      expect(res.body.refreshToken).toBeTruthy();
+      expect(res.body).not.toHaveProperty('passwordHash');
+    });
+
+    test('returns the same user on a repeat Google sign-in (find-or-create)', async () => {
+      const app = buildApp();
+
+      const first = await request(app).post('/social').send({ provider: 'google', idToken: 'google-id-token' });
+      const second = await request(app).post('/social').send({ provider: 'google', idToken: 'google-id-token' });
+
+      expect(second.status).toBe(200);
+      expect(second.body.userId).toBe(first.body.userId);
+    });
+
+    test('400s with UNSUPPORTED_PROVIDER for a provider that is not wired up', async () => {
+      const app = buildApp();
+
+      const res = await request(app).post('/social').send({ provider: 'apple', idToken: 'apple-id-token' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('UNSUPPORTED_PROVIDER');
+    });
+
+    test('400s on a malformed body (missing idToken)', async () => {
+      const app = buildApp();
+
+      const res = await request(app).post('/social').send({ provider: 'google' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('INVALID_REQUEST_BODY');
     });
   });
 

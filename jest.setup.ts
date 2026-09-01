@@ -7,6 +7,7 @@ process.env.R2_ACCESS_KEY_ID ??= 'test-key';
 process.env.R2_SECRET_ACCESS_KEY ??= 'test-secret';
 process.env.R2_BUCKET_NAME ??= 'test-bucket';
 process.env.JWT_SECRET ??= 'test-jwt-secret-at-least-32-characters-long';
+process.env.GOOGLE_OAUTH_CLIENT_IDS ??= 'test-ios.apps.googleusercontent.com,test-android.apps.googleusercontent.com';
 process.env.RAG_SERVICE_URL ??= 'http://localhost:9999';
 // food-recognition module defaults for test environment
 process.env.LLM_SERVICE_URL ??= 'http://localhost:11434';

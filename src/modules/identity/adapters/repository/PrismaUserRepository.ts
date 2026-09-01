@@ -10,8 +10,16 @@ export class PrismaUserRepository implements UserRepositoryPort {
     return prisma.user.findUnique({ where: { id } });
   }
 
+  async findByGoogleSub(googleSub: string): Promise<User | null> {
+    return prisma.user.findUnique({ where: { googleSub } });
+  }
+
   async create(input: CreateUserInput): Promise<User> {
     return prisma.user.create({ data: input });
+  }
+
+  async linkGoogleAccount(id: string, googleSub: string): Promise<User> {
+    return prisma.user.update({ where: { id }, data: { googleSub } });
   }
 
   async updateProfile(input: UpdateUserProfileInput): Promise<User> {

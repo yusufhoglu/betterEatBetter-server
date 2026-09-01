@@ -22,6 +22,15 @@ const envSchema = z.object({
   JWT_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
 
+  // identity module — Google Sign-In. Comma-separated list of accepted OAuth
+  // client IDs (one per platform: iOS, Android, Web), checked as the audience
+  // when verifying a Google ID token.
+  GOOGLE_OAUTH_CLIENT_IDS: z
+    .string()
+    .min(1)
+    .transform((value) => value.split(',').map((id) => id.trim()).filter(Boolean))
+    .pipe(z.array(z.string().min(1)).min(1)),
+
   RAG_SERVICE_URL: z.string().min(1),
 
   // food-recognition module settings
