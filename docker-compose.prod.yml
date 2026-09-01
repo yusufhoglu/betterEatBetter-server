@@ -72,6 +72,12 @@ services:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: food_tracking
+    # Bound to the server's loopback only -- not reachable from the public
+    # interface. Lets an operator reach the DB from their laptop via an SSH
+    # tunnel: `ssh -N -L 5433:localhost:5432 <server>` then connect to
+    # 127.0.0.1:5433 (e.g. `npx prisma studio`).
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

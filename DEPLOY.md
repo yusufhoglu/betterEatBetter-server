@@ -80,6 +80,18 @@ curl -fsS https://$DOMAIN/health          # liveness
 curl -fsS https://$DOMAIN/health/ready    # DB + Redis reachability
 ```
 
+### Inspecting the database from a laptop
+
+Postgres publishes on the server's loopback only (`127.0.0.1:5432`). Tunnel in:
+
+```bash
+ssh -N -L 5433:localhost:5432 root@161.97.111.192      # keep this open
+# then, elsewhere:
+DATABASE_URL='postgresql://app:<POSTGRES_PASSWORD>@127.0.0.1:5433/food_tracking' npx prisma studio
+```
+
+(PowerShell: `$env:DATABASE_URL='...'; npx prisma studio` — `.env` won't override an env var already set.)
+
 ### Backups
 
 `postgres_data` is a named Docker volume. A minimal cron backup:
