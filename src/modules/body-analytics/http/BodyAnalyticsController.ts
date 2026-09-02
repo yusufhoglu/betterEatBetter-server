@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { ValidationError } from '../../../shared/errors/ValidationError';
+import { getLocale } from '../../../shared/i18n/locale';
 import type { AddBodyMeasurement } from '../use-cases/AddBodyMeasurement';
 import type { DeleteBodyMeasurement } from '../use-cases/DeleteBodyMeasurement';
 import type { GetBodySilhouetteProfile } from '../use-cases/GetBodySilhouetteProfile';
@@ -238,7 +239,9 @@ export class BodyAnalyticsController {
 
   handleGetMealInsights = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      res.status(200).json(await this.getMealInsights.execute(req.auth!.userId, req.query.range as never));
+      res
+        .status(200)
+        .json(await this.getMealInsights.execute(req.auth!.userId, req.query.range as never, getLocale(req)));
     } catch (error) {
       next(error);
     }

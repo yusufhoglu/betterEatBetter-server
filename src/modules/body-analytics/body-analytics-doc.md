@@ -119,13 +119,14 @@ sequenceDiagram
 - Yeni analytics endpoint'i ekliyorsaniz once bunun transactional source of truth'tan mi yoksa read-model'den mi okunmasi gerektigini secin. Tekrarlanan toplu sorgular icin read-model tercih edin.
 - `body-analytics` diger modullerin tablolarina direkt gitmemeli. `ProfilePort`, `DailyTrackingPort`, `PlanTargetPort` gibi portlar uzerinden gidin.
 - Insight uretimi adapter uzerinden soyutlanmis. LLM tabanli generator eklerken use-case imzasini degistirmeyin; `InsightGeneratorPort` implement edin.
+- Kullaniciya donen metinler (insight `title`/`body` vb.) `Accept-Language`'e gore uretilir. Controller `getLocale(req)` ile `Locale` cozer, `GetMealInsights` bunu generator'a gecirir; bilinmeyen etiketlerde `en`'e duser.
 
 ## Ornek Best Practice
 
 Dogru:
 
 ```ts
-const insights = await insightGenerator.generate(summary);
+const insights = await insightGenerator.generate(logs, locale);
 ```
 
 Yanlis: `GetMealInsights` icinde dogrudan LLM client olusturmak veya `nutrition-logging` repository import etmek.

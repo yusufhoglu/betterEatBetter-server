@@ -1,3 +1,4 @@
+import type { Locale } from '../../../../shared/i18n/locale';
 import type { MealInsightCard, MealLogReadModel } from '../../domain/bodyAnalyticsTypes';
 import type { InsightGeneratorPort } from '../../ports/InsightGeneratorPort';
 
@@ -6,7 +7,7 @@ import type { InsightGeneratorPort } from '../../ports/InsightGeneratorPort';
  * introducing an LLM dependency in this round.
  */
 export class LlmInsightGenerator implements InsightGeneratorPort {
-  generate(_logs: MealLogReadModel[]): MealInsightCard[] {
+  generate(_logs: MealLogReadModel[], _locale: Locale): MealInsightCard[] {
     return [];
   }
 }

@@ -10,6 +10,7 @@ import { healthRoutes } from './http/healthRoutes';
 import { createRouter } from './http/router';
 import { env } from './shared/config/env';
 import { errorMapperMiddleware } from './shared/errors/errorMapper';
+import { localeMiddleware } from './shared/i18n/locale';
 import { logger } from './shared/observability/logger';
 import { requestLoggingMiddleware } from './shared/observability/requestLoggingMiddleware';
 import { canonicalizeFoodPhotoTraceMiddleware, tracingMiddleware } from './shared/observability/tracingMiddleware';
@@ -78,7 +79,7 @@ function startFoodEntryCleanupPolling(): void {
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,PATCH,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-trace-id');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-trace-id, Accept-Language');
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
   } else {
@@ -91,6 +92,7 @@ app.use(healthRoutes());
 app.use(tracingMiddleware);
 app.use(express.json());
 app.use(canonicalizeFoodPhotoTraceMiddleware);
+app.use(localeMiddleware);
 app.use(requestLoggingMiddleware);
 app.use(createRouter());
 app.use(errorMapperMiddleware);

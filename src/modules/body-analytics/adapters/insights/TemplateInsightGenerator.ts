@@ -1,3 +1,4 @@
+import type { Locale } from '../../../../shared/i18n/locale';
 import type { InsightGeneratorPort } from '../../ports/InsightGeneratorPort';
 import type { MealInsightCard, MealLogReadModel } from '../../domain/bodyAnalyticsTypes';
 
@@ -10,10 +11,46 @@ function dayCalories(logs: MealLogReadModel[]): number {
   }, 0);
 }
 
+interface InsightCopy {
+  emptyState: MealInsightCard;
+  latestDaySummary: (calories: number) => MealInsightCard;
+  proteinConsistency: (days: number) => MealInsightCard;
+}
+
+const COPY: Record<Locale, InsightCopy> = {
+  en: {
+    emptyState: { title: 'No meal logs yet', body: 'Log a few meals to unlock nutrition insights.' },
+    latestDaySummary: (calories) => ({
+      title: 'Latest day summary',
+      body: `Your most recent logged day reached ${calories} kcal.`,
+    }),
+    proteinConsistency: (days) => ({
+      title: 'Protein consistency',
+      body: `You logged at least 30g protein on ${days} distinct day(s) in this range.`,
+    }),
+  },
+  tr: {
+    emptyState: {
+      title: 'Henüz öğün kaydı yok',
+      body: 'Beslenme içgörülerini açmak için birkaç öğün kaydet.',
+    },
+    latestDaySummary: (calories) => ({
+      title: 'Son gün özeti',
+      body: `En son kaydettiğin gün ${calories} kcal'ye ulaştı.`,
+    }),
+    proteinConsistency: (days) => ({
+      title: 'Protein tutarlılığı',
+      body: `Bu aralıkta ${days} ayrı günde en az 30g protein kaydettin.`,
+    }),
+  },
+};
+
 export class TemplateInsightGenerator implements InsightGeneratorPort {
-  generate(logs: MealLogReadModel[]): MealInsightCard[] {
+  generate(logs: MealLogReadModel[], locale: Locale): MealInsightCard[] {
+    const copy = COPY[locale];
+
     if (logs.length === 0) {
-      return [{ title: 'No meal logs yet', body: 'Log a few meals to unlock nutrition insights.' }];
+      return [copy.emptyState];
     }
 
     const sorted = [...logs].sort((left, right) => right.date.getTime() - left.date.getTime());
@@ -26,15 +63,6 @@ export class TemplateInsightGenerator implements InsightGeneratorPort {
         .map((log) => log.date.toISOString().slice(0, 10)),
     ).size;
 
-    return [
-      {
-        title: 'Latest day summary',
-        body: `Your most recent logged day reached ${latestCalories} kcal.`,
-      },
-      {
-        title: 'Protein consistency',
-        body: `You logged at least 30g protein on ${proteinHeavyDays} distinct day(s) in this range.`,
-      },
-    ];
+    return [copy.latestDaySummary(latestCalories), copy.proteinConsistency(proteinHeavyDays)];
   }
 }
