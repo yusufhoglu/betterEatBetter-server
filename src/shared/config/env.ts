@@ -49,6 +49,10 @@ const envSchema = z.object({
   MAX_TOOL_TURNS: z.coerce.number().int().positive().default(5),
   MAX_CONTEXT_MESSAGES: z.coerce.number().int().positive().default(20),
 
+  // Postgres connection pool sizing (appended to DATABASE_URL if absent).
+  DATABASE_CONNECTION_LIMIT: z.coerce.number().int().positive().default(20),
+  DATABASE_POOL_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(20),
+
   // subscription module — Google Play Developer API + Real-time Developer Notifications
   GOOGLE_PLAY_PACKAGE_NAME: z.string().min(1),
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().min(1),
