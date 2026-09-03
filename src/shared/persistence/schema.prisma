@@ -106,10 +106,10 @@ model RefreshToken {
 // ONLY the photo flow writes here — barcode/text/search are synchronous and
 // return results directly without persistent storage.
 model FoodEntry {
-  id         String   @id               // = mealPhotoId (deterministic job id)
+  id         String   @id // = mealPhotoId (deterministic job id)
   userId     String
-  status     String                     // 'processing' | 'completed' | 'insufficient_data' | 'failed'
-  resultJson Json?                      // Python RAG raw result (items, macros, needsUserAction)
+  status     String // 'processing' | 'completed' | 'insufficient_data' | 'failed'
+  resultJson Json? // Python RAG raw result (items, macros, needsUserAction)
   errorCode  String?
   createdAt  DateTime @default(now())
 
@@ -226,20 +226,20 @@ model NotificationPreference {
 // the Social feed (with full macros + a re-signable photo reference).
 // `prepTimeMinutes` is only set for hand-added recipes.
 model FavoriteRecipe {
-  id              String   @id @default(uuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title           String
-  imageUrl        String?
-  emoji           String?
-  kcal            Int
-  prepTimeMinutes Int?
-  proteinG        Int?
-  carbsG          Int?
-  fatG            Int?
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String
+  imageUrl         String?
+  emoji            String?
+  kcal             Int
+  prepTimeMinutes  Int?
+  proteinG         Int?
+  carbsG           Int?
+  fatG             Int?
   mealPhotoId      String?
   mealPhotoOwnerId String?
-  createdAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
 
   @@unique([userId, mealPhotoId])
   @@index([userId, createdAt])
@@ -247,21 +247,21 @@ model FavoriteRecipe {
 }
 
 model SavedMeal {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  imageUrl  String?
-  emoji     String?
-  kcal      Int
-  proteinG  Int
-  carbsG    Int?
-  fatG      Int?
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String
+  imageUrl         String?
+  emoji            String?
+  kcal             Int
+  proteinG         Int
+  carbsG           Int?
+  fatG             Int?
   // When saved from the Social feed: the source meal photo, re-signed on read.
   // `imageUrl` is derived from these when present.
   mealPhotoId      String?
   mealPhotoOwnerId String?
-  createdAt DateTime @default(now())
+  createdAt        DateTime @default(now())
 
   // A given Social meal photo is saved at most once per user (NULLs don't
   // collide, so manual saves are unaffected).
@@ -291,8 +291,8 @@ model Subscription {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  @@index([userId, status, expiresAt])
   @@unique([userId, productId, provider])
+  @@index([userId, status, expiresAt])
   @@map("subscriptions")
 }
 
@@ -318,6 +318,36 @@ model Message {
 
   @@index([conversationId, createdAt])
   @@map("messages")
+}
+
+// dietician module: a goal-oriented coaching conversation. conversationId is
+// client/trace-supplied like Conversation. `digest` is a rolling structured
+// summary (ConversationDigest) that stands in for messages trimmed out of the
+// context window; `digestTurn` records the turnCount it was last rebuilt at.
+model DieticianConversation {
+  id         String             @id @default(uuid())
+  userId     String
+  createdAt  DateTime           @default(now())
+  turnCount  Int                @default(0)
+  digest     Json?
+  digestTurn Int                @default(0)
+  messages   DieticianMessage[]
+
+  @@index([userId])
+  @@map("dietician_conversations")
+}
+
+model DieticianMessage {
+  id             String                @id @default(uuid())
+  conversationId String
+  conversation   DieticianConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // 'system'|'user'|'assistant'|'tool'
+  content        String
+  origin         String                @default("live") // 'live' | 'proactive'
+  createdAt      DateTime              @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("dietician_messages")
 }
 
 // social module: a small reverse-chronological feed of meal photos the user
