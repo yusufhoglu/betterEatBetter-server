@@ -67,9 +67,9 @@ describe('UpdateProfileMeasurements', () => {
     });
     expect(storedPlan).toMatchObject({
       dailyCalories: 1704,
-      proteinG: 160,
-      carbsG: 133,
-      fatG: 59,
+      proteinG: 128,
+      carbsG: 154,
+      fatG: 64,
     });
   });
 });

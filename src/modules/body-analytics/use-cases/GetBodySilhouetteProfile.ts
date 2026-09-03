@@ -19,12 +19,14 @@ export class GetBodySilhouetteProfile {
       throw new NotFoundError('NOT_ONBOARDED', 'User has not completed onboarding');
     }
 
+    // A region the user edited on the Analytics tab wins; otherwise fall back to
+    // whatever they entered during onboarding so those measurements aren't lost.
     return {
       heightCm: onboardingProfile.heightCm,
-      neckCm: silhouetteProfile?.neckCm ?? null,
-      shoulderCm: silhouetteProfile?.shoulderCm ?? null,
-      waistCm: silhouetteProfile?.waistCm ?? null,
-      hipCm: silhouetteProfile?.hipCm ?? null,
+      neckCm: silhouetteProfile?.neckCm ?? onboardingProfile.neckCm ?? null,
+      shoulderCm: silhouetteProfile?.shoulderCm ?? onboardingProfile.shoulderCm ?? null,
+      waistCm: silhouetteProfile?.waistCm ?? onboardingProfile.waistCm ?? null,
+      hipCm: silhouetteProfile?.hipCm ?? onboardingProfile.hipCm ?? null,
       sex: onboardingProfile.gender,
     };
   }

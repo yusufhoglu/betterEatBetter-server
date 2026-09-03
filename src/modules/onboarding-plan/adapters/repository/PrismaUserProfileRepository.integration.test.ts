@@ -83,6 +83,36 @@ describe('PrismaUserProfileRepository (integration)', () => {
     expect(await repository.findByUserId('does-not-exist')).toBeNull();
   });
 
+  it('round-trips the optional tape measurements, defaulting them to null', async () => {
+    await prisma.user.create({
+      data: { id: 'user-tape', email: 'tape@example.com', passwordHash: 'hashed-value' },
+    });
+
+    const created = await repository.create({
+      userId: 'user-tape',
+      weightKg: 80,
+      targetWeightKg: 72,
+      initialWeightKg: 80,
+      heightCm: 180,
+      age: 30,
+      gender: 'male',
+      workoutsPerWeek: 3,
+      goal: 'lose',
+      weeklyPaceKg: 0.5,
+      waistCm: 90,
+      neckCm: 40,
+      shoulderCm: 120,
+    });
+
+    expect(created).toMatchObject({ waistCm: 90, neckCm: 40, hipCm: null, shoulderCm: 120 });
+    expect(await repository.findByUserId('user-tape')).toMatchObject({
+      waistCm: 90,
+      neckCm: 40,
+      hipCm: null,
+      shoulderCm: 120,
+    });
+  });
+
   it('supports a null targetWeightKg while keeping initialWeightKg required', async () => {
     await prisma.user.create({
       data: { id: 'user-2', email: 'targetless@example.com', passwordHash: 'hashed-value' },

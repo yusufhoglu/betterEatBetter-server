@@ -69,9 +69,9 @@ describe('UpdatePlan', () => {
     expect(updatedPlan).toMatchObject({
       userId: 'user-1',
       dailyCalories: 1623,
-      proteinG: 160,
-      carbsG: 123,
-      fatG: 55,
+      proteinG: 128,
+      carbsG: 134,
+      fatG: 64,
       projection: {
         startWeightKg: 80,
         targetWeightKg: 72,
@@ -139,9 +139,9 @@ describe('UpdatePlan', () => {
 
     expect(recomputed).toMatchObject({
       dailyCalories: 1623,
-      proteinG: 160,
-      carbsG: 123,
-      fatG: 55,
+      proteinG: 128,
+      carbsG: 134,
+      fatG: 64,
     });
   });
 

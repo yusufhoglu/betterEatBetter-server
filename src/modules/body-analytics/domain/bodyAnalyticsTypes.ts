@@ -57,6 +57,12 @@ export interface AnalyticsUserProfile {
   workoutsPerWeek: number;
   goal: Goal;
   weeklyPaceKg: number;
+  // Tape measurements captured at onboarding — a fallback for the silhouette
+  // profile before the user edits any region on the Analytics tab.
+  waistCm?: number | null;
+  neckCm?: number | null;
+  hipCm?: number | null;
+  shoulderCm?: number | null;
   createdAt: Date;
 }
 

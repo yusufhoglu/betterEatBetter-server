@@ -57,6 +57,14 @@ model UserProfile {
   workoutsPerWeek Int
   goal            String // 'lose' | 'maintain' | 'gain'
   weeklyPaceKg    Float
+  // Optional tape-measure circumferences (cm) collected during onboarding. When
+  // present they drive a US-Navy body-fat estimate; otherwise the plan falls
+  // back to a Deurenberg (BMI-based) estimate. See PlanCalculationService.
+  // shoulderCm is not used for body fat — it is kept for the shoulder-to-waist ratio.
+  waistCm         Float?
+  neckCm          Float?
+  hipCm           Float?
+  shoulderCm      Float?
   createdAt       DateTime @default(now())
 
   @@map("user_profiles")

@@ -15,7 +15,7 @@ Bu modul vucut olcumleri, silhouette profili ve meal read-model uzerinden analit
 | Method | Path | Aciklama |
 | --- | --- | --- |
 | `GET` | `/analytics/body-stats` | Son olcumler ve ozet body stats |
-| `GET` | `/analytics/body-profile` | Silhouette profili |
+| `GET` | `/analytics/body-profile` | Silhouette profili (bir bolge duzenlenmediyse onboarding'de girilen olcuye fallback eder) |
 | `PATCH` | `/analytics/body-profile` | Silhouette profilini gunceller |
 | `GET` | `/analytics/waist-height-ratio` | Bel-boy oranini hesaplar |
 | `GET` | `/analytics/goal-progress` | Goal progress ozeti |

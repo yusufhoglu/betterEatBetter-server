@@ -11,6 +11,11 @@ export interface UserProfile {
   workoutsPerWeek: number;
   goal: Goal;
   weeklyPaceKg: number;
+  // Optional onboarding tape measurements (cm) — drive the Navy body-fat estimate.
+  waistCm: number | null;
+  neckCm: number | null;
+  hipCm: number | null;
+  shoulderCm: number | null;
   createdAt: Date;
 }
 
@@ -25,6 +30,10 @@ export interface CreateUserProfileInput {
   workoutsPerWeek: number;
   goal: Goal;
   weeklyPaceKg: number;
+  waistCm?: number | null;
+  neckCm?: number | null;
+  hipCm?: number | null;
+  shoulderCm?: number | null;
 }
 
 export interface UpdateUserProfileInput {
@@ -37,6 +46,10 @@ export interface UpdateUserProfileInput {
   workoutsPerWeek?: number;
   goal?: Goal;
   weeklyPaceKg?: number;
+  waistCm?: number | null;
+  neckCm?: number | null;
+  hipCm?: number | null;
+  shoulderCm?: number | null;
 }
 
 export interface UserProfileRepositoryPort {

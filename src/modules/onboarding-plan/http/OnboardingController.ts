@@ -19,6 +19,11 @@ const completeOnboardingSchema = z
     workoutsPerWeek: z.number().int().min(0),
     goal: z.enum(['lose', 'maintain', 'gain']),
     weeklyPaceKg: z.number().positive(),
+    // Optional tape measurements (cm) from the skippable body-measurement step.
+    waistCm: z.number().positive().optional(),
+    neckCm: z.number().positive().optional(),
+    hipCm: z.number().positive().optional(),
+    shoulderCm: z.number().positive().optional(),
   })
   .refine((value) => value.age !== undefined || value.dateOfBirth !== undefined, {
     message: 'Either age or dateOfBirth is required',
@@ -72,6 +77,10 @@ export class OnboardingController {
         workoutsPerWeek: input.workoutsPerWeek,
         goal: input.goal,
         weeklyPaceKg: input.weeklyPaceKg,
+        waistCm: input.waistCm,
+        neckCm: input.neckCm,
+        hipCm: input.hipCm,
+        shoulderCm: input.shoulderCm,
       });
       logger.info({ userId, dailyCalories: plan.dailyCalories }, 'onboarding complete request succeeded');
       res.status(201).json(plan);

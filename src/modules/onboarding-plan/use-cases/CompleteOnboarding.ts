@@ -17,6 +17,11 @@ export interface CompleteOnboardingInput {
   workoutsPerWeek: number;
   goal: Goal;
   weeklyPaceKg: number;
+  // Optional tape measurements (cm) from the skippable onboarding step.
+  waistCm?: number | null;
+  neckCm?: number | null;
+  hipCm?: number | null;
+  shoulderCm?: number | null;
 }
 
 /**
@@ -50,6 +55,10 @@ export class CompleteOnboarding {
       workoutsPerWeek: input.workoutsPerWeek,
       goal: input.goal,
       weeklyPaceKg: input.weeklyPaceKg,
+      waistCm: input.waistCm ?? null,
+      neckCm: input.neckCm ?? null,
+      hipCm: input.hipCm ?? null,
+      shoulderCm: input.shoulderCm ?? null,
     });
 
     logger.info({ userId: input.userId }, 'computing onboarding plan');
@@ -61,6 +70,9 @@ export class CompleteOnboarding {
       workoutsPerWeek: input.workoutsPerWeek,
       goal: input.goal,
       weeklyPaceKg: input.weeklyPaceKg,
+      waistCm: input.waistCm ?? null,
+      neckCm: input.neckCm ?? null,
+      hipCm: input.hipCm ?? null,
     });
 
     logger.info({ userId: input.userId }, 'persisting onboarding plan');

@@ -13,7 +13,14 @@ export class InMemoryUserProfileRepository implements UserProfileRepositoryPort 
   }
 
   async create(input: CreateUserProfileInput): Promise<UserProfile> {
-    const profile: UserProfile = { ...input, createdAt: new Date() };
+    const profile: UserProfile = {
+      ...input,
+      waistCm: input.waistCm ?? null,
+      neckCm: input.neckCm ?? null,
+      hipCm: input.hipCm ?? null,
+      shoulderCm: input.shoulderCm ?? null,
+      createdAt: new Date(),
+    };
     this.profilesByUserId.set(input.userId, profile);
     return profile;
   }

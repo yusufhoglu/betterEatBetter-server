@@ -39,6 +39,13 @@ sequenceDiagram
     Controller-->>Client: 201 plan
 ```
 
+## Vucut Kompozisyonu (body-fat -> makro)
+
+- `PlanCalculationService.computeBodyComposition` tek bir `bodyFatPct` uretir: `waistCm` + `neckCm` (kadinlarda ayrica `hipCm`) geldiyse **US-Navy**, gelmediyse **Deurenberg** (BMI tabanli) tahmini. Sonuc `[5, 60]` bandina clamp'lenir.
+- `waistCm` / `neckCm` / `hipCm` / `shoulderCm` opsiyoneldir ve `user_profiles` tablosunda nullable tutulur (onboarding adimi atlanabilir). Migration: `20260902120000_add_body_measurements`. `shoulderCm` yag hesabinda kullanilmaz; sadece `shoulderToWaistRatio` icin saklanir (`BuildPlanResponse` icinde `shoulderCm / waistCm`, ikisi de varsa).
+- `computePlan` yag orani ile: protein `2.0 g/kg yagsiz kutle` (`1.6-2.2 g/kg vucut agirligi` araligina clamp), yag `max(kcal*0.25/9, 0.8 g/kg)` tabani, karbonhidrat kalanı. BMR yalnizca Navy olcumu varsa Katch-McArdle'a geçer.
+- `bodyFatPct` ve `leanBodyMassKg` `Plan` tablosunda saklanmaz; `BuildPlanResponse` her cevapta profilden yeniden hesaplar (projeksiyon/healthScore gibi).
+
 ## Gelistirme Rehberi
 
 - Yeni plan kurali ekleyecekseniz once `shared/domain/PlanCalculationService.ts` veya ilgili `domain/` fonksiyonlarina ekleyin; controller seviyesinde hesap yapmayin.

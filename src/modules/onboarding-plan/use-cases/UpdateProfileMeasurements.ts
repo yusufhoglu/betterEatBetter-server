@@ -36,11 +36,17 @@ export class UpdateProfileMeasurements {
       workoutsPerWeek: updatedProfile.workoutsPerWeek,
       goal: updatedProfile.goal,
       weeklyPaceKg: updatedProfile.weeklyPaceKg,
+      waistCm: updatedProfile.waistCm,
+      neckCm: updatedProfile.neckCm,
+      hipCm: updatedProfile.hipCm,
     });
 
     await this.planRepository.update({
       userId,
-      ...recalculatedPlan,
+      dailyCalories: recalculatedPlan.dailyCalories,
+      proteinG: recalculatedPlan.proteinG,
+      carbsG: recalculatedPlan.carbsG,
+      fatG: recalculatedPlan.fatG,
     });
 
     return updatedProfile;

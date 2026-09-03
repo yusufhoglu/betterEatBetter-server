@@ -42,19 +42,21 @@ describe('CompleteOnboarding', () => {
 
     // PlanCalculationService.computePlan is called with the survey answers and the
     // result is exactly what gets persisted (see PlanCalculationService.test.ts for
-    // the same inputs: dailyCalories 1898, proteinG 160, carbsG 157, fatG 70).
+    // the same inputs: dailyCalories 1898, proteinG 128, carbsG 203, fatG 64).
     expect(plan).toMatchObject({
       userId: 'user-1',
       dailyCalories: 1898,
-      proteinG: 160,
-      carbsG: 157,
-      fatG: 70,
+      proteinG: 128,
+      carbsG: 203,
+      fatG: 64,
       projection: {
         startWeightKg: 80,
         targetWeightKg: 72,
         estimatedTargetDate: new Date('2026-12-13T00:00:00.000Z'),
       },
       healthScore: expect.any(Number),
+      bodyFatPct: expect.any(Number),
+      leanBodyMassKg: expect.any(Number),
     });
 
     const storedProfile = await userProfileRepository.findByUserId('user-1');
@@ -105,6 +107,45 @@ describe('CompleteOnboarding', () => {
 
     const plan = await planRepository.findByUserId('user-1');
     expect(plan?.userId).toBe('user-1');
+  });
+
+  test('persists the optional tape measurements and uses a Navy body-fat estimate when they are present', async () => {
+    const { completeOnboarding, userProfileRepository } = buildCompleteOnboarding();
+
+    const withoutTape = buildCompleteOnboarding();
+    const baseline = await withoutTape.completeOnboarding.execute(buildInput());
+
+    const plan = await completeOnboarding.execute(
+      buildInput({ waistCm: 90, neckCm: 40, shoulderCm: 120 }),
+    );
+    const storedProfile = await userProfileRepository.findByUserId('user-1');
+
+    expect(storedProfile).toMatchObject({
+      waistCm: 90,
+      neckCm: 40,
+      hipCm: null,
+      shoulderCm: 120,
+    });
+    // shoulder ÷ waist, carried on the response but not part of the plan.
+    expect(plan.shoulderToWaistRatio).toBeCloseTo(120 / 90, 2);
+    // Navy (waist/neck) lands on a different body-fat figure than the
+    // Deurenberg fallback, so the macro split shifts too.
+    expect(plan.bodyFatPct).not.toBe(baseline.bodyFatPct);
+    expect(plan.proteinG).not.toBe(baseline.proteinG);
+  });
+
+  test('stores the tape measurements as null when the step is skipped', async () => {
+    const { completeOnboarding, userProfileRepository } = buildCompleteOnboarding();
+
+    await completeOnboarding.execute(buildInput());
+    const storedProfile = await userProfileRepository.findByUserId('user-1');
+
+    expect(storedProfile).toMatchObject({
+      waistCm: null,
+      neckCm: null,
+      hipCm: null,
+      shoulderCm: null,
+    });
   });
 
   test('stores targetWeightKg as null when it is omitted during onboarding', async () => {

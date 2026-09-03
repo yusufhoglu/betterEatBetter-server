@@ -248,6 +248,9 @@ describe('all endpoint smoke tests', () => {
       expect(res.status).toBe(201);
       expect(res.body.dailyCalories).toBeTruthy();
       expect(res.body.projection).toBeTruthy();
+      expect(typeof res.body.bodyFatPct).toBe('number');
+      expect(typeof res.body.leanBodyMassKg).toBe('number');
+      expect(res.body).toHaveProperty('shoulderToWaistRatio');
     });
   });
 

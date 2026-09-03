@@ -55,6 +55,9 @@ export class UpdatePlan {
       workoutsPerWeek: updatedProfile.workoutsPerWeek,
       goal: updatedProfile.goal,
       weeklyPaceKg: updatedProfile.weeklyPaceKg,
+      waistCm: updatedProfile.waistCm,
+      neckCm: updatedProfile.neckCm,
+      hipCm: updatedProfile.hipCm,
     });
 
     // A goal-parameter change (weight, pace, workouts, goal, target) is an

@@ -21,6 +21,10 @@ interface UserProfileRow {
   workoutsPerWeek: number;
   goal: string;
   weeklyPaceKg: number;
+  waistCm: number | null;
+  neckCm: number | null;
+  hipCm: number | null;
+  shoulderCm: number | null;
   createdAt: Date;
 }
 
@@ -36,6 +40,10 @@ function toUserProfile(row: UserProfileRow): UserProfile {
     workoutsPerWeek: row.workoutsPerWeek,
     goal: row.goal as Goal,
     weeklyPaceKg: row.weeklyPaceKg,
+    waistCm: row.waistCm,
+    neckCm: row.neckCm,
+    hipCm: row.hipCm,
+    shoulderCm: row.shoulderCm,
     createdAt: row.createdAt,
   };
 }
@@ -70,6 +78,10 @@ export class PrismaUserProfileRepository implements UserProfileRepositoryPort {
         workoutsPerWeek: input.workoutsPerWeek,
         goal: input.goal,
         weeklyPaceKg: input.weeklyPaceKg,
+        waistCm: input.waistCm,
+        neckCm: input.neckCm,
+        hipCm: input.hipCm,
+        shoulderCm: input.shoulderCm,
       },
     });
     logger.info({ userId: input.userId }, 'updated user profile');
