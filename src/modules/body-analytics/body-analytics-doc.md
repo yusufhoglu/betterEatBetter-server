@@ -1,13 +1,15 @@
 # Body Analytics Modulu Developer Doc
 
-Bu modul vucut olcumleri, silhouette profili ve meal read-model uzerinden analitik endpointler sunar. Yogun okumaya optimize edilmis bir read-model ve moduller arasi adaptorler uzerinden calisir.
+Bu modul vucut olcumleri ve meal read-model uzerinden analitik endpointler sunar. Yogun okumaya optimize edilmis bir read-model ve moduller arasi adaptorler uzerinden calisir.
+
+Cevre olculeri (`waist`/`neck`/`hip`/`shoulder`) icin tek source of truth `BodyMeasurement` tablosudur. "Guncel deger" = ilgili metrigin en son satiri, yoksa `user_profiles`'a onboarding'de yazilan tohum. Ayri bir silhouette tablosu YOK.
 
 ## Mimari Ozeti
 
 - `http/BodyAnalyticsController.ts` body stats, trend ve meal analytics endpointlerini expose eder.
 - `use-cases/` altinda iki ana grup vardir: body measurement odakli akislari ve meal analytics odakli akislari.
 - `ports/` katmani profile, plan target, daily tracking, insight generator ve read-model bagimliliklarini soyutlar.
-- `adapters/repository/` Prisma ile `BodyMeasurement`, `BodySilhouetteProfile` ve `MealLogReadModel` tablolarini okur/yazar.
+- `adapters/repository/` Prisma ile `BodyMeasurement` ve `MealLogReadModel` tablolarini okur/yazar.
 - `jobs/consumeOutboxEventsJob.ts` nutrition logging outbox event'lerinden analytic read-model'i besler.
 
 ## Endpointler
@@ -15,8 +17,8 @@ Bu modul vucut olcumleri, silhouette profili ve meal read-model uzerinden analit
 | Method | Path | Aciklama |
 | --- | --- | --- |
 | `GET` | `/analytics/body-stats` | Son olcumler ve ozet body stats |
-| `GET` | `/analytics/body-profile` | Silhouette profili (bir bolge duzenlenmediyse onboarding'de girilen olcuye fallback eder) |
-| `PATCH` | `/analytics/body-profile` | Silhouette profilini gunceller |
+| `GET` | `/analytics/body-profile` | Guncel silhouette gorunumu: her bolge = en son `BodyMeasurement` ?? onboarding tohumu |
+| `PATCH` | `/analytics/body-profile` | Her bolge icin `BodyMeasurement` satiri ekler + `onboarding-plan`'a yazar (plan recalc) |
 | `GET` | `/analytics/waist-height-ratio` | Bel-boy oranini hesaplar |
 | `GET` | `/analytics/goal-progress` | Goal progress ozeti |
 | `GET` | `/analytics/goal/progress` | Goal progress alias endpoint'i |
@@ -54,8 +56,8 @@ sequenceDiagram
     else GET/PATCH /analytics/body-profile
         Client->>Controller: body profile request
         Controller->>UseCase: GetBodySilhouetteProfile / UpdateBodySilhouetteProfile
-        UseCase->>Repo: read or write silhouette profile
-        UseCase->>Profile: fallback/read supporting data
+        UseCase->>Repo: read latest measurement per region (PATCH: also append rows)
+        UseCase->>Profile: read height/sex + seed (PATCH: write + plan recalc)
         UseCase-->>Controller: profile payload
         Controller-->>Client: 200
     else CRUD /body-measurements*

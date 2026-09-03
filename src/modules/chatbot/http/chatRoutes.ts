@@ -7,7 +7,6 @@ import { prisma } from '../../../shared/persistence/db';
 import { PrismaBodyMeasurementRepository } from '../../body-analytics/adapters/repository/PrismaBodyMeasurementRepository';
 import { PrismaMealLogReadModelRepository } from '../../body-analytics/adapters/repository/PrismaMealLogReadModelRepository';
 import { OnboardingPlanProfileAdapter } from '../../body-analytics/adapters/profile/OnboardingPlanProfileAdapter';
-import { PrismaBodySilhouetteProfileRepository } from '../../body-analytics/adapters/repository/PrismaBodySilhouetteProfileRepository';
 import { GetBodyStats } from '../../body-analytics/use-cases/GetBodyStats';
 import { GetMealAverages } from '../../body-analytics/use-cases/GetMealAverages';
 import { LlmTextEstimator } from '../../food-recognition/adapters/text/LlmTextEstimator';
@@ -62,11 +61,7 @@ export function chatRoutes(): Router {
     new GetUserProfile(userProfileRepository),
     new UpdateProfileMeasurements(userProfileRepository, planRepository),
   );
-  const getBodyStats = new GetBodyStats(
-    new PrismaBodyMeasurementRepository(prisma),
-    new PrismaBodySilhouetteProfileRepository(prisma),
-    profilePort,
-  );
+  const getBodyStats = new GetBodyStats(new PrismaBodyMeasurementRepository(prisma), profilePort);
   const getMealAverages = new GetMealAverages(new PrismaMealLogReadModelRepository(prisma));
   const analyticsSummaryTool = new AnalyticsSummaryTool(getBodyStats, getMealAverages);
 

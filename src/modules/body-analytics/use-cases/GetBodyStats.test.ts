@@ -17,11 +17,6 @@ const profile: AnalyticsUserProfile = {
   createdAt: new Date('2026-08-01T00:00:00.000Z'),
 };
 
-const silhouetteRepository = {
-  findByUserId: jest.fn(),
-  upsert: jest.fn(),
-};
-
 describe('GetBodyStats', () => {
   // Freeze the clock so the use-case's trend windows keep covering the
   // late-August 2026 fixtures as real time moves on.
@@ -30,12 +25,6 @@ describe('GetBodyStats', () => {
   });
   afterAll(() => {
     jest.useRealTimers();
-  });
-
-  beforeEach(() => {
-    silhouetteRepository.findByUserId.mockReset();
-    silhouetteRepository.upsert.mockReset();
-    silhouetteRepository.findByUserId.mockResolvedValue(null);
   });
 
   it('returns null fractions for body fat and waist while keeping weight goal-aware', async () => {
@@ -61,7 +50,7 @@ describe('GetBodyStats', () => {
         createdAt: new Date('2026-08-24T00:00:00.000Z'),
       },
     ]);
-    const useCase = new GetBodyStats(repository, silhouetteRepository, new FakeOnboardingPlanProfilePort(profile));
+    const useCase = new GetBodyStats(repository, new FakeOnboardingPlanProfilePort(profile));
 
     const result = await useCase.execute('user-1');
     expect(result.bodyFat.fraction).toBeNull();
@@ -69,18 +58,13 @@ describe('GetBodyStats', () => {
     expect(result.weight.trendIsGood).toBe(true);
   });
 
-  it('falls back to the silhouette waist when no waist measurement exists', async () => {
+  it('falls back to the onboarding seed waist when no waist measurement exists', async () => {
     const repository = new InMemoryBodyMeasurementRepository();
-    silhouetteRepository.findByUserId.mockResolvedValue({
-      userId: 'user-1',
-      neckCm: null,
-      shoulderCm: null,
-      waistCm: 86,
-      hipCm: null,
-      updatedAt: new Date('2026-08-24T00:00:00.000Z'),
-    });
 
-    const useCase = new GetBodyStats(repository, silhouetteRepository, new FakeOnboardingPlanProfilePort(profile));
+    const useCase = new GetBodyStats(
+      repository,
+      new FakeOnboardingPlanProfilePort({ ...profile, waistCm: 86 }),
+    );
 
     const result = await useCase.execute('user-1');
 
@@ -132,7 +116,6 @@ describe('GetBodyStats', () => {
     ]);
     const loseGoalUseCase = new GetBodyStats(
       repository,
-      silhouetteRepository,
       new FakeOnboardingPlanProfilePort({
         ...profile,
         goal: 'lose',
@@ -140,7 +123,6 @@ describe('GetBodyStats', () => {
     );
     const gainGoalUseCase = new GetBodyStats(
       repository,
-      silhouetteRepository,
       new FakeOnboardingPlanProfilePort({
         ...profile,
         goal: 'gain',

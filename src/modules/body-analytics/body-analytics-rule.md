@@ -14,34 +14,38 @@ response şekillerini DEĞİŞTİRMEYİN, sadece implemente edin.
 
 ---
 
-## Veri sahipliği — iki ayrı kavram, KARIŞTIRILMAZ
+## Veri sahipliği — `BodyMeasurement` TEK kaynak
 
-1. **`BodyMeasurement`** — kullanıcının manuel/senkron kaydettiği ölçüm GEÇMİŞİ
-   (`GET/POST/PATCH/DELETE /body-measurements`, trend chart'ı besler). Zaman
-   serisi verisi, her kayıt bir zaman noktası.
-2. **`BodySilhouetteProfile`** — vücut silüeti diyagramının GÜNCEL anlık görüntüsü
-   (`GET/PATCH /analytics/body-profile`). Zaman serisi DEĞİL, tek satır/kullanıcı,
-   sürekli üzerine yazılan bir "profil" kaydı.
+Çevre ölçüleri (`waist`/`neck`/`hip`/`shoulder`) için tek bir source of truth var:
+**`BodyMeasurement` tablosu** (`GET/POST/PATCH/DELETE /body-measurements`). Zaman
+serisi; her satır bir zaman noktası, trend chart'ını besler.
 
-Bu ikisi spec'te aynı alan adını (`waistCm`) paylaşıyor ama KAVRAMSAL OLARAK FARKLI —
-biri geçmiş, biri anlık görüntü. Birbirlerini OTOMATİK GÜNCELLEMEZLER (silüet profili
-güncellenince ölçüm geçmişine yeni bir kayıt EKLENMEZ, ve tam tersi) — bu bilinçli bir
-ayrım, senkronizasyon karmaşıklığından kaçınmak için.
+- **"Güncel değer"** = ilgili metriğin en son `BodyMeasurement` satırı; hiç ölçüm
+  yoksa `user_profiles`'a onboarding'de yazılan tohum değere düşer.
+- `body_silhouette_profiles` tablosu KALDIRILDI. `GET /analytics/body-profile`
+  artık `GetBodySilhouetteProfile` içinde "en son ölçüm ?? onboarding tohumu"
+  olarak türetilen bir GÖRÜNÜMDÜR — ayrı bir tablo değil.
+- `PATCH /analytics/body-profile` bir ölçüm olayıdır: her düzenlenen bölge için
+  `BodyMeasurement` satırı EKLENİR (`source: 'manual'`) VE değer
+  `onboarding-plan`'a itilir (plan yeniden hesaplanır). Silüet düzenlemesi ile
+  ölçüm geçmişi artık AYNI şeydir — eskiden bilinçli olarak ayrılmışlardı, bu
+  karar tersine çevrildi (senkron tek yazım yolu, kopya tablo yok).
 
-## `heightCm`/`gender` — `onboarding-plan`'dan okunur, KOPYALANMAZ
+## `heightCm`/`gender` + çevre ölçüleri — `onboarding-plan`'a yazılır
 
 - Bu modülün KENDİ tablosunda `heightCm`/`gender`/`weightKg`/`targetWeightKg`/
   `initialWeightKg` alanları YOK.
 - `use-cases/GetBodySilhouetteProfile.ts`, `onboarding-plan/GetUserProfile`'ı
-  DOĞRUDAN import edip `heightCm`/`gender`'ı oradan okur, kendi `BodySilhouetteProfile`
-  tablosundan sadece `neckCm`/`shoulderCm`/`waistCm`/`hipCm`'i okur, ikisini birleştirip
-  response oluşturur.
-- `UpdateBodySilhouetteProfile.ts`: gelen body'de `heightCm`/`gender` varsa,
-  `onboarding-plan/UpdateProfileMeasurements`'a DELEGE EDİLİR (bu, plan'ın da yeniden
-  hesaplanmasını tetikler — height BMR'ı etkiliyor). `neckCm`/`shoulderCm`/`waistCm`/
-  `hipCm` kendi tablosuna yazılır. İKİ YAZIM da aynı use-case içinde sırayla yapılır
-  (atomik transaction ZORUNLU DEĞİL — `identity`/`onboarding-plan`'daki "sıralı yazım,
-  transaction gerekmez" seviyesinde basitlik kabul edilir).
+  DOĞRUDAN import edip `heightCm`/`gender`'ı ve çevre ölçüsü tohumlarını oradan
+  okur; `BodyMeasurement`'tan her bölgenin en son değerini okur; ikisini
+  birleştirip response oluşturur.
+- `UpdateBodySilhouetteProfile.ts`: `heightCm`/`gender` VE `neckCm`/`shoulderCm`/
+  `waistCm`/`hipCm` — hepsi `onboarding-plan/UpdateProfileMeasurements`'a DELEGE
+  EDİLİR (bu, plan'ın yeniden hesaplanmasını tetikler — height BMR'ı, çevre
+  ölçüleri Navy body-fat'i etkiliyor). Ayrıca her çevre ölçüsü için bir
+  `BodyMeasurement` satırı yazılır. İKİ YAZIM da aynı use-case içinde sırayla
+  yapılır (atomik transaction ZORUNLU DEĞİL — codebase'in geri kalanındaki
+  "sıralı yazım, transaction gerekmez" seviyesinde basitlik kabul edilir).
 
 ## Outbox tüketimi — POLLING JOB, senkron tetikleme DEĞİL
 
@@ -92,8 +96,8 @@ ayrım, senkronizasyon karmaşıklığından kaçınmak için.
 
 | İhtiyaç | Kaynak | Yöntem |
 |---|---|---|
-| `heightCm`, `gender`, `goal`, `targetWeightKg`, `initialWeightKg` | `onboarding-plan` | `GetUserProfile` (doğrudan import) |
-| `heightCm`/`gender` güncelleme | `onboarding-plan` | `UpdateProfileMeasurements` (doğrudan import) |
+| `heightCm`, `gender`, `goal`, `targetWeightKg`, `initialWeightKg`, çevre ölçüsü tohumları | `onboarding-plan` | `GetUserProfile` (doğrudan import) |
+| `heightCm`/`gender`/`waistCm`/`neckCm`/`hipCm`/`shoulderCm` güncelleme (+ plan recalc) | `onboarding-plan` | `UpdateProfileMeasurements` (doğrudan import) |
 | `streakDays` (goal-progress) | `daily-tracking` | `GetTodayStatus` (doğrudan import) |
 | Öğün verisi (top-foods, breakdown, averages, correlation, weekly trend) | `nutrition-logging` | ASLA doğrudan değil — sadece outbox event'lerinden beslenen kendi `MealLogReadModel`'i |
 
@@ -130,9 +134,9 @@ ayrım, senkronizasyon karmaşıklığından kaçınmak için.
   için `goal`'e göre `trendIsGood` yönünün değiştiği (KRİTİK test).
 - `AddBodyMeasurement`/`UpdateBodyMeasurement` (source: `edited` otomatik set edildiği)/
   `DeleteBodyMeasurement`.
-- `UpdateBodySilhouetteProfile.test.ts`: `heightCm` gönderildiğinde
-  `onboarding-plan/UpdateProfileMeasurements`'ın çağrıldığının (fake ile call
-  doğrulaması) test edilmesi.
+- `UpdateBodySilhouetteProfile.test.ts`: `heightCm`/çevre ölçüsü gönderildiğinde
+  `onboarding-plan/UpdateProfileMeasurements`'ın çağrıldığı (fake ile call
+  doğrulaması) VE her çevre ölçüsü için bir `BodyMeasurement` satırı eklendiği.
 - `GetGoalProgress.test.ts`: `daily-tracking/GetTodayStatus`'un çağrıldığı, `streakDays`
   değerinin doğru taşındığı.
 

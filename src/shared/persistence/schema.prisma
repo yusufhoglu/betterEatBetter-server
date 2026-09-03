@@ -57,10 +57,12 @@ model UserProfile {
   workoutsPerWeek Int
   goal            String // 'lose' | 'maintain' | 'gain'
   weeklyPaceKg    Float
-  // Optional tape-measure circumferences (cm) collected during onboarding. When
-  // present they drive a US-Navy body-fat estimate; otherwise the plan falls
-  // back to a Deurenberg (BMI-based) estimate. See PlanCalculationService.
-  // shoulderCm is not used for body fat — it is kept for the shoulder-to-waist ratio.
+  // Current tape-measure circumferences (cm). Seeded at onboarding, then kept in
+  // lockstep with the latest body_measurements row for the same metric (see
+  // body-analytics/UpdateBodySilhouetteProfile). waist/neck/hip drive a US-Navy
+  // body-fat estimate; without them the plan falls back to a Deurenberg
+  // (BMI-based) estimate. shoulderCm is not used for body fat — it is kept for
+  // the shoulder-to-waist ratio. See PlanCalculationService.
   waistCm         Float?
   neckCm          Float?
   hipCm           Float?
@@ -166,17 +168,6 @@ model BodyMeasurement {
 
   @@index([userId, metric, date])
   @@map("body_measurements")
-}
-
-model BodySilhouetteProfile {
-  userId     String   @id
-  neckCm     Float?
-  shoulderCm Float?
-  waistCm    Float?
-  hipCm      Float?
-  updatedAt  DateTime @updatedAt
-
-  @@map("body_silhouette_profiles")
 }
 
 model MealLogReadModel {

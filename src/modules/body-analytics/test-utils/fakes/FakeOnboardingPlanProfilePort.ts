@@ -21,6 +21,10 @@ export class FakeOnboardingPlanProfilePort implements ProfilePort {
       ...this.profile,
       heightCm: changes.heightCm ?? this.profile.heightCm,
       gender: changes.gender ?? this.profile.gender,
+      waistCm: changes.waistCm ?? this.profile.waistCm ?? null,
+      neckCm: changes.neckCm ?? this.profile.neckCm ?? null,
+      hipCm: changes.hipCm ?? this.profile.hipCm ?? null,
+      shoulderCm: changes.shoulderCm ?? this.profile.shoulderCm ?? null,
     };
 
     return this.profile;

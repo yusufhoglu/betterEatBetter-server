@@ -14,7 +14,6 @@ import { UpdateProfileMeasurements } from '../../onboarding-plan/use-cases/Updat
 import { TemplateInsightGenerator } from '../adapters/insights/TemplateInsightGenerator';
 import { OnboardingPlanProfileAdapter } from '../adapters/profile/OnboardingPlanProfileAdapter';
 import { PrismaBodyMeasurementRepository } from '../adapters/repository/PrismaBodyMeasurementRepository';
-import { PrismaBodySilhouetteProfileRepository } from '../adapters/repository/PrismaBodySilhouetteProfileRepository';
 import { PrismaMealLogReadModelRepository } from '../adapters/repository/PrismaMealLogReadModelRepository';
 import { AddBodyMeasurement } from '../use-cases/AddBodyMeasurement';
 import { DeleteBodyMeasurement } from '../use-cases/DeleteBodyMeasurement';
@@ -36,7 +35,6 @@ import { BodyAnalyticsController } from './BodyAnalyticsController';
 
 function buildController(): BodyAnalyticsController {
   const bodyMeasurementRepository = new PrismaBodyMeasurementRepository(prisma);
-  const silhouetteProfileRepository = new PrismaBodySilhouetteProfileRepository(prisma);
   const mealLogReadModelRepository = new PrismaMealLogReadModelRepository(prisma);
   const userProfileRepository = new PrismaUserProfileRepository(prisma);
   const planRepository = new PrismaPlanRepository(prisma);
@@ -56,15 +54,15 @@ function buildController(): BodyAnalyticsController {
   const dailyTrackingPort = new DailyTrackingAdapter(getTodayStatus);
 
   return new BodyAnalyticsController(
-    new GetBodyStats(bodyMeasurementRepository, silhouetteProfileRepository, profilePort),
+    new GetBodyStats(bodyMeasurementRepository, profilePort),
     new ListBodyMeasurements(bodyMeasurementRepository),
     new AddBodyMeasurement(bodyMeasurementRepository),
     new UpdateBodyMeasurement(bodyMeasurementRepository),
     new DeleteBodyMeasurement(bodyMeasurementRepository),
     new GetMeasurementTrend(bodyMeasurementRepository, profilePort),
-    new GetBodySilhouetteProfile(silhouetteProfileRepository, profilePort),
-    new UpdateBodySilhouetteProfile(silhouetteProfileRepository, profilePort),
-    new GetWaistHeightRatio(silhouetteProfileRepository, profilePort),
+    new GetBodySilhouetteProfile(bodyMeasurementRepository, profilePort),
+    new UpdateBodySilhouetteProfile(bodyMeasurementRepository, profilePort),
+    new GetWaistHeightRatio(bodyMeasurementRepository, profilePort),
     new GetGoalProgress(bodyMeasurementRepository, profilePort, dailyTrackingPort),
     new GetMealAverages(mealLogReadModelRepository),
     new GetWeeklyMealTrend(mealLogReadModelRepository, planTargetPort),

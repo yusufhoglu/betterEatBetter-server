@@ -42,7 +42,8 @@ sequenceDiagram
 ## Vucut Kompozisyonu (body-fat -> makro)
 
 - `PlanCalculationService.computeBodyComposition` tek bir `bodyFatPct` uretir: `waistCm` + `neckCm` (kadinlarda ayrica `hipCm`) geldiyse **US-Navy**, gelmediyse **Deurenberg** (BMI tabanli) tahmini. Sonuc `[5, 60]` bandina clamp'lenir.
-- `waistCm` / `neckCm` / `hipCm` / `shoulderCm` opsiyoneldir ve `user_profiles` tablosunda nullable tutulur (onboarding adimi atlanabilir). Migration: `20260902120000_add_body_measurements`. `shoulderCm` yag hesabinda kullanilmaz; sadece `shoulderToWaistRatio` icin saklanir (`BuildPlanResponse` icinde `shoulderCm / waistCm`, ikisi de varsa).
+- `waistCm` / `neckCm` / `hipCm` / `shoulderCm` opsiyoneldir ve `user_profiles` tablosunda nullable tutulur (onboarding adimi atlanabilir). `shoulderCm` yag hesabinda kullanilmaz; sadece `shoulderToWaistRatio` icin saklanir (`BuildPlanResponse` icinde `shoulderCm / waistCm`, ikisi de varsa).
+- Bu alanlar onboarding'de tohumlanir, sonrasinda `UpdateProfileMeasurements` ile guncellenebilir (her guncelleme plani yeniden hesaplar). `body-analytics` bu use-case'i cagirir; ayrica cevre olculeri icin source of truth `body_measurements` tablosudur ve `user_profiles` degerleri onun en son satiriyla senkron tutulur. Bkz. `body-analytics/UpdateBodySilhouetteProfile`.
 - `computePlan` yag orani ile: protein `2.0 g/kg yagsiz kutle` (`1.6-2.2 g/kg vucut agirligi` araligina clamp), yag `max(kcal*0.25/9, 0.8 g/kg)` tabani, karbonhidrat kalanı. BMR yalnizca Navy olcumu varsa Katch-McArdle'a geçer.
 - `bodyFatPct` ve `leanBodyMassKg` `Plan` tablosunda saklanmaz; `BuildPlanResponse` her cevapta profilden yeniden hesaplar (projeksiyon/healthScore gibi).
 

@@ -1179,7 +1179,6 @@ async function resetDatabase(prisma: PrismaClient): Promise<void> {
       "notification_preferences",
       "unit_preferences",
       "meal_log_read_models",
-      "body_silhouette_profiles",
       "body_measurements",
       "outbox_events",
       "meal_items",

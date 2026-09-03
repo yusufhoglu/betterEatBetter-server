@@ -8,12 +8,6 @@ import { AnalyticsSummaryTool } from './AnalyticsSummaryTool';
 function buildTool() {
   const measurementRepository = new InMemoryBodyMeasurementRepository();
   const mealLogReadModelRepository = new InMemoryMealLogReadModel();
-  const silhouetteRepository = {
-    findByUserId: async () => null,
-    upsert: async () => {
-      throw new Error('not implemented');
-    },
-  };
   const profilePort = new FakeOnboardingPlanProfilePort({
     userId: 'user-1',
     weightKg: 80,
@@ -29,7 +23,7 @@ function buildTool() {
   });
 
   const tool = new AnalyticsSummaryTool(
-    new GetBodyStats(measurementRepository, silhouetteRepository, profilePort),
+    new GetBodyStats(measurementRepository, profilePort),
     new GetMealAverages(mealLogReadModelRepository),
   );
 

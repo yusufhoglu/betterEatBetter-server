@@ -8,7 +8,7 @@ import type {
 } from '../domain/bodyAnalyticsTypes';
 
 export function assertBodyMeasurementMetric(value: string): asserts value is BodyMeasurementMetric {
-  if (!['weight', 'bodyFat', 'waist', 'neck', 'hip', 'muscleMass'].includes(value)) {
+  if (!['weight', 'bodyFat', 'waist', 'neck', 'hip', 'shoulder', 'muscleMass'].includes(value)) {
     throw new ValidationError('INVALID_METRIC', 'Unsupported body measurement metric');
   }
 }
@@ -35,6 +35,7 @@ export function unitForMetric(metric: BodyMeasurementMetric): string {
     case 'waist':
     case 'neck':
     case 'hip':
+    case 'shoulder':
       return 'cm';
   }
 }

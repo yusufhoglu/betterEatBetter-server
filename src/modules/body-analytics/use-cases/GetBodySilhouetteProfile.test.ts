@@ -1,28 +1,8 @@
 import { NotFoundError } from '../../../shared/errors/NotFoundError';
-import type { AnalyticsUserProfile, BodySilhouetteProfileRecord } from '../domain/bodyAnalyticsTypes';
-import type { BodySilhouetteProfileRepositoryPort, UpdateBodySilhouetteProfileInput } from '../ports/BodySilhouetteProfileRepositoryPort';
+import type { AnalyticsUserProfile, BodyMeasurement } from '../domain/bodyAnalyticsTypes';
 import { FakeOnboardingPlanProfilePort } from '../test-utils/fakes/FakeOnboardingPlanProfilePort';
+import { InMemoryBodyMeasurementRepository } from '../test-utils/fakes/InMemoryBodyMeasurementRepository';
 import { GetBodySilhouetteProfile } from './GetBodySilhouetteProfile';
-
-class FakeBodySilhouetteProfileRepository implements BodySilhouetteProfileRepositoryPort {
-  constructor(private profile: BodySilhouetteProfileRecord | null = null) {}
-
-  async findByUserId(): Promise<BodySilhouetteProfileRecord | null> {
-    return this.profile;
-  }
-
-  async upsert(input: UpdateBodySilhouetteProfileInput): Promise<BodySilhouetteProfileRecord> {
-    this.profile = {
-      userId: input.userId,
-      neckCm: input.neckCm ?? null,
-      shoulderCm: input.shoulderCm ?? null,
-      waistCm: input.waistCm ?? null,
-      hipCm: input.hipCm ?? null,
-      updatedAt: new Date('2026-08-24T00:00:00.000Z'),
-    };
-    return this.profile;
-  }
-}
 
 function baseProfile(overrides: Partial<AnalyticsUserProfile> = {}): AnalyticsUserProfile {
   return {
@@ -41,19 +21,30 @@ function baseProfile(overrides: Partial<AnalyticsUserProfile> = {}): AnalyticsUs
   };
 }
 
+function measurement(overrides: Partial<BodyMeasurement> & Pick<BodyMeasurement, 'metric' | 'value' | 'date'>): BodyMeasurement {
+  return {
+    id: `${overrides.metric}-${overrides.date.toISOString()}`,
+    userId: 'user-1',
+    unit: 'cm',
+    source: 'manual',
+    createdAt: overrides.date,
+    ...overrides,
+  };
+}
+
 describe('GetBodySilhouetteProfile', () => {
   it('throws NOT_ONBOARDED when there is no onboarding profile', async () => {
     const useCase = new GetBodySilhouetteProfile(
-      new FakeBodySilhouetteProfileRepository(),
+      new InMemoryBodyMeasurementRepository(),
       new FakeOnboardingPlanProfilePort(null),
     );
 
     await expect(useCase.execute('user-1')).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it('falls back to the onboarding tape measurements when the silhouette profile is empty', async () => {
+  it('falls back to the onboarding seed when no measurement has been logged', async () => {
     const useCase = new GetBodySilhouetteProfile(
-      new FakeBodySilhouetteProfileRepository(null),
+      new InMemoryBodyMeasurementRepository(),
       new FakeOnboardingPlanProfilePort(
         baseProfile({ waistCm: 88, neckCm: 40, shoulderCm: 118, hipCm: null }),
       ),
@@ -69,21 +60,17 @@ describe('GetBodySilhouetteProfile', () => {
     });
   });
 
-  it('prefers a silhouette-profile value over the onboarding one, per region', async () => {
+  it('prefers the latest measurement over the onboarding seed, per region', async () => {
     const useCase = new GetBodySilhouetteProfile(
-      new FakeBodySilhouetteProfileRepository({
-        userId: 'user-1',
-        neckCm: null,
-        shoulderCm: null,
-        waistCm: 92, // edited on the Analytics tab
-        hipCm: null,
-        updatedAt: new Date('2026-08-24T00:00:00.000Z'),
-      }),
+      new InMemoryBodyMeasurementRepository([
+        measurement({ metric: 'waist', value: 90, date: new Date('2026-09-01T00:00:00.000Z') }),
+        measurement({ metric: 'waist', value: 92, date: new Date('2026-09-10T00:00:00.000Z') }),
+      ]),
       new FakeOnboardingPlanProfilePort(baseProfile({ waistCm: 88, neckCm: 40 })),
     );
 
     const result = await useCase.execute('user-1');
-    expect(result.waistCm).toBe(92); // silhouette wins
-    expect(result.neckCm).toBe(40); // onboarding fallback
+    expect(result.waistCm).toBe(92); // most recent measurement wins
+    expect(result.neckCm).toBe(40); // onboarding seed fallback
   });
 });

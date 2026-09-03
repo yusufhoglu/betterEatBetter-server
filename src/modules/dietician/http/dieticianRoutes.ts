@@ -5,7 +5,6 @@ import { env } from '../../../shared/config/env';
 import { createLlmClient } from '../../../shared/llm/llmClientFactory';
 import { prisma } from '../../../shared/persistence/db';
 import { PrismaBodyMeasurementRepository } from '../../body-analytics/adapters/repository/PrismaBodyMeasurementRepository';
-import { PrismaBodySilhouetteProfileRepository } from '../../body-analytics/adapters/repository/PrismaBodySilhouetteProfileRepository';
 import { PrismaMealLogReadModelRepository } from '../../body-analytics/adapters/repository/PrismaMealLogReadModelRepository';
 import { OnboardingPlanProfileAdapter } from '../../body-analytics/adapters/profile/OnboardingPlanProfileAdapter';
 import { GetBodyStats } from '../../body-analytics/use-cases/GetBodyStats';
@@ -62,11 +61,7 @@ export function dieticianRoutes(): Router {
     getUserProfile,
     new UpdateProfileMeasurements(userProfileRepository, planRepository),
   );
-  const getBodyStats = new GetBodyStats(
-    new PrismaBodyMeasurementRepository(prisma),
-    new PrismaBodySilhouetteProfileRepository(prisma),
-    profilePort,
-  );
+  const getBodyStats = new GetBodyStats(new PrismaBodyMeasurementRepository(prisma), profilePort);
   const getMealAverages = new GetMealAverages(new PrismaMealLogReadModelRepository(prisma));
 
   const mealEventPublisher = new MealLoggedEventPublisher();

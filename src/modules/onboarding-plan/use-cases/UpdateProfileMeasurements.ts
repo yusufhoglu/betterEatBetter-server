@@ -7,6 +7,13 @@ export interface UpdateProfileMeasurementsChanges {
   heightCm?: number;
   age?: number;
   gender?: Gender;
+  // Tape-measure circumferences (cm). waist/neck/hip drive the Navy body-fat
+  // estimate; shoulder is stored only for the shoulder-to-waist ratio. Any of
+  // these changing recalculates the plan.
+  waistCm?: number | null;
+  neckCm?: number | null;
+  hipCm?: number | null;
+  shoulderCm?: number | null;
 }
 
 export class UpdateProfileMeasurements {
@@ -26,6 +33,10 @@ export class UpdateProfileMeasurements {
       heightCm: changes.heightCm,
       age: changes.age,
       gender: changes.gender,
+      waistCm: changes.waistCm,
+      neckCm: changes.neckCm,
+      hipCm: changes.hipCm,
+      shoulderCm: changes.shoulderCm,
     });
 
     const recalculatedPlan = computePlan({

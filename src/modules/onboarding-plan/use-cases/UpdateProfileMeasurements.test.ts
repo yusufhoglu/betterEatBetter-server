@@ -72,4 +72,21 @@ describe('UpdateProfileMeasurements', () => {
       fatG: 64,
     });
   });
+
+  test('persists circumferences and recalculates the plan off the Navy body-fat estimate', async () => {
+    const { completeOnboarding, updateProfileMeasurements, userProfileRepository, planRepository } =
+      buildUpdateProfileMeasurements();
+
+    await completeOnboarding.execute(buildInput());
+    const planBefore = await planRepository.findByUserId('user-1');
+
+    await updateProfileMeasurements.execute('user-1', { waistCm: 92, neckCm: 40, shoulderCm: 124 });
+
+    const storedProfile = await userProfileRepository.findByUserId('user-1');
+    const planAfter = await planRepository.findByUserId('user-1');
+
+    expect(storedProfile).toMatchObject({ waistCm: 92, neckCm: 40, shoulderCm: 124 });
+    // waist + neck present -> Navy estimate kicks in -> macros shift.
+    expect(planAfter).not.toEqual(planBefore);
+  });
 });

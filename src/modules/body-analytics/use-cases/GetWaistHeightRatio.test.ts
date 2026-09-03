@@ -1,46 +1,58 @@
-import type { BodySilhouetteProfileRecord } from '../domain/bodyAnalyticsTypes';
-import type { BodySilhouetteProfileRepositoryPort } from '../ports/BodySilhouetteProfileRepositoryPort';
+import type { AnalyticsUserProfile } from '../domain/bodyAnalyticsTypes';
 import { FakeOnboardingPlanProfilePort } from '../test-utils/fakes/FakeOnboardingPlanProfilePort';
+import { InMemoryBodyMeasurementRepository } from '../test-utils/fakes/InMemoryBodyMeasurementRepository';
 import { GetWaistHeightRatio } from './GetWaistHeightRatio';
 
-class FakeRepository implements BodySilhouetteProfileRepositoryPort {
-  constructor(private readonly profile: BodySilhouetteProfileRecord | null) {}
-
-  async findByUserId(): Promise<BodySilhouetteProfileRecord | null> {
-    return this.profile;
-  }
-
-  async upsert(): Promise<BodySilhouetteProfileRecord> {
-    throw new Error('not used');
-  }
+function buildProfilePort(overrides: Partial<AnalyticsUserProfile> = {}) {
+  return new FakeOnboardingPlanProfilePort({
+    userId: 'user-1',
+    weightKg: 80,
+    targetWeightKg: 72,
+    initialWeightKg: 80,
+    heightCm: 180,
+    age: 30,
+    gender: 'male',
+    workoutsPerWeek: 3,
+    goal: 'lose',
+    weeklyPaceKg: 0.5,
+    createdAt: new Date('2026-08-01T00:00:00.000Z'),
+    ...overrides,
+  });
 }
 
 describe('GetWaistHeightRatio', () => {
-  it('computes ratio and classification', async () => {
+  it('computes ratio and classification from the latest waist measurement', async () => {
     const useCase = new GetWaistHeightRatio(
-      new FakeRepository({
-        userId: 'user-1',
-        neckCm: null,
-        shoulderCm: null,
-        waistCm: 86,
-        hipCm: null,
-        updatedAt: new Date('2026-08-24T00:00:00.000Z'),
-      }),
-      new FakeOnboardingPlanProfilePort({
-        userId: 'user-1',
-        weightKg: 80,
-        targetWeightKg: 72,
-        initialWeightKg: 80,
-        heightCm: 180,
-        age: 30,
-        gender: 'male',
-        workoutsPerWeek: 3,
-        goal: 'lose',
-        weeklyPaceKg: 0.5,
-        createdAt: new Date('2026-08-01T00:00:00.000Z'),
-      }),
+      new InMemoryBodyMeasurementRepository([
+        {
+          id: 'waist-1',
+          userId: 'user-1',
+          metric: 'waist',
+          value: 86,
+          unit: 'cm',
+          date: new Date('2026-09-01T00:00:00.000Z'),
+          source: 'manual',
+          createdAt: new Date('2026-09-01T00:00:00.000Z'),
+        },
+      ]),
+      buildProfilePort(),
     );
 
     await expect(useCase.execute('user-1')).resolves.toEqual({ ratio: 0.48, classification: 'low' });
+  });
+
+  it('falls back to the onboarding seed when no waist measurement exists', async () => {
+    const useCase = new GetWaistHeightRatio(
+      new InMemoryBodyMeasurementRepository(),
+      buildProfilePort({ waistCm: 86 }),
+    );
+
+    await expect(useCase.execute('user-1')).resolves.toEqual({ ratio: 0.48, classification: 'low' });
+  });
+
+  it('returns nulls when nothing is known', async () => {
+    const useCase = new GetWaistHeightRatio(new InMemoryBodyMeasurementRepository(), buildProfilePort());
+
+    await expect(useCase.execute('user-1')).resolves.toEqual({ ratio: null, classification: null });
   });
 });

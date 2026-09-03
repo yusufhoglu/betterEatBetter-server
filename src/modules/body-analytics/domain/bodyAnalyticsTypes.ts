@@ -1,6 +1,6 @@
 import type { Goal, Gender } from '../../../shared/domain/PlanCalculationService';
 
-export const bodyMeasurementMetrics = ['weight', 'bodyFat', 'waist', 'neck', 'hip', 'muscleMass'] as const;
+export const bodyMeasurementMetrics = ['weight', 'bodyFat', 'waist', 'neck', 'hip', 'shoulder', 'muscleMass'] as const;
 export type BodyMeasurementMetric = (typeof bodyMeasurementMetrics)[number];
 
 export const trendMetrics = ['weight', 'bodyFat', 'waist', 'muscleMass'] as const;
@@ -28,15 +28,6 @@ export interface BodyMeasurement {
   createdAt: Date;
 }
 
-export interface BodySilhouetteProfileRecord {
-  userId: string;
-  neckCm: number | null;
-  shoulderCm: number | null;
-  waistCm: number | null;
-  hipCm: number | null;
-  updatedAt: Date;
-}
-
 export interface BodyProfileView {
   heightCm: number;
   neckCm: number | null;
@@ -57,8 +48,9 @@ export interface AnalyticsUserProfile {
   workoutsPerWeek: number;
   goal: Goal;
   weeklyPaceKg: number;
-  // Tape measurements captured at onboarding — a fallback for the silhouette
-  // profile before the user edits any region on the Analytics tab.
+  // Circumferences the plan calculation reads. Seeded at onboarding and then kept
+  // in lockstep with the latest body_measurements row for the same metric — the
+  // fallback used when no measurement has been logged for a region yet.
   waistCm?: number | null;
   neckCm?: number | null;
   hipCm?: number | null;

@@ -1,49 +1,64 @@
-import type { BodySilhouetteProfileRecord } from '../domain/bodyAnalyticsTypes';
-import type { BodySilhouetteProfileRepositoryPort, UpdateBodySilhouetteProfileInput } from '../ports/BodySilhouetteProfileRepositoryPort';
+import { InMemoryBodyMeasurementRepository } from '../test-utils/fakes/InMemoryBodyMeasurementRepository';
 import { FakeOnboardingPlanProfilePort } from '../test-utils/fakes/FakeOnboardingPlanProfilePort';
 import { UpdateBodySilhouetteProfile } from './UpdateBodySilhouetteProfile';
 
-class FakeBodySilhouetteProfileRepository implements BodySilhouetteProfileRepositoryPort {
-  constructor(private profile: BodySilhouetteProfileRecord | null = null) {}
-
-  async findByUserId(): Promise<BodySilhouetteProfileRecord | null> {
-    return this.profile;
-  }
-
-  async upsert(input: UpdateBodySilhouetteProfileInput): Promise<BodySilhouetteProfileRecord> {
-    this.profile = {
-      userId: input.userId,
-      neckCm: input.neckCm ?? null,
-      shoulderCm: input.shoulderCm ?? null,
-      waistCm: input.waistCm ?? null,
-      hipCm: input.hipCm ?? null,
-      updatedAt: new Date('2026-08-24T00:00:00.000Z'),
-    };
-    return this.profile;
-  }
+function buildProfilePort() {
+  return new FakeOnboardingPlanProfilePort({
+    userId: 'user-1',
+    weightKg: 80,
+    targetWeightKg: 72,
+    initialWeightKg: 80,
+    heightCm: 180,
+    age: 30,
+    gender: 'male',
+    workoutsPerWeek: 3,
+    goal: 'lose',
+    weeklyPaceKg: 0.5,
+    createdAt: new Date('2026-08-01T00:00:00.000Z'),
+  });
 }
 
 describe('UpdateBodySilhouetteProfile', () => {
-  it('delegates height updates to onboarding-plan', async () => {
-    const profilePort = new FakeOnboardingPlanProfilePort({
-      userId: 'user-1',
-      weightKg: 80,
-      targetWeightKg: 72,
-      initialWeightKg: 80,
-      heightCm: 180,
-      age: 30,
-      gender: 'male',
-      workoutsPerWeek: 3,
-      goal: 'lose',
-      weeklyPaceKg: 0.5,
-      createdAt: new Date('2026-08-01T00:00:00.000Z'),
-    });
-    const repository = new FakeBodySilhouetteProfileRepository();
-    const useCase = new UpdateBodySilhouetteProfile(repository, profilePort);
+  it('pushes height and circumferences to onboarding-plan and appends measurement rows', async () => {
+    const profilePort = buildProfilePort();
+    const measurementRepository = new InMemoryBodyMeasurementRepository();
+    const useCase = new UpdateBodySilhouetteProfile(measurementRepository, profilePort);
 
-    const result = await useCase.execute('user-1', { heightCm: 182, waistCm: 86 });
-    expect(profilePort.updateCalls).toEqual([{ userId: 'user-1', changes: { heightCm: 182, gender: undefined } }]);
+    const result = await useCase.execute('user-1', { heightCm: 182, waistCm: 86, neckCm: 39 });
+
+    expect(profilePort.updateCalls).toEqual([
+      {
+        userId: 'user-1',
+        changes: {
+          heightCm: 182,
+          gender: undefined,
+          waistCm: 86,
+          neckCm: 39,
+          shoulderCm: undefined,
+          hipCm: undefined,
+        },
+      },
+    ]);
+
+    const waistHistory = await measurementRepository.list({ userId: 'user-1', metric: 'waist' });
+    const neckHistory = await measurementRepository.list({ userId: 'user-1', metric: 'neck' });
+    expect(waistHistory).toHaveLength(1);
+    expect(waistHistory[0]).toMatchObject({ metric: 'waist', value: 86, unit: 'cm', source: 'manual' });
+    expect(neckHistory[0]).toMatchObject({ metric: 'neck', value: 39, unit: 'cm', source: 'manual' });
+
     expect(result.heightCm).toBe(182);
     expect(result.waistCm).toBe(86);
+    expect(result.neckCm).toBe(39);
+  });
+
+  it('does not touch onboarding-plan or the log when nothing actionable is sent', async () => {
+    const profilePort = buildProfilePort();
+    const measurementRepository = new InMemoryBodyMeasurementRepository();
+    const useCase = new UpdateBodySilhouetteProfile(measurementRepository, profilePort);
+
+    await useCase.execute('user-1', {});
+
+    expect(profilePort.updateCalls).toEqual([]);
+    expect(await measurementRepository.list({ userId: 'user-1' })).toEqual([]);
   });
 });

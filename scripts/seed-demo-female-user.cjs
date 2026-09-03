@@ -399,7 +399,10 @@ function generateMeasurements(dayTotals) {
   return {
     measurements,
     currentWeightKg: latestWeight,
-    silhouetteProfile: {
+    // Current circumferences seeded onto the user profile — the plan-calculation
+    // input and the fallback for regions with no measurement yet. Kept aligned
+    // with the latest rows in `measurements`.
+    circumferences: {
       neckCm: latestNeck,
       shoulderCm: 102,
       waistCm: latestWaist,
@@ -423,7 +426,7 @@ function metric(date, metricName, value, unit) {
 async function seed() {
   const passwordHash = await argon2.hash(DEMO_PASSWORD, { type: argon2.argon2id });
   const { mealItems, readModels, dayTotals } = generateDailyMeals();
-  const { measurements, currentWeightKg, silhouetteProfile } = generateMeasurements(dayTotals);
+  const { measurements, currentWeightKg, circumferences } = generateMeasurements(dayTotals);
 
   const existingUser = await prisma.user.findFirst({
     where: {
@@ -443,7 +446,6 @@ async function seed() {
       prisma.subscription.deleteMany({ where: { userId } }),
       prisma.notificationPreference.deleteMany({ where: { userId } }),
       prisma.unitPreference.deleteMany({ where: { userId } }),
-      prisma.bodySilhouetteProfile.deleteMany({ where: { userId } }),
       prisma.bodyMeasurement.deleteMany({ where: { userId } }),
       prisma.mealLogReadModel.deleteMany({ where: { userId } }),
       prisma.mealItem.deleteMany({ where: { userId } }),
@@ -502,6 +504,7 @@ async function seed() {
         workoutsPerWeek: PROFILE_BASE.workoutsPerWeek,
         goal: PROFILE_BASE.goal,
         weeklyPaceKg: PROFILE_BASE.weeklyPaceKg,
+        ...circumferences,
         createdAt: utcDate('2025-08-20'),
       },
     });
@@ -548,13 +551,6 @@ async function seed() {
         status: 'active',
         expiresAt: new Date('2027-08-24T23:59:59.999Z'),
         createdAt: utcDate('2026-02-14'),
-      },
-    });
-
-    await tx.bodySilhouetteProfile.create({
-      data: {
-        userId: user.id,
-        ...silhouetteProfile,
       },
     });
 
