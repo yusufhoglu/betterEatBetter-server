@@ -56,6 +56,16 @@ function secondsUntil(target: Date, now: Date): number {
 }
 
 /**
+ * TTL for a day's counter: time from `now` to just after the next UTC midnight,
+ * as a RELATIVE duration. Must not be an absolute PEXPIREAT timestamp — with an
+ * injected (e.g. backdated) `now` that timestamp can already be in the past,
+ * which makes Redis drop the key immediately and the counter never accumulates.
+ */
+function counterTtlSeconds(reset: Date, now: Date): number {
+  return secondsUntil(reset, now) + 60;
+}
+
+/**
  * Increments the caller's usage for today and throws `RateLimitError`
  * (`FREE_TIER_DAILY_LIMIT`) once it would exceed `limit`. A rejected call does
  * not consume the quota (the increment is rolled back).
@@ -76,8 +86,9 @@ export async function consumeDailyQuota(
   try {
     count = await cacheRedisClient.incr(rk);
     // Refresh the expiry on every hit — cheap, and defends against a key that
-    // somehow lost its TTL from living forever.
-    await cacheRedisClient.pexpireat(rk, reset.getTime() + 60_000);
+    // somehow lost its TTL from living forever. Relative TTL (not PEXPIREAT):
+    // see counterTtlSeconds.
+    await cacheRedisClient.expire(rk, counterTtlSeconds(reset, now));
   } catch (err) {
     logger.warn({ err, key }, 'daily quota check failed — allowing request (fail-open)');
     return;
