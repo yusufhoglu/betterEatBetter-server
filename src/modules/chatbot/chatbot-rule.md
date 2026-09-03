@@ -126,9 +126,16 @@ OLMAZ, hiçbir state tutmaz.
 
 ## Rate limiting
 
-- `shared/rateLimiting/checkRateLimit('chat:${userId}', limit, windowSeconds)` —
-  LLM çağrısı maliyetli olduğu için sınırlı. Öneri: 20 mesaj/dakika (env'den
-  ayarlanabilir).
+- `rateLimiting/chatRateLimiter.ts` middleware, `POST /:conversationId/messages`
+  üzerinde `premiumContext`'ten SONRA çalışır. Üç kontrol:
+  1. `chat:user:${userId}` burst limiti (`checkRateLimit`, env `CHAT_RATE_LIMIT_PER_USER`,
+     20/dk).
+  2. `chat:global:${tier}` sistem tavanı (free/premium ayrı bucket).
+  3. **Free-tier günlük kota** (`consumeDailyQuota('chat:${userId}',
+     env.FREE_DAILY_CHAT_LIMIT)`) — SADECE `req.isPremium !== true` ise. UTC gününde
+     7 mesaj (env'den). Aşılınca `FREE_TIER_DAILY_LIMIT` kodu → mobil upsell.
+- `premiumContextMiddleware` + `PremiumStatusCache` artık `modules/subscription/
+  entitlement/` altında (food-recognition de kullanıyor) — chatbot sadece import eder.
 
 ## Diğer kurallar (shared/'den miras)
 
