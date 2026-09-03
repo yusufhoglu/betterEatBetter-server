@@ -9,6 +9,7 @@ import { nutritionLoggingRoutes } from '../modules/nutrition-logging/http/nutrit
 import { dailyTrackingRoutes } from '../modules/daily-tracking/http/dailyTrackingRoutes';
 import { bodyAnalyticsRoutes, bodyMeasurementRoutes } from '../modules/body-analytics/http/bodyAnalyticsRoutes';
 import { chatRoutes } from '../modules/chatbot/http/chatRoutes';
+import { dieticianRoutes } from '../modules/dietician/http/dieticianRoutes';
 import { meRoutes } from '../modules/me/http/meRoutes';
 import { notificationsRoutes } from '../modules/notifications/http/notificationsRoutes';
 import { subscriptionRoutes } from '../modules/subscription/http/subscriptionRoutes';
@@ -28,6 +29,7 @@ export function createRouter(): Router {
   router.use('/analytics', bodyAnalyticsRoutes());
   router.use('/body-measurements', bodyMeasurementRoutes());
   router.use('/chat', chatRoutes());
+  router.use('/dietician', dieticianRoutes());
   router.use('/notifications', notificationsRoutes());
   router.use('/subscription', subscriptionRoutes());
   router.use('/social', socialRoutes());
