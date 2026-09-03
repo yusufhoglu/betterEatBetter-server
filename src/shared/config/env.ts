@@ -64,6 +64,16 @@ const envSchema = z.object({
   // OpenAI SDK internal retry budget (honours Retry-After on 429/5xx).
   OPENAI_MAX_RETRIES: z.coerce.number().int().nonnegative().default(3),
 
+  // Chat message rate limits (sliding window, 60s). The global ceiling is split
+  // into separate free / premium buckets so free load never starves premium.
+  CHAT_RATE_LIMIT_PER_USER: z.coerce.number().int().positive().default(20),
+  CHAT_RATE_LIMIT_GLOBAL_FREE: z.coerce.number().int().positive().default(400),
+  CHAT_RATE_LIMIT_GLOBAL_PREMIUM: z.coerce.number().int().positive().default(2000),
+
+  // How long a resolved premium/free entitlement is cached (per user) before
+  // re-checking the subscription store.
+  ENTITLEMENT_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
+
   // subscription module — Google Play Developer API + Real-time Developer Notifications
   GOOGLE_PLAY_PACKAGE_NAME: z.string().min(1),
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().min(1),

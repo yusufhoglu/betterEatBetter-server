@@ -121,7 +121,7 @@ export class ChatController {
         );
       }
 
-      await runWithContext({ traceId: conversationId, userId, messageId }, async () => {
+      await runWithContext({ traceId: conversationId, userId, messageId, isPremium: req.isPremium === true }, async () => {
         const iterator = this.sendMessage
           .execute({ userId, conversationId, content })
           [Symbol.asyncIterator]();

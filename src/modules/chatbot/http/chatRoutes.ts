@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../../shared/auth/authMiddleware';
+import { cacheRedisClient } from '../../../shared/cache/redisCacheClient';
 import { env } from '../../../shared/config/env';
 import { createLlmClient } from '../../../shared/llm/llmClientFactory';
 import { prisma } from '../../../shared/persistence/db';
@@ -23,7 +24,11 @@ import { PrismaUserProfileRepository } from '../../onboarding-plan/adapters/repo
 import { PrismaPlanRepository } from '../../onboarding-plan/adapters/repository/PrismaPlanRepository';
 import { GetUserProfile } from '../../onboarding-plan/use-cases/GetUserProfile';
 import { UpdateProfileMeasurements } from '../../onboarding-plan/use-cases/UpdateProfileMeasurements';
+import { PrismaSubscriptionRepository } from '../../subscription/adapters/repository/PrismaSubscriptionRepository';
+import { GetSubscriptionEntitlement } from '../../subscription/use-cases/GetSubscriptionEntitlement';
 import { SharedLlmChatAdapter } from '../adapters/llm/SharedLlmChatAdapter';
+import { PremiumStatusCache } from '../entitlement/PremiumStatusCache';
+import { premiumContextMiddleware } from '../entitlement/premiumContextMiddleware';
 import { PrismaConversationRepository } from '../adapters/repository/PrismaConversationRepository';
 import { DEFAULT_MAX_CONTEXT_MESSAGES } from '../context/trimConversationHistory';
 import { ChatController } from './ChatController';
@@ -90,7 +95,21 @@ export function chatRoutes(): Router {
     confirmMealProposal,
   );
 
-  router.post('/:conversationId/messages', authMiddleware, chatRateLimiter, controller.handleSendMessage);
+  const premiumContext = premiumContextMiddleware(
+    new PremiumStatusCache(
+      new GetSubscriptionEntitlement(new PrismaSubscriptionRepository(prisma)),
+      cacheRedisClient,
+      env.ENTITLEMENT_CACHE_TTL_SECONDS,
+    ),
+  );
+
+  router.post(
+    '/:conversationId/messages',
+    authMiddleware,
+    premiumContext,
+    chatRateLimiter,
+    controller.handleSendMessage,
+  );
   router.get('/:conversationId', authMiddleware, controller.handleGetConversationHistory);
   router.post('/:conversationId/proposals/photo', authMiddleware, controller.handleSeedPhotoProposal);
   router.post('/:conversationId/proposals/confirm', authMiddleware, controller.handleConfirmMealProposal);
