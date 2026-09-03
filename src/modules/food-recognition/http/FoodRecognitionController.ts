@@ -1,9 +1,11 @@
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
+import { env } from '../../../shared/config/env';
 import { ValidationError } from '../../../shared/errors/ValidationError';
 import { createModuleLogger } from '../../../shared/observability/logger';
 import { runWithContext } from '../../../shared/observability/tracer';
 import { TRACE_ID_HEADER } from '../../../shared/observability/tracingMiddleware';
+import { consumeDailyQuota, refundDailyQuota } from '../../../shared/rateLimiting/dailyQuota';
 import { checkRateLimit } from '../../../shared/rateLimiting/rateLimiter';
 import type { RecognizeFromPhoto } from '../use-cases/RecognizeFromPhoto';
 import type { RecognizeFromBarcode } from '../use-cases/RecognizeFromBarcode';
@@ -53,13 +55,25 @@ export class FoodRecognitionController {
         logger.info({ mealPhotoId, userId }, 'photo recognition request received');
         await checkRateLimit(`photo:${userId}`, 5, 60);
 
-        const result = await this.recognizeFromPhoto.execute({
-          mealPhotoId,
-          userId,
-        });
+        // Free-tier users get FREE_DAILY_PHOTO_LIMIT photo logs per UTC day;
+        // premium bypasses. Consumed here, before the async pipeline — but
+        // refunded if the photo never makes it in (invalid/oversized image).
+        // A failure further downstream (RAG) still burns the day's scan.
+        const isPremium = req.isPremium === true;
+        if (!isPremium) {
+          await consumeDailyQuota(`photo:${userId}`, env.FREE_DAILY_PHOTO_LIMIT);
+        }
 
-        logger.info({ mealPhotoId: result.mealPhotoId, userId }, 'photo recognition request accepted');
-        res.status(202).json({ mealPhotoId: result.mealPhotoId });
+        try {
+          const result = await this.recognizeFromPhoto.execute({ mealPhotoId, userId });
+          logger.info({ mealPhotoId: result.mealPhotoId, userId }, 'photo recognition request accepted');
+          res.status(202).json({ mealPhotoId: result.mealPhotoId });
+        } catch (err) {
+          if (!isPremium && err instanceof ValidationError) {
+            await refundDailyQuota(`photo:${userId}`);
+          }
+          throw err;
+        }
       });
     } catch (err) {
       logger.error({ err, body: req.body, userId: req.auth?.userId }, 'photo recognition request failed');

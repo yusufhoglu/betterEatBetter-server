@@ -1,5 +1,10 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../../shared/auth/authMiddleware';
+import { env } from '../../../shared/config/env';
+import { PremiumStatusCache } from '../../subscription/entitlement/PremiumStatusCache';
+import { premiumContextMiddleware } from '../../subscription/entitlement/premiumContextMiddleware';
+import { PrismaSubscriptionRepository } from '../../subscription/adapters/repository/PrismaSubscriptionRepository';
+import { GetSubscriptionEntitlement } from '../../subscription/use-cases/GetSubscriptionEntitlement';
 import { RecognizeFromPhoto } from '../use-cases/RecognizeFromPhoto';
 import { RecognizeFromBarcode } from '../use-cases/RecognizeFromBarcode';
 import { RecognizeFromText } from '../use-cases/RecognizeFromText';
@@ -44,8 +49,21 @@ export function foodRecognitionRoutes(): Router {
     repository,
   );
 
-  // Rate limits: photo 5/min, barcode 10/min, text 10/min, search unlimited
-  router.post('/photo', authMiddleware, (req, res, next) => controller.handlePhoto(req, res, next));
+  // Resolves req.isPremium so handlePhoto can apply the free-tier daily photo
+  // quota. Same cache the chat path uses (entitlement:premium:<userId>).
+  const premiumContext = premiumContextMiddleware(
+    new PremiumStatusCache(
+      new GetSubscriptionEntitlement(new PrismaSubscriptionRepository(prisma)),
+      cacheRedisClient,
+      env.ENTITLEMENT_CACHE_TTL_SECONDS,
+    ),
+  );
+
+  // Rate limits: photo 5/min burst + FREE_DAILY_PHOTO_LIMIT/day (free tier),
+  // barcode 10/min, text 10/min, search unlimited
+  router.post('/photo', authMiddleware, premiumContext, (req, res, next) =>
+    controller.handlePhoto(req, res, next),
+  );
   router.get('/photo/:mealPhotoId', authMiddleware, (req, res, next) =>
     controller.handleGetPhotoStatus(req, res, next),
   );

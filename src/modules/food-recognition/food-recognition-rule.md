@@ -126,6 +126,13 @@ model FoodEntry {
   bildirimi gelmezse/gecikirse mobilin fallback'i).
 - Rate limit (hepsi `shared/rateLimiting/checkRateLimit`, key formatı `{source}:${userId}`):
   `photo` 5/dk, `barcode` 10/dk, `text` 10/dk, `search` LİMİTSİZ.
+- **`POST /food/photo` free-tier günlük kotası**: route `authMiddleware`'den sonra
+  `premiumContextMiddleware` (`modules/subscription/entitlement/`) çalışır, `req.isPremium`
+  set eder. `handlePhoto`, burst kontrolünden sonra free kullanıcılar için
+  `consumeDailyQuota('photo:${userId}', env.FREE_DAILY_PHOTO_LIMIT)` (UTC gününde 1 log)
+  çağırır. `RecognizeFromPhoto.execute` bir `ValidationError` fırlatırsa (bozuk/büyük
+  görsel) kota `refundDailyQuota` ile iade edilir — RAG tarafındaki bir hata günü YAKAR
+  (job-side iade sonraki iş). Aşılınca `FREE_TIER_DAILY_LIMIT` kodu → mobil upsell.
 - Hata response'ları SADECE `code` taşır, İngilizce/Türkçe sabit mesaj metni YOK — mobil
   kendi lokalizasyonunu yapar.
 
