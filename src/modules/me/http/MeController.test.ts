@@ -2,6 +2,17 @@ import express from 'express';
 import type { RequestHandler } from 'express';
 import request from 'supertest';
 import { errorMapperMiddleware } from '../../../shared/errors/errorMapper';
+
+jest.mock('../../../shared/rateLimiting/dailyQuota', () => ({
+  peekDailyQuota: jest.fn(async (_key: string, limit: number) => ({
+    used: 0,
+    limit,
+    remaining: limit,
+    resetsAt: new Date('2026-09-04T00:00:00.000Z'),
+  })),
+}));
+
+// eslint-disable-next-line import/first
 import { MeController } from './MeController';
 
 function buildApp() {
@@ -275,6 +286,10 @@ describe('MeController', () => {
       weightKg: 72.4,
       age: 28,
       isPremium: true,
+      usage: {
+        photo: { used: 0, limit: null, remaining: null, resetsAt: '2026-09-04T00:00:00.000Z' },
+        chat: { used: 0, limit: null, remaining: null, resetsAt: '2026-09-04T00:00:00.000Z' },
+      },
     });
   });
 

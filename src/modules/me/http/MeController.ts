@@ -1,7 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { computePlan } from '../../../shared/domain/PlanCalculationService';
+import { env } from '../../../shared/config/env';
 import { ValidationError } from '../../../shared/errors/ValidationError';
+import { peekDailyQuota, type DailyQuotaStatus } from '../../../shared/rateLimiting/dailyQuota';
 import { ComputeWeightProjection } from '../../onboarding-plan/domain/ComputeWeightProjection';
 import type { GetUserAccountProfile } from '../../identity/use-cases/GetUserAccountProfile';
 import type { UpdateUserAccountProfile } from '../../identity/use-cases/UpdateUserAccountProfile';
@@ -183,7 +185,30 @@ export class MeController {
       weightKg: profile.weightKg,
       age: profile.age,
       isPremium,
+      usage: await this.buildUsageResponse(userId, isPremium),
     };
+  }
+
+  /**
+   * Today's free-tier consumption for the metered AI features, so the app can
+   * render "1/1 scans used" / "5 messages left" and an upsell when spent.
+   * Premium users report `limit`/`remaining` as null (unlimited); `resetsAt` is
+   * still the next UTC midnight.
+   */
+  private async buildUsageResponse(userId: string, isPremium: boolean) {
+    const [photo, chat] = await Promise.all([
+      peekDailyQuota(`photo:${userId}`, env.FREE_DAILY_PHOTO_LIMIT),
+      peekDailyQuota(`chat:${userId}`, env.FREE_DAILY_CHAT_LIMIT),
+    ]);
+
+    const shape = (q: DailyQuotaStatus) => ({
+      used: q.used,
+      limit: isPremium ? null : q.limit,
+      remaining: isPremium ? null : q.remaining,
+      resetsAt: q.resetsAt.toISOString(),
+    });
+
+    return { photo: shape(photo), chat: shape(chat) };
   }
 
   private async buildGoalResponse(userId: string) {

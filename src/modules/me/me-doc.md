@@ -111,6 +111,7 @@ sequenceDiagram
 
 - `me` modulunu business source of truth'a cevirmeyin. Bu modulun gorevi birlesik mobile-facing response olusturmak.
 - Profil/goal patch endpointlerinde alanlar farkli sahip modullere dagiliyor. Yeni alan eklerken once owner modulunu belirleyin, sonra `MeController` sadece orkestrasyon yapsin.
+- `GET /profile` cevabi `isPremium`'un yaninda bir `usage` blogu tasir: `{ photo, chat }`, her biri `{ used, limit, remaining, resetsAt }`. Kaynak `shared/rateLimiting/dailyQuota.peekDailyQuota` (free-tier gunluk kotalar, `photo:${userId}` / `chat:${userId}` anahtarlari). Premium kullanicida `limit`/`remaining` = `null` (sinirsiz), `resetsAt` yine ertesi UTC gece yarisi. Peek sayaci ASLA degistirmez.
 - Preferences ve user catalog verileri bu modulun kendi sahipligi altinda; yeni preference turleri ekliyorsaniz `MePreferencesRepositoryPort` uzerinden ilerleyin.
 
 ## Ornek Best Practice
