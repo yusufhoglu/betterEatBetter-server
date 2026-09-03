@@ -49,6 +49,24 @@ const envSchema = z.object({
   MAX_TOOL_TURNS: z.coerce.number().int().positive().default(5),
   MAX_CONTEXT_MESSAGES: z.coerce.number().int().positive().default(20),
 
+  // shared/llm model tiers (shared/llm/modelTiers.ts). `cheap` handles the
+  // mechanical LLM work (classification, data-gathering, summarization);
+  // `prime` is reserved for the user-facing answer that warrants a stronger
+  // model. Both are plain provider model ids for the active LLM_PROVIDER.
+  LLM_MODEL_CHEAP: z.string().min(1).default('gpt-5-mini'),
+  LLM_MODEL_PRIME: z.string().min(1).default('gpt-5'),
+
+  // dietician module — coaching conversation over the two model tiers.
+  DIETICIAN_MAX_GATHER_TURNS: z.coerce.number().int().positive().default(3),
+  DIETICIAN_DIGEST_EVERY_N_TURNS: z.coerce.number().int().positive().default(6),
+  DIETICIAN_MAX_CONTEXT_MESSAGES: z.coerce.number().int().positive().default(20),
+  DIETICIAN_RATE_LIMIT_PER_USER: z.coerce.number().int().positive().default(12),
+  DIETICIAN_RATE_LIMIT_GLOBAL_FREE: z.coerce.number().int().positive().default(200),
+  DIETICIAN_RATE_LIMIT_GLOBAL_PREMIUM: z.coerce.number().int().positive().default(1200),
+  // Free-tier daily dietician turns — lower than chat: every advice turn spends
+  // a prime-model completion. 0 disables the dietician for free users.
+  FREE_DAILY_DIETICIAN_LIMIT: z.coerce.number().int().nonnegative().default(3),
+
   // Postgres connection pool sizing (appended to DATABASE_URL if absent).
   DATABASE_CONNECTION_LIMIT: z.coerce.number().int().positive().default(20),
   DATABASE_POOL_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(20),
