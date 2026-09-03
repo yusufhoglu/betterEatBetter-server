@@ -72,10 +72,9 @@ const fakeProposal: MealLogProposal = {
 };
 
 describe('SendMessage', () => {
-  it('streams the final reply directly when the model calls no tools', async () => {
+  it('emits the first completion directly (no second LLM call) when the model uses no tools', async () => {
     const llmChatPort = new FakeLlmChatPort();
     llmChatPort.setTurnResults([{ content: 'Hi there!' }]);
-    llmChatPort.setStreamChunks(['Hi', ' there!']);
     const repository = new InMemoryConversationRepository();
     const sendMessage = new SendMessage(llmChatPort, repository);
 
@@ -85,7 +84,13 @@ describe('SendMessage', () => {
     expect(textOf(chunks)).toBe('Hi there!');
     expect(chunks.every((c) => c.type === 'text')).toBe(true);
     expect(llmChatPort.sendTurnCalls).toHaveLength(1);
-    expect(llmChatPort.streamFinalReplyCalls).toHaveLength(1);
+    expect(llmChatPort.streamFinalReplyCalls).toHaveLength(0);
+
+    const conversation = await repository.findById('user-1', 'conv-1');
+    expect(conversation?.messages.map((m) => ({ role: m.role, content: m.content }))).toEqual([
+      { role: 'user', content: 'Hello' },
+      { role: 'assistant', content: 'Hi there!' },
+    ]);
   });
 
   it('executes a called tool, appends its result to history, and calls sendTurn a second time', async () => {
@@ -130,12 +135,16 @@ describe('SendMessage', () => {
     expect(llmChatPort.streamFinalReplyCalls).toHaveLength(1);
   });
 
-  it('persists the full assistant reply once the stream completes', async () => {
+  it('persists the full assistant reply once the streamed final turn completes', async () => {
     const llmChatPort = new FakeLlmChatPort();
-    llmChatPort.setTurnResults([{ content: 'Complete reply' }]);
+    llmChatPort.setTurnResults([
+      { content: '', toolCalls: [{ id: 'call_1', name: 'get_meal_data', input: {} }] },
+      { content: 'Complete reply' },
+    ]);
     llmChatPort.setStreamChunks(['Complete', ' reply']);
     const repository = new InMemoryConversationRepository();
-    const sendMessage = new SendMessage(llmChatPort, repository);
+    const tool = new FakeChatTool({ calories: 100 });
+    const sendMessage = new SendMessage(llmChatPort, repository, [tool]);
 
     const stream = sendMessage.execute({ userId: 'user-1', conversationId: 'conv-1', content: 'Hello' });
     await collectChunks(stream);
@@ -147,13 +156,17 @@ describe('SendMessage', () => {
     ]);
   });
 
-  it('does NOT persist a partial assistant message and reports STREAM_INTERRUPTED when the stream breaks mid-flight', async () => {
+  it('does NOT persist a partial assistant message and reports STREAM_INTERRUPTED when the streamed final turn breaks mid-flight', async () => {
     const llmChatPort = new FakeLlmChatPort();
-    llmChatPort.setTurnResults([{ content: 'ignored' }]);
+    llmChatPort.setTurnResults([
+      { content: '', toolCalls: [{ id: 'call_1', name: 'get_meal_data', input: {} }] },
+      { content: 'ignored' },
+    ]);
     llmChatPort.setStreamChunks(['Partial ']);
     llmChatPort.setStreamError(new Error('connection dropped'));
     const repository = new InMemoryConversationRepository();
-    const sendMessage = new SendMessage(llmChatPort, repository);
+    const tool = new FakeChatTool({ calories: 100 });
+    const sendMessage = new SendMessage(llmChatPort, repository, [tool]);
 
     const stream = sendMessage.execute({ userId: 'user-1', conversationId: 'conv-1', content: 'Hello' });
 
@@ -168,6 +181,8 @@ describe('SendMessage', () => {
     expect((caughtError as IntegrationError).code).toBe('STREAM_INTERRUPTED');
 
     const conversation = await repository.findById('user-1', 'conv-1');
+    // only the user message persisted — the non-proposal tool turn lives in
+    // working memory, and the interrupted final reply is never written.
     expect(conversation?.messages.map((m) => m.role)).toEqual(['user']);
   });
 

@@ -74,6 +74,16 @@ export class SendMessage {
       const result = await this.llmChatPort.sendTurn(workingMessages, toolDefinitions);
 
       if (!result.toolCalls || result.toolCalls.length === 0) {
+        if (!usedTools) {
+          // No tools were ever involved — the completion we already have IS
+          // the final answer. Emitting it directly avoids a second,
+          // near-duplicate LLM call (and its tokens/latency) just to re-say
+          // what the model already said.
+          await this.conversationRepository.appendMessage(input.conversationId, 'assistant', result.content);
+          yield { type: 'text', delta: result.content };
+          return;
+        }
+
         workingMessages = [...workingMessages, { role: 'assistant', content: result.content }];
         yield* this.streamAndPersist(input.conversationId, this.withFinalReplyGuard(workingMessages, usedTools));
         return;
