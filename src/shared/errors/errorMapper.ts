@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { DomainError } from './DomainError';
+import { IntegrationError } from './IntegrationError';
 import { RateLimitError } from './RateLimitError';
 import { createModuleLogger } from '../observability/logger';
 
@@ -17,6 +18,10 @@ export function errorMapperMiddleware(
   _next: NextFunction,
 ): void {
   if (err instanceof RateLimitError) {
+    res.setHeader('Retry-After', String(err.retryAfterSeconds));
+  }
+
+  if (err instanceof IntegrationError && err.retryAfterSeconds !== undefined) {
     res.setHeader('Retry-After', String(err.retryAfterSeconds));
   }
 

@@ -4,6 +4,8 @@ export interface TraceContext {
   traceId: string;
   userId?: string;
   messageId?: string;
+  /** True once entitlement has resolved the request as a premium user. */
+  isPremium?: boolean;
 }
 
 const asyncLocalStorage = new AsyncLocalStorage<TraceContext>();
@@ -43,4 +45,17 @@ export function setMessageId(messageId: string): void {
   if (store) {
     store.messageId = messageId;
   }
+}
+
+/** Mutates the current store in place — called once entitlement has resolved. */
+export function setPremium(isPremium: boolean): void {
+  const store = asyncLocalStorage.getStore();
+  if (store) {
+    store.isPremium = isPremium;
+  }
+}
+
+/** Whether the in-flight request belongs to a premium user (false when unknown). */
+export function isPremiumRequest(): boolean {
+  return asyncLocalStorage.getStore()?.isPremium === true;
 }

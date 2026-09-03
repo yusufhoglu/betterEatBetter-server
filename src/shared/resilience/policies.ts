@@ -57,9 +57,14 @@ export function buildResiliencePolicy(options: ResiliencePolicyOptions): IPolicy
   // bad caller input (e.g. ValidationError for an invalid token/request) —
   // that's a fault of the specific call, not the downstream service, and
   // counting it would let a client tripping input errors take the circuit
-  // down for everyone else.
+  // down for everyone else. It also skips errors flagged
+  // `circuitImpacting: false` (provider throttling / local overload) — those
+  // mean "slow down", not "the upstream is broken".
   const circuitBreakerPolicy = circuitBreaker(
-    handleWhen((err) => err instanceof IntegrationError || isTaskCancelledError(err)),
+    handleWhen(
+      (err) =>
+        (err instanceof IntegrationError && err.circuitImpacting) || isTaskCancelledError(err),
+    ),
     {
       halfOpenAfter: circuitBreakerHalfOpenAfterMs,
       breaker: new ConsecutiveBreaker(circuitBreakerThreshold),

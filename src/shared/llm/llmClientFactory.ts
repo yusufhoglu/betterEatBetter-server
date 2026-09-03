@@ -1,7 +1,9 @@
 import type { IPolicy } from 'cockatiel';
 import { env } from '../config/env';
 import { buildResiliencePolicy, type ResiliencePolicyOptions } from '../resilience/policies';
+import { isPremiumRequest } from '../observability/tracer';
 import type { LlmClient } from './LlmClient';
+import { llmConcurrencyGate } from './llmConcurrencyGate';
 import { AnthropicProvider } from './providers/AnthropicProvider';
 import { OpenAiProvider } from './providers/OpenAiProvider';
 import type { LlmCompleteRequest, LlmCompleteResponse, LlmStreamCompleteRequest } from './types';
@@ -28,6 +30,7 @@ registerLlmProvider('openai', () => {
     apiKey: env.OPENAI_API_KEY,
     model: env.OPENAI_MODEL,
     timeoutMs: env.TIMEOUTS_ENABLED ? env.OPENAI_TIMEOUT_MS : undefined,
+    maxRetries: env.OPENAI_MAX_RETRIES,
   });
 });
 
@@ -68,7 +71,17 @@ export function createLlmClient(options: CreateLlmClientOptions = {}): LlmClient
  * The policy here only covers the synchronous hand-off to the underlying
  * async generator — timeout/circuit-breaker/retry protect stream *creation*,
  * not a failure mid-stream (retrying a partially-yielded stream isn't safe).
+ *
+ * Every call also passes through the process-wide {@link llmConcurrencyGate}
+ * so a burst of users can't open more simultaneous provider connections than
+ * the configured ceiling — excess callers queue (bounded) rather than 429.
+ * For streams the gate slot is held until the stream is fully drained.
  */
+/** Premium requests get the gate's priority lane; everything else is normal. */
+function currentPriority(): 'premium' | 'normal' {
+  return isPremiumRequest() ? 'premium' : 'normal';
+}
+
 class ResilientLlmClient implements LlmClient {
   constructor(
     private readonly inner: LlmClient,
@@ -76,11 +89,21 @@ class ResilientLlmClient implements LlmClient {
   ) {}
 
   async complete(request: LlmCompleteRequest): Promise<LlmCompleteResponse> {
-    return this.policy.execute(() => this.inner.complete(request));
+    const release = await llmConcurrencyGate.acquire(currentPriority());
+    try {
+      return await this.policy.execute(() => this.inner.complete(request));
+    } finally {
+      release();
+    }
   }
 
   async *streamComplete(request: LlmStreamCompleteRequest): AsyncIterable<string> {
-    const stream = await this.policy.execute(() => Promise.resolve(this.inner.streamComplete(request)));
-    yield* stream;
+    const release = await llmConcurrencyGate.acquire(currentPriority());
+    try {
+      const stream = await this.policy.execute(() => Promise.resolve(this.inner.streamComplete(request)));
+      yield* stream;
+    } finally {
+      release();
+    }
   }
 }

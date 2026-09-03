@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { DomainError } from '../../../shared/errors/DomainError';
+import { IntegrationError } from '../../../shared/errors/IntegrationError';
 import { ValidationError } from '../../../shared/errors/ValidationError';
 import { createModuleLogger } from '../../../shared/observability/logger';
 import { runWithContext } from '../../../shared/observability/tracer';
@@ -154,7 +155,13 @@ export class ChatController {
           res.write('event: done\ndata: {}\n\n');
         } catch (err) {
           const code = err instanceof DomainError ? err.code : 'STREAM_INTERRUPTED';
-          res.write(`event: error\ndata: ${JSON.stringify({ code })}\n\n`);
+          const retryAfterSeconds =
+            err instanceof IntegrationError ? err.retryAfterSeconds : undefined;
+          res.write(
+            `event: error\ndata: ${JSON.stringify(
+              retryAfterSeconds !== undefined ? { code, retryAfterSeconds } : { code },
+            )}\n\n`,
+          );
         } finally {
           clearInterval(heartbeat);
           res.end();

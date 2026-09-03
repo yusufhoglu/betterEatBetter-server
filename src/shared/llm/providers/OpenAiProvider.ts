@@ -24,6 +24,12 @@ export interface OpenAiProviderOptions {
   readonly apiKey: string;
   readonly model: string;
   readonly timeoutMs?: number;
+  /**
+   * SDK-level retry budget. The OpenAI SDK retries 429/408/409/5xx and
+   * connection errors with exponential backoff, honouring `Retry-After` /
+   * `retry-after-ms` response headers — this is the primary throttle defence.
+   */
+  readonly maxRetries?: number;
 }
 
 /** Translates the canonical LLM format to/from the OpenAI Chat Completions API. */
@@ -35,6 +41,7 @@ export class OpenAiProvider implements LlmClient {
     this.client = new OpenAI({
       apiKey: options.apiKey,
       timeout: options.timeoutMs,
+      ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
     });
     this.model = options.model;
   }
@@ -109,6 +116,24 @@ function mapOpenAiError(err: unknown): Error {
     return err;
   }
 
+  // The SDK has already exhausted its own retry budget by the time it throws.
+  const status = readHttpStatus(err);
+  if (status === 429) {
+    // Not retryable at this layer: the SDK already retried honouring
+    // Retry-After, and a tight app-level retry won't outlast the window —
+    // the client should back off using the Retry-After header instead.
+    return new IntegrationError(
+      'LLM_RATE_LIMITED',
+      'OpenAI rate limit exceeded',
+      false,
+      503,
+      readRetryAfterSeconds(err),
+    );
+  }
+  if (status !== undefined && status >= 500) {
+    return new IntegrationError('LLM_UPSTREAM_UNAVAILABLE', `OpenAI returned HTTP ${status}`, true, 503);
+  }
+
   if (isOpenAiConnectionTimeoutError(err)) {
     return new IntegrationError('LLM_NETWORK_TIMEOUT', 'OpenAI connection timed out', true, 503);
   }
@@ -118,6 +143,43 @@ function mapOpenAiError(err: unknown): Error {
   }
 
   return err instanceof Error ? err : new Error(String(err));
+}
+
+/** OpenAI's `APIError` carries a numeric `status`; duck-typed so a mocked SDK still works. */
+function readHttpStatus(err: unknown): number | undefined {
+  if (typeof err === 'object' && err !== null && 'status' in err) {
+    const status = (err as { status: unknown }).status;
+    if (typeof status === 'number' && Number.isFinite(status)) {
+      return status;
+    }
+  }
+  return undefined;
+}
+
+function readRetryAfterSeconds(err: unknown): number | undefined {
+  const headers = (err as { headers?: unknown }).headers;
+
+  const readHeader = (name: string): string | null => {
+    if (headers && typeof (headers as Headers).get === 'function') {
+      return (headers as Headers).get(name);
+    }
+    if (headers && typeof headers === 'object' && name in headers) {
+      return String((headers as Record<string, unknown>)[name]);
+    }
+    return null;
+  };
+
+  const retryAfterMs = Number(readHeader('retry-after-ms'));
+  if (Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
+    return Math.ceil(retryAfterMs / 1000);
+  }
+
+  const retryAfterSeconds = Number(readHeader('retry-after'));
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    return Math.ceil(retryAfterSeconds);
+  }
+
+  return undefined;
 }
 
 function isOpenAiConnectionTimeoutError(err: unknown): boolean {

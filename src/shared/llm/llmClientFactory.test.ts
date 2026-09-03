@@ -7,6 +7,10 @@ jest.mock('../config/env', () => ({
     TIMEOUTS_ENABLED: true,
     ANTHROPIC_API_KEY: undefined as string | undefined,
     ANTHROPIC_MODEL: 'claude-sonnet-4-6',
+    LLM_MAX_CONCURRENCY: 24,
+    LLM_PREMIUM_BURST_SLOTS: 4,
+    LLM_MAX_QUEUE_DEPTH: 200,
+    OPENAI_MAX_RETRIES: 3,
   },
 }));
 

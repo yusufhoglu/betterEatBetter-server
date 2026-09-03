@@ -53,6 +53,17 @@ const envSchema = z.object({
   DATABASE_CONNECTION_LIMIT: z.coerce.number().int().positive().default(20),
   DATABASE_POOL_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(20),
 
+  // Global cap on concurrent outbound LLM requests (all features share it).
+  // Keeps a burst of users from hammering the provider past its RPM/TPM limit.
+  // Premium requests may use LLM_PREMIUM_BURST_SLOTS extra slots and jump the
+  // queue ahead of free traffic.
+  LLM_MAX_CONCURRENCY: z.coerce.number().int().positive().default(24),
+  LLM_PREMIUM_BURST_SLOTS: z.coerce.number().int().nonnegative().default(4),
+  LLM_MAX_QUEUE_DEPTH: z.coerce.number().int().positive().default(200),
+
+  // OpenAI SDK internal retry budget (honours Retry-After on 429/5xx).
+  OPENAI_MAX_RETRIES: z.coerce.number().int().nonnegative().default(3),
+
   // subscription module — Google Play Developer API + Real-time Developer Notifications
   GOOGLE_PLAY_PACKAGE_NAME: z.string().min(1),
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().min(1),

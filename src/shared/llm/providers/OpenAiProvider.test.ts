@@ -184,6 +184,48 @@ describe('OpenAiProvider', () => {
     });
   });
 
+  it('maps an OpenAI 429 to a non-retryable LLM_RATE_LIMITED carrying Retry-After', async () => {
+    const rateLimitError = Object.assign(new Error('429 Too Many Requests'), {
+      status: 429,
+      headers: new Headers({ 'retry-after': '18' }),
+    });
+    createMock.mockRejectedValue(rateLimitError);
+
+    const provider = new OpenAiProvider({ apiKey: 'test-key', model: 'gpt-4o' });
+
+    await expect(provider.complete({ messages: [{ role: 'user', content: 'hi' }] })).rejects.toMatchObject({
+      code: 'LLM_RATE_LIMITED',
+      retryable: false,
+      httpStatus: 503,
+      retryAfterSeconds: 18,
+      circuitImpacting: false,
+    });
+  });
+
+  it('prefers retry-after-ms over retry-after when both are present', async () => {
+    createMock.mockRejectedValue(
+      Object.assign(new Error('429'), { status: 429, headers: new Headers({ 'retry-after': '30', 'retry-after-ms': '2400' }) }),
+    );
+
+    const provider = new OpenAiProvider({ apiKey: 'test-key', model: 'gpt-4o' });
+
+    await expect(provider.complete({ messages: [{ role: 'user', content: 'hi' }] })).rejects.toMatchObject({
+      retryAfterSeconds: 3,
+    });
+  });
+
+  it('maps an OpenAI 5xx to a retryable LLM_UPSTREAM_UNAVAILABLE', async () => {
+    createMock.mockRejectedValue(Object.assign(new Error('503'), { status: 503 }));
+
+    const provider = new OpenAiProvider({ apiKey: 'test-key', model: 'gpt-4o' });
+
+    await expect(provider.complete({ messages: [{ role: 'user', content: 'hi' }] })).rejects.toMatchObject({
+      code: 'LLM_UPSTREAM_UNAVAILABLE',
+      retryable: true,
+      circuitImpacting: true,
+    });
+  });
+
   it('throws a taxonomy error when a tool message is missing toolCallId', async () => {
     const provider = new OpenAiProvider({ apiKey: 'test-key', model: 'gpt-4o' });
 
