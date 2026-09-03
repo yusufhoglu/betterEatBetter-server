@@ -1,23 +1,13 @@
-import type { LlmMessage } from '../../../shared/llm/types';
-
-export const DEFAULT_MAX_CONTEXT_MESSAGES = 20;
+import {
+  DEFAULT_MAX_HISTORY_MESSAGES,
+  trimHistory,
+} from '../../../shared/llm/conversation/trimHistory';
 
 /**
- * Simple "last N messages" window — no summarization this round. The system
- * message (persona/instructions), if present, is always kept and excluded
- * from the trimmed count.
+ * Chatbot's context window is the shared `trimHistory` helper
+ * (`shared/llm/conversation/trimHistory.ts`) under the module's historical
+ * names — kept as a thin re-export so existing imports and the module rule doc
+ * stay valid.
  */
-export function trimConversationHistory(
-  messages: LlmMessage[],
-  maxMessages: number = DEFAULT_MAX_CONTEXT_MESSAGES,
-): LlmMessage[] {
-  if (messages.length <= maxMessages) {
-    return messages;
-  }
-
-  const systemMessages = messages.filter((message) => message.role === 'system');
-  const nonSystemMessages = messages.filter((message) => message.role !== 'system');
-  const budget = Math.max(maxMessages - systemMessages.length, 0);
-
-  return [...systemMessages, ...nonSystemMessages.slice(-budget)];
-}
+export const DEFAULT_MAX_CONTEXT_MESSAGES = DEFAULT_MAX_HISTORY_MESSAGES;
+export const trimConversationHistory = trimHistory;
