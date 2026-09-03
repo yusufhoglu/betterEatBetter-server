@@ -1,6 +1,6 @@
 import { createModuleLogger } from '../../../shared/observability/logger';
 
-const logger = createModuleLogger('chatbot');
+const logger = createModuleLogger('subscription');
 
 /** The slice of `GetSubscriptionEntitlement` this cache needs. */
 export interface EntitlementSource {
@@ -14,9 +14,10 @@ export interface EntitlementCacheStore {
 }
 
 /**
- * Caches each user's premium/free entitlement for a short TTL so the chat hot
- * path (rate limiter + priority routing, hit on every message) doesn't do a
- * subscription-table read every time.
+ * Caches each user's premium/free entitlement for a short TTL so hot paths that
+ * check it on every request (chat rate limiter + priority routing, the
+ * free-tier daily quotas on chat and photo) don't do a subscription-table read
+ * every time.
  *
  * Fail-open to `false`: if the cache or the subscription store is unavailable,
  * the user is treated as free — a momentary loss of priority, never a blocked
