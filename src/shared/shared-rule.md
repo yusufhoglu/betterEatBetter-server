@@ -28,6 +28,14 @@ Referans: `backend-architecture.md` §3 ve §6.
 - Modüller kendi `key` formatını belirler (örn. `chat:${userId}`, `signin:${ip}`,
   `photo:${userId}`) — mekanizma modülden habersiz, sadece key/limit/window parametre alır.
 - Limit aşıldığında `RateLimitError` fırlatılır, çıplak `429` response yazılmaz.
+- **`rateLimiting/dailyQuota.ts` — free-tier günlük kota** (`checkRateLimit`'ten AYRI
+  mekanizma): `consumeDailyQuota(key, limit)` / `peekDailyQuota` / `refundDailyQuota`.
+  UTC takvim gününe göre fixed-window sayaç (`quota:<key>:<YYYY-MM-DD>`, ertesi UTC gece
+  yarısından hemen sonra expire). **Fail-open** (`checkRateLimit`'in aksine — Redis
+  düşerse istek GEÇER). Premium bypass ÇAĞIRANIN işi (sadece free kullanıcı için çağrılır).
+  Aşıldığında `RateLimitError` `FREE_TIER_DAILY_LIMIT` koduyla fırlar (mobil bunu "upsell
+  göster" olarak yorumlar, "yavaşla" değil). Env: `FREE_DAILY_PHOTO_LIMIT` (1),
+  `FREE_DAILY_CHAT_LIMIT` (7), `RATE_LIMIT_ENABLED` ile birlikte gate'lenir.
 
 ## DI / Wiring
 

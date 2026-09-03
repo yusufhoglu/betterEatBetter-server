@@ -70,6 +70,12 @@ const envSchema = z.object({
   CHAT_RATE_LIMIT_GLOBAL_FREE: z.coerce.number().int().positive().default(400),
   CHAT_RATE_LIMIT_GLOBAL_PREMIUM: z.coerce.number().int().positive().default(2000),
 
+  // Free-tier daily quotas — fixed window on the UTC calendar day. Premium
+  // users bypass these entirely. Enforced on top of the burst limits above and
+  // gated by RATE_LIMIT_ENABLED. 0 disables the feature for free users.
+  FREE_DAILY_PHOTO_LIMIT: z.coerce.number().int().nonnegative().default(1),
+  FREE_DAILY_CHAT_LIMIT: z.coerce.number().int().nonnegative().default(7),
+
   // How long a resolved premium/free entitlement is cached (per user) before
   // re-checking the subscription store.
   ENTITLEMENT_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
