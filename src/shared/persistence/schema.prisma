@@ -32,6 +32,7 @@ model User {
   plan                   Plan?
   unitPreference         UnitPreference?
   notificationPreference NotificationPreference?
+  deviceTokens           DeviceToken[]
   favoriteRecipes        FavoriteRecipe[]
   savedMeals             SavedMeal[]
   subscriptions          Subscription[]
@@ -211,6 +212,27 @@ model NotificationPreference {
   updatedAt        DateTime @updatedAt
 
   @@map("notification_preferences")
+}
+
+// notifications module: one row per (device, push token). `token` is the FCM
+// registration token or APNs device token the mobile app obtained; `timezone`
+// is the device's IANA zone, refreshed on every registration so the scheduled
+// jobs can compare against the user's local wall-clock rather than server time.
+// `locale` is the language the job-composed copy should be written in.
+model DeviceToken {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform   String // 'ios' | 'android'
+  token      String   @unique
+  timezone   String   @default("UTC")
+  locale     String   @default("en") // 'en' | 'tr'
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@map("device_tokens")
 }
 
 // "Favorite Meals" — the user's bookmarked meals, incl. anything saved from
