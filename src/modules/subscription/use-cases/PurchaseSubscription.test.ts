@@ -14,6 +14,8 @@ class FakeEntitlementCache implements EntitlementCachePort {
 }
 
 class FakeReceiptValidator implements ReceiptValidatorPort {
+  constructor(private readonly linkedPurchaseToken: string | null = null) {}
+
   async validate(input: { productId: string; receiptToken: string }) {
     return {
       productId: input.productId,
@@ -21,6 +23,7 @@ class FakeReceiptValidator implements ReceiptValidatorPort {
       expiresAt: new Date('2027-01-01T00:00:00.000Z'),
       willRenew: true,
       inGracePeriod: false,
+      linkedPurchaseToken: this.linkedPurchaseToken,
     };
   }
 }
@@ -28,6 +31,7 @@ class FakeReceiptValidator implements ReceiptValidatorPort {
 class FakeSubscriptionRepository implements SubscriptionRepositoryPort {
   byPurchaseToken = new Map<string, SubscriptionRecord>();
   upserted: Array<Parameters<SubscriptionRepositoryPort['upsert']>[0]> = [];
+  superseded: Array<Parameters<SubscriptionRepositoryPort['supersede']>[0]> = [];
 
   async findLatestByUserId(): Promise<SubscriptionRecord | null> {
     return null;
@@ -52,6 +56,10 @@ class FakeSubscriptionRepository implements SubscriptionRepositoryPort {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
+  }
+
+  async supersede(input: Parameters<SubscriptionRepositoryPort['supersede']>[0]): Promise<void> {
+    this.superseded.push(input);
   }
 }
 
@@ -142,5 +150,37 @@ describe('PurchaseSubscription', () => {
         receiptToken: 'own-token',
       }),
     ).resolves.toBeDefined();
+  });
+
+  test('supersedes the linked prior purchaseToken when the receipt reports one (plan upgrade/downgrade)', async () => {
+    const repository = new FakeSubscriptionRepository();
+    const entitlementCache = new FakeEntitlementCache();
+    const validateReceipt = new ValidateReceipt(new FakeReceiptValidator('old-monthly-token'), new FakeReceiptValidator('old-monthly-token'));
+    const purchaseSubscription = new PurchaseSubscription(validateReceipt, repository, entitlementCache);
+
+    await purchaseSubscription.execute({
+      userId: 'user-1',
+      provider: 'google',
+      productId: 'premium_yearly',
+      receiptToken: 'new-yearly-token',
+    });
+
+    expect(repository.superseded).toEqual([{ purchaseToken: 'old-monthly-token', expectedUserId: 'user-1' }]);
+  });
+
+  test('does not call supersede when the receipt reports no linkedPurchaseToken', async () => {
+    const repository = new FakeSubscriptionRepository();
+    const entitlementCache = new FakeEntitlementCache();
+    const validateReceipt = new ValidateReceipt(new FakeReceiptValidator(), new FakeReceiptValidator());
+    const purchaseSubscription = new PurchaseSubscription(validateReceipt, repository, entitlementCache);
+
+    await purchaseSubscription.execute({
+      userId: 'user-1',
+      provider: 'google',
+      productId: 'premium_yearly',
+      receiptToken: 'first-purchase-token',
+    });
+
+    expect(repository.superseded).toEqual([]);
   });
 });

@@ -122,6 +122,79 @@ describe('PrismaSubscriptionRepository (integration)', () => {
     expect(result).toBeNull();
   });
 
+  it('findLatestByUserId prefers an active row over a more-recently-touched non-entitled one', async () => {
+    // Simulates a plan upgrade: the old monthly row gets superseded (touched)
+    // *after* the new yearly row was created, so it has the newer updatedAt —
+    // picking by recency alone would wrongly surface the stale, non-entitled
+    // plan as "latest".
+    await repository.upsert({
+      userId,
+      productId: 'premium_yearly',
+      provider: 'google',
+      status: 'active',
+      expiresAt: new Date('2028-01-01T00:00:00.000Z'),
+      purchaseToken: 'token-new',
+      willRenew: true,
+      inGracePeriod: false,
+    });
+    await repository.upsert({
+      userId,
+      productId: 'premium_monthly',
+      provider: 'google',
+      status: 'active',
+      expiresAt: new Date('2026-10-01T00:00:00.000Z'),
+      purchaseToken: 'token-old',
+      willRenew: true,
+      inGracePeriod: false,
+    });
+    await repository.supersede({ purchaseToken: 'token-old', expectedUserId: userId });
+
+    const latest = await repository.findLatestByUserId(userId);
+    expect(latest?.productId).toBe('premium_yearly');
+    expect(latest?.status).toBe('active');
+  });
+
+  it('supersede marks the row status superseded and stops it being entitled', async () => {
+    await repository.upsert({
+      userId,
+      productId: 'premium_monthly',
+      provider: 'google',
+      status: 'active',
+      expiresAt: new Date('2027-01-01T00:00:00.000Z'),
+      purchaseToken: 'token-old',
+      willRenew: true,
+      inGracePeriod: false,
+    });
+
+    await repository.supersede({ purchaseToken: 'token-old', expectedUserId: userId });
+
+    const found = await repository.findByPurchaseToken('token-old');
+    expect(found?.status).toBe('superseded');
+    expect(found?.willRenew).toBe(false);
+  });
+
+  it('supersede is a no-op when the purchaseToken belongs to a different user', async () => {
+    await repository.upsert({
+      userId,
+      productId: 'premium_monthly',
+      provider: 'google',
+      status: 'active',
+      expiresAt: new Date('2027-01-01T00:00:00.000Z'),
+      purchaseToken: 'token-old',
+      willRenew: true,
+      inGracePeriod: false,
+    });
+
+    await repository.supersede({ purchaseToken: 'token-old', expectedUserId: 'someone-else' });
+
+    const found = await repository.findByPurchaseToken('token-old');
+    expect(found?.status).toBe('active');
+  });
+
+  it('supersede is a no-op when the purchaseToken is unknown', async () => {
+    await expect(repository.supersede({ purchaseToken: 'does-not-exist', expectedUserId: userId })).resolves.toBeUndefined();
+  });
+
   it('findByPurchaseToken looks a subscription up by its Google Play purchaseToken', async () => {
     await repository.upsert({
       userId,

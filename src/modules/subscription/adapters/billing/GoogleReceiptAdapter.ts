@@ -23,6 +23,10 @@ const subscriptionPurchaseSchema = z.object({
   // server-side here rather than relying solely on the client's
   // completePurchase() (see subscription-backend-contract.md step 4).
   acknowledgementState: z.string().optional(),
+  // Set by Google when this purchase resulted from an upgrade/downgrade or
+  // resubscribe of a prior subscription — points at the purchaseToken it
+  // supersedes. Absent for a first-time purchase.
+  linkedPurchaseToken: z.string().optional(),
   lineItems: z
     .array(
       z.object({
@@ -62,7 +66,12 @@ export class GoogleReceiptAdapter implements ReceiptValidatorPort {
   }
 
   async validate(input: {
-    productId: string;
+    // Optional so RTDN reconciliation can look up a purchaseToken it has
+    // never seen before (e.g. an out-of-app plan switch) without already
+    // knowing which product it belongs to — see processPlayRtdnJob.ts. The
+    // client-driven purchase flow (ValidateReceipt/PurchaseSubscription)
+    // always passes it, so the cross-check below still applies there.
+    productId?: string;
     receiptToken: string;
   }): Promise<{
     productId: string;
@@ -70,6 +79,7 @@ export class GoogleReceiptAdapter implements ReceiptValidatorPort {
     expiresAt: Date | null;
     willRenew: boolean;
     inGracePeriod: boolean;
+    linkedPurchaseToken: string | null;
   }> {
     const purchaseToken = input.receiptToken;
 
@@ -118,14 +128,19 @@ export class GoogleReceiptAdapter implements ReceiptValidatorPort {
     const mapped = MapGooglePlayState(parsed.data);
 
     // mapped.productId is null when Google's response carries no line items
-    // (nothing to cross-check against) — otherwise it must match what the
+    // (nothing to cross-check against); input.productId is undefined when the
+    // caller doesn't know it yet (RTDN reconciling an unfamiliar token) —
+    // either way there's nothing to compare. Otherwise it must match what the
     // client claims, so a purchaseToken for one product can't be used to
     // claim entitlement to a different (e.g. pricier) one.
-    if (mapped.productId !== null && mapped.productId !== input.productId) {
+    if (input.productId !== undefined && mapped.productId !== null && mapped.productId !== input.productId) {
       throw new ValidationError(INVALID_TOKEN_CODE, 'purchaseToken does not match the given productId');
     }
 
-    const resolvedProductId = mapped.productId ?? input.productId;
+    const resolvedProductId = mapped.productId ?? input.productId ?? null;
+    if (resolvedProductId === null) {
+      throw new IntegrationError(PLAY_API_ERROR_CODE, 'Google Play API response had no productId to resolve', false);
+    }
 
     // Acknowledge server-side while the purchase is still entitled and pending
     // acknowledgement. Best-effort: a failure here never fails verification —
@@ -141,6 +156,7 @@ export class GoogleReceiptAdapter implements ReceiptValidatorPort {
       expiresAt: mapped.expiresAt,
       willRenew: mapped.willRenew,
       inGracePeriod: mapped.inGracePeriod,
+      linkedPurchaseToken: parsed.data.linkedPurchaseToken ?? null,
     };
   }
 

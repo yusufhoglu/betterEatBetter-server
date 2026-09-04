@@ -11,6 +11,7 @@ class FakeValidator implements ReceiptValidatorPort {
       expiresAt: null,
       willRenew: true,
       inGracePeriod: false,
+      linkedPurchaseToken: null,
     };
   }
 }

@@ -37,6 +37,16 @@ export class PurchaseSubscription {
       inGracePeriod: validated.inGracePeriod,
     });
 
+    // An upgrade/downgrade/resubscribe carries the prior purchaseToken it
+    // replaces — close that row out so it can't outlive its usefulness and
+    // shadow the new one (see PrismaSubscriptionRepository.findLatestByUserId).
+    if (validated.linkedPurchaseToken) {
+      await this.subscriptionRepository.supersede({
+        purchaseToken: validated.linkedPurchaseToken,
+        expectedUserId: input.userId,
+      });
+    }
+
     // The entitlement just changed — drop the cached premium/free decision so
     // the freemium quota paths don't keep treating a fresh subscriber as free
     // until the cache TTL lapses.

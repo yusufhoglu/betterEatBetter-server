@@ -11,6 +11,7 @@ export class AppleReceiptAdapter implements ReceiptValidatorPort {
     expiresAt: Date | null;
     willRenew: boolean;
     inGracePeriod: boolean;
+    linkedPurchaseToken: string | null;
   }> {
     if (!input.receiptToken.startsWith('apple:')) {
       throw new ValidationError('INVALID_TOKEN', 'Apple receipt token is invalid');
@@ -22,6 +23,7 @@ export class AppleReceiptAdapter implements ReceiptValidatorPort {
       expiresAt: null,
       willRenew: true,
       inGracePeriod: false,
+      linkedPurchaseToken: null,
     };
   }
 }

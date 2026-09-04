@@ -13,10 +13,12 @@ function subscriptionPurchaseBody(overrides: {
   expiryTime?: string;
   autoRenewEnabled?: boolean;
   acknowledgementState?: string;
+  linkedPurchaseToken?: string;
 }) {
   return {
     subscriptionState: overrides.subscriptionState,
     ...(overrides.acknowledgementState ? { acknowledgementState: overrides.acknowledgementState } : {}),
+    ...(overrides.linkedPurchaseToken ? { linkedPurchaseToken: overrides.linkedPurchaseToken } : {}),
     lineItems: [
       {
         productId: overrides.productId ?? 'premium_yearly',
@@ -75,6 +77,7 @@ describe('GoogleReceiptAdapter', () => {
       expiresAt: new Date('2027-01-01T00:00:00.000Z'),
       willRenew: true,
       inGracePeriod: false,
+      linkedPurchaseToken: null,
     });
   });
 
@@ -201,5 +204,47 @@ describe('GoogleReceiptAdapter', () => {
     const result = await buildAdapter().validate({ productId: 'premium_yearly', receiptToken: 'purchase-token-123' });
 
     expect(result.status).toBe('active');
+  });
+
+  test('surfaces linkedPurchaseToken when Google reports the purchase supersedes a prior one', async () => {
+    fetchSpy.mockResolvedValue(
+      jsonResponse(
+        200,
+        subscriptionPurchaseBody({ subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE', linkedPurchaseToken: 'old-token' }),
+      ),
+    );
+
+    const result = await buildAdapter().validate({ productId: 'premium_yearly', receiptToken: 'purchase-token-123' });
+
+    expect(result.linkedPurchaseToken).toBe('old-token');
+  });
+
+  test('returns null linkedPurchaseToken for a first-time purchase', async () => {
+    fetchSpy.mockResolvedValue(jsonResponse(200, subscriptionPurchaseBody({ subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE' })));
+
+    const result = await buildAdapter().validate({ productId: 'premium_yearly', receiptToken: 'purchase-token-123' });
+
+    expect(result.linkedPurchaseToken).toBeNull();
+  });
+
+  test('looks up a purchaseToken without a claimed productId, skipping the cross-check (RTDN reconcile of an unknown token)', async () => {
+    fetchSpy.mockResolvedValue(
+      jsonResponse(
+        200,
+        subscriptionPurchaseBody({ subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE', productId: 'premium_yearly' }),
+      ),
+    );
+
+    const result = await buildAdapter().validate({ receiptToken: 'purchase-token-123' });
+
+    expect(result.productId).toBe('premium_yearly');
+  });
+
+  test('throws PLAY_API_ERROR when no productId is claimed and Google returns no line items to resolve one from', async () => {
+    fetchSpy.mockResolvedValue(jsonResponse(200, { subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE', lineItems: [] }));
+
+    await expect(buildAdapter().validate({ receiptToken: 'purchase-token-123' })).rejects.toMatchObject({
+      code: 'PLAY_API_ERROR',
+    });
   });
 });

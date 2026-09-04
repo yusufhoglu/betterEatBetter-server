@@ -25,4 +25,11 @@ export interface SubscriptionRepositoryPort {
     willRenew: boolean;
     inGracePeriod: boolean;
   }): Promise<SubscriptionRecord>;
+  // Closes out the row for a purchaseToken that a newer purchase has
+  // superseded (Google's linkedPurchaseToken — set on upgrade/downgrade/
+  // resubscribe). No-ops if the token isn't found or isn't bound to
+  // expectedUserId — a mismatch means it isn't actually this user's prior
+  // purchase, so it must be left alone rather than "closed" on someone else's
+  // say-so. Best-effort: never throws.
+  supersede(input: { purchaseToken: string; expectedUserId: string }): Promise<void>;
 }

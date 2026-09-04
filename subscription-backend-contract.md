@@ -52,10 +52,13 @@ Backend must:
 2. Confirm the token is valid, matches `productId`, and belongs to a purchase
    Google considers active (`SUBSCRIPTION_STATE_ACTIVE` /
    `_IN_GRACE_PERIOD` / `_CANCELED` but not yet expired).
-3. Bind the Play purchase to **this** `userId` (store
-   `purchaseToken` + `linkedPurchaseToken` chain, `obfuscatedExternalAccountId`
-   if you set one at purchase time — the app currently doesn't, so bind on
-   first-seen and reject if the token is already bound to another user).
+3. Bind the Play purchase to **this** `userId` (store `purchaseToken`;
+   `obfuscatedExternalAccountId` isn't set at purchase time — the app
+   currently doesn't set one — so bind on first-seen and reject if the token
+   is already bound to another user). If Google reports a
+   `linkedPurchaseToken` (this purchase resulted from an upgrade/downgrade/
+   resubscribe), close out the row for that prior token — see "Plan changes"
+   below.
 4. Acknowledge to Google. The backend now does this server-side
    (`purchases.subscriptions.acknowledge`) whenever the Play API reports the
    purchase as active + `ACKNOWLEDGEMENT_STATE_PENDING` — best-effort, it never
@@ -108,8 +111,36 @@ Backend needs a push endpoint (e.g. `POST /subscription/play-rtdn`) that:
 This is what keeps `GET /subscription/entitlement` correct without the app
 polling — renewals, cancellations, refunds, and payment failures all land here.
 
+## Plan changes (monthly ↔ yearly)
+
+The app has no in-app "switch plan" button yet (that's still `future`, see
+below), but Play lets a user change plans from the **Play Store app itself**
+(Settings → Subscriptions), outside our UI entirely. That mints a brand-new
+`purchaseToken`; Google's subscription resource for it carries
+`linkedPurchaseToken` pointing at the token it replaces. The backend follows
+that chain both ways:
+
+- **Client-driven** (`POST /verify` with the new token, once the app supports
+  triggering a change): `ValidateReceipt` returns the new receipt's
+  `linkedPurchaseToken`; `PurchaseSubscription` upserts the new row, then
+  closes out the old row (status `superseded`) for the same user.
+- **Out-of-app** (RTDN only, no `/verify` call ever happens for the new
+  token): `processPlayRtdnJob` looks up the notified `purchaseToken`; if it's
+  unrecognized, it fetches the purchase directly from Google (no `productId`
+  to cross-check yet), follows `linkedPurchaseToken` to the row it knows,
+  binds the new row to that row's `userId`, and supersedes the old row. If
+  neither token is recognized, the notification is dropped — nothing to
+  reconcile against yet.
+
+A `superseded` row is never entitled (`GetSubscriptionEntitlement` only
+treats `active`/`trialing` as premium) and `findLatestByUserId` prefers
+currently-entitled rows over merely recently-touched ones — so a stale
+pre-upgrade row can't shadow the current plan even if it gets touched again
+after the fact.
+
 ## Not handled by the app
 
 - iOS / App Store (Android only for now).
-- Upgrade/downgrade between monthly↔yearly (`ChangeSubscriptionParam`) — future.
+- An in-app "switch plan" button (`ChangeSubscriptionParam`) — future; the
+  backend already reconciles plan changes made outside the app (see above).
 - Promo codes, offers beyond the base plan.
