@@ -1,4 +1,5 @@
 import { ConflictError } from '../../../shared/errors/ConflictError';
+import type { EntitlementCachePort } from '../ports/EntitlementCachePort';
 import type { SubscriptionRepositoryPort } from '../ports/SubscriptionRepositoryPort';
 import type { ValidateReceipt } from './ValidateReceipt';
 
@@ -6,6 +7,7 @@ export class PurchaseSubscription {
   constructor(
     private readonly validateReceipt: ValidateReceipt,
     private readonly subscriptionRepository: SubscriptionRepositoryPort,
+    private readonly entitlementCache: EntitlementCachePort,
   ) {}
 
   async execute(input: { userId: string; provider: 'apple' | 'google'; productId: string; receiptToken: string }) {
@@ -24,7 +26,7 @@ export class PurchaseSubscription {
       receiptToken: input.receiptToken,
     });
 
-    return this.subscriptionRepository.upsert({
+    const subscription = await this.subscriptionRepository.upsert({
       userId: input.userId,
       productId: validated.productId,
       provider: input.provider,
@@ -34,5 +36,12 @@ export class PurchaseSubscription {
       willRenew: validated.willRenew,
       inGracePeriod: validated.inGracePeriod,
     });
+
+    // The entitlement just changed — drop the cached premium/free decision so
+    // the freemium quota paths don't keep treating a fresh subscriber as free
+    // until the cache TTL lapses.
+    await this.entitlementCache.invalidate(input.userId);
+
+    return subscription;
   }
 }

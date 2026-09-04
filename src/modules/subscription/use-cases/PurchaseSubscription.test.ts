@@ -1,8 +1,17 @@
 import { ConflictError } from '../../../shared/errors/ConflictError';
+import type { EntitlementCachePort } from '../ports/EntitlementCachePort';
 import type { ReceiptValidatorPort } from '../ports/ReceiptValidatorPort';
 import type { SubscriptionRecord, SubscriptionRepositoryPort } from '../ports/SubscriptionRepositoryPort';
 import { PurchaseSubscription } from './PurchaseSubscription';
 import { ValidateReceipt } from './ValidateReceipt';
+
+class FakeEntitlementCache implements EntitlementCachePort {
+  invalidated: string[] = [];
+
+  async invalidate(userId: string): Promise<void> {
+    this.invalidated.push(userId);
+  }
+}
 
 class FakeReceiptValidator implements ReceiptValidatorPort {
   async validate(input: { productId: string; receiptToken: string }) {
@@ -49,8 +58,9 @@ class FakeSubscriptionRepository implements SubscriptionRepositoryPort {
 describe('PurchaseSubscription', () => {
   test('validates the receipt then persists the purchaseToken alongside the resulting state', async () => {
     const repository = new FakeSubscriptionRepository();
+    const entitlementCache = new FakeEntitlementCache();
     const validateReceipt = new ValidateReceipt(new FakeReceiptValidator(), new FakeReceiptValidator());
-    const purchaseSubscription = new PurchaseSubscription(validateReceipt, repository);
+    const purchaseSubscription = new PurchaseSubscription(validateReceipt, repository, entitlementCache);
 
     const result = await purchaseSubscription.execute({
       userId: 'user-1',
@@ -60,6 +70,7 @@ describe('PurchaseSubscription', () => {
     });
 
     expect(result.status).toBe('active');
+    expect(entitlementCache.invalidated).toEqual(['user-1']);
     expect(repository.upserted).toEqual([
       {
         userId: 'user-1',
@@ -89,8 +100,9 @@ describe('PurchaseSubscription', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    const entitlementCache = new FakeEntitlementCache();
     const validateReceipt = new ValidateReceipt(new FakeReceiptValidator(), new FakeReceiptValidator());
-    const purchaseSubscription = new PurchaseSubscription(validateReceipt, repository);
+    const purchaseSubscription = new PurchaseSubscription(validateReceipt, repository, entitlementCache);
 
     await expect(
       purchaseSubscription.execute({
@@ -101,6 +113,7 @@ describe('PurchaseSubscription', () => {
       }),
     ).rejects.toThrow(ConflictError);
     expect(repository.upserted).toHaveLength(0);
+    expect(entitlementCache.invalidated).toHaveLength(0);
   });
 
   test('allows re-verifying a purchaseToken already linked to the same user', async () => {
@@ -119,7 +132,7 @@ describe('PurchaseSubscription', () => {
       updatedAt: new Date(),
     });
     const validateReceipt = new ValidateReceipt(new FakeReceiptValidator(), new FakeReceiptValidator());
-    const purchaseSubscription = new PurchaseSubscription(validateReceipt, repository);
+    const purchaseSubscription = new PurchaseSubscription(validateReceipt, repository, new FakeEntitlementCache());
 
     await expect(
       purchaseSubscription.execute({

@@ -7,9 +7,10 @@ Bu modul mobil odeme makbuzlarini (Google Play Billing purchaseToken) validate e
 - `http/SubscriptionController.ts` request/response'u `subscription-backend-contract.md`'deki Entitlement seklinde tasir.
 - `use-cases/PurchaseSubscription.ts` satin alma akisini (+ purchaseToken conflict kontrolu), `ValidateReceipt.ts` provider dogrulamasini, `GetSubscriptionEntitlement.ts` premium kararini tasir.
 - `ports/ReceiptValidatorPort.ts` ve `SubscriptionRepositoryPort.ts` provider ve kalicilik bagimliliklarini soyutlar.
-- `entitlement/PremiumStatusCache.ts` + `entitlement/premiumContextMiddleware.ts`: premium/free karari kisa TTL ile Redis'te cache'lenir (`entitlement:premium:<userId>`, env `ENTITLEMENT_CACHE_TTL_SECONDS`), middleware `req.isPremium`'i set eder. `chatbot` (chat rate limiter + gunluk kota) ve `food-recognition` (`POST /food/photo` gunluk kotasi) bunu import eder. Fail-open: cache/DB dususte kullanici free sayilir, istek BLOKLANMAZ.
-- `adapters/billing/GoogleReceiptAdapter.ts` Google Play Developer API'ye (subscriptionsv2.get) baglanir, `AppleReceiptAdapter.ts` henuz stub (Android-only, bkz kontrat). `adapters/repository/PrismaSubscriptionRepository.ts` DB yazimini yapar.
-- `use-cases/ProcessGooglePlayRtdn.ts` + `jobs/processPlayRtdnJob.ts`: Google'in Real-time Developer Notifications webhook'unu isler.
+- `entitlement/PremiumStatusCache.ts` + `entitlement/premiumContextMiddleware.ts`: premium/free karari kisa TTL ile Redis'te cache'lenir (`entitlement:premium:<userId>`, key helper `premiumEntitlementCacheKey`, env `ENTITLEMENT_CACHE_TTL_SECONDS`), middleware `req.isPremium`'i set eder. `chatbot` (chat rate limiter + gunluk kota) ve `food-recognition` (`POST /food/photo` gunluk kotasi) bunu import eder. Fail-open: cache/DB dususte kullanici free sayilir, istek BLOKLANMAZ.
+- `entitlement/RedisEntitlementCache.ts` (`EntitlementCachePort`): entitlement degistiginde (satin alma + RTDN reconcile) o kullanicinin cache key'ini siler; boylece yeni abone TTL dolana kadar `free` gorunmez. Best-effort — silme hatasi atmaz.
+- `adapters/billing/GoogleReceiptAdapter.ts` Google Play Developer API'ye (subscriptionsv2.get) baglanir. `acknowledgementState === ACKNOWLEDGEMENT_STATE_PENDING` ve purchase aktifse server-side `purchases.subscriptions.acknowledge` (v1) cagrilir — best-effort, verification'i BLOKLAMAZ (client `completePurchase()` + RTDN reconcile yedek). `AppleReceiptAdapter.ts` henuz stub (Android-only, bkz kontrat). `adapters/repository/PrismaSubscriptionRepository.ts` DB yazimini yapar.
+- `use-cases/ProcessGooglePlayRtdn.ts` + `jobs/processPlayRtdnJob.ts`: Google'in Real-time Developer Notifications webhook'unu isler; reconcile sonrasi entitlement cache'i invalidate eder.
 
 ## Endpointler
 

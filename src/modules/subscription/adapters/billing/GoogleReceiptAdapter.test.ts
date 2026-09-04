@@ -12,9 +12,11 @@ function subscriptionPurchaseBody(overrides: {
   productId?: string;
   expiryTime?: string;
   autoRenewEnabled?: boolean;
+  acknowledgementState?: string;
 }) {
   return {
     subscriptionState: overrides.subscriptionState,
+    ...(overrides.acknowledgementState ? { acknowledgementState: overrides.acknowledgementState } : {}),
     lineItems: [
       {
         productId: overrides.productId ?? 'premium_yearly',
@@ -140,5 +142,64 @@ describe('GoogleReceiptAdapter', () => {
     await expect(buildAdapter().validate({ productId: 'premium_yearly', receiptToken: 'token' })).rejects.toMatchObject({
       code: 'PLAY_API_ERROR',
     });
+  });
+
+  test('acknowledges server-side when the purchase is active and pending acknowledgement', async () => {
+    fetchSpy.mockImplementation(async (input) => {
+      if (String(input).endsWith(':acknowledge')) {
+        return jsonResponse(200, {});
+      }
+      return jsonResponse(
+        200,
+        subscriptionPurchaseBody({
+          subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+          acknowledgementState: 'ACKNOWLEDGEMENT_STATE_PENDING',
+        }),
+      );
+    });
+
+    const result = await buildAdapter().validate({ productId: 'premium_yearly', receiptToken: 'purchase-token-123' });
+
+    expect(result.status).toBe('active');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://androidpublisher.googleapis.com/androidpublisher/v3/applications/com.example.app/purchases/subscriptions/premium_yearly/tokens/purchase-token-123:acknowledge',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  test('does not acknowledge when the purchase is already acknowledged', async () => {
+    fetchSpy.mockResolvedValue(
+      jsonResponse(
+        200,
+        subscriptionPurchaseBody({
+          subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+          acknowledgementState: 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED',
+        }),
+      ),
+    );
+
+    await buildAdapter().validate({ productId: 'premium_yearly', receiptToken: 'purchase-token-123' });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).not.toHaveBeenCalledWith(expect.stringContaining(':acknowledge'), expect.anything());
+  });
+
+  test('a failed acknowledgement never fails verification', async () => {
+    fetchSpy.mockImplementation(async (input) => {
+      if (String(input).endsWith(':acknowledge')) {
+        return jsonResponse(400, { error: 'already acknowledged' });
+      }
+      return jsonResponse(
+        200,
+        subscriptionPurchaseBody({
+          subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+          acknowledgementState: 'ACKNOWLEDGEMENT_STATE_PENDING',
+        }),
+      );
+    });
+
+    const result = await buildAdapter().validate({ productId: 'premium_yearly', receiptToken: 'purchase-token-123' });
+
+    expect(result.status).toBe('active');
   });
 });

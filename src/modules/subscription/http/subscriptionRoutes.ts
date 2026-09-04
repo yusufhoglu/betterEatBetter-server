@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../../shared/auth/authMiddleware';
+import { cacheRedisClient } from '../../../shared/cache/redisCacheClient';
 import { prisma } from '../../../shared/persistence/db';
 import { AppleReceiptAdapter } from '../adapters/billing/AppleReceiptAdapter';
 import { GooglePubSubVerifier } from '../adapters/billing/GooglePubSubVerifier';
 import { GoogleReceiptAdapter } from '../adapters/billing/GoogleReceiptAdapter';
 import { ResilientGoogleReceiptAdapter } from '../adapters/billing/ResilientGoogleReceiptAdapter';
 import { PrismaSubscriptionRepository } from '../adapters/repository/PrismaSubscriptionRepository';
+import { RedisEntitlementCache } from '../entitlement/RedisEntitlementCache';
 import { GetSubscriptionEntitlement } from '../use-cases/GetSubscriptionEntitlement';
 import { ProcessGooglePlayRtdn } from '../use-cases/ProcessGooglePlayRtdn';
 import { PurchaseSubscription } from '../use-cases/PurchaseSubscription';
@@ -20,9 +22,10 @@ export function subscriptionRoutes(): Router {
     new ResilientGoogleReceiptAdapter(new GoogleReceiptAdapter()),
   );
   const getSubscriptionEntitlement = new GetSubscriptionEntitlement(subscriptionRepository);
+  const entitlementCache = new RedisEntitlementCache(cacheRedisClient);
   const processGooglePlayRtdn = new ProcessGooglePlayRtdn(new GooglePubSubVerifier());
   const controller = new SubscriptionController(
-    new PurchaseSubscription(validateReceipt, subscriptionRepository),
+    new PurchaseSubscription(validateReceipt, subscriptionRepository, entitlementCache),
     getSubscriptionEntitlement,
     processGooglePlayRtdn,
   );

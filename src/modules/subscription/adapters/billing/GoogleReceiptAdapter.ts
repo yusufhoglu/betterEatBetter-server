@@ -18,6 +18,11 @@ const PLAY_API_ERROR_CODE = 'PLAY_API_ERROR';
 
 const subscriptionPurchaseSchema = z.object({
   subscriptionState: z.string(),
+  // ACKNOWLEDGEMENT_STATE_PENDING until either side acknowledges. Google
+  // auto-refunds a purchase left unacknowledged for 3 days, so we acknowledge
+  // server-side here rather than relying solely on the client's
+  // completePurchase() (see subscription-backend-contract.md step 4).
+  acknowledgementState: z.string().optional(),
   lineItems: z
     .array(
       z.object({
@@ -28,6 +33,8 @@ const subscriptionPurchaseSchema = z.object({
     )
     .default([]),
 });
+
+const ACKNOWLEDGEMENT_STATE_PENDING = 'ACKNOWLEDGEMENT_STATE_PENDING' as const;
 
 /**
  * Real Google Play Developer API integration — replaces the old
@@ -118,12 +125,53 @@ export class GoogleReceiptAdapter implements ReceiptValidatorPort {
       throw new ValidationError(INVALID_TOKEN_CODE, 'purchaseToken does not match the given productId');
     }
 
+    const resolvedProductId = mapped.productId ?? input.productId;
+
+    // Acknowledge server-side while the purchase is still entitled and pending
+    // acknowledgement. Best-effort: a failure here never fails verification —
+    // the client's completePurchase() and the RTDN reconcile path both retry
+    // this, and Google's 3-day window is generous.
+    if (mapped.status === 'active' && parsed.data.acknowledgementState === ACKNOWLEDGEMENT_STATE_PENDING) {
+      await this.acknowledge(resolvedProductId, purchaseToken, accessToken);
+    }
+
     return {
-      productId: mapped.productId ?? input.productId,
+      productId: resolvedProductId,
       status: mapped.status,
       expiresAt: mapped.expiresAt,
       willRenew: mapped.willRenew,
       inGracePeriod: mapped.inGracePeriod,
     };
+  }
+
+  /**
+   * POST purchases.subscriptions.acknowledge (the v1 endpoint — subscriptionsv2
+   * has no acknowledge of its own). Swallows every failure: if Google raced the
+   * client's acknowledgement we'd get a 400 here, and any transient error is
+   * covered by the client ack + RTDN reconcile. Never throws.
+   */
+  private async acknowledge(
+    productId: string,
+    purchaseToken: string,
+    accessToken: string | null | undefined,
+  ): Promise<void> {
+    const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(this.packageName)}/purchases/subscriptions/${encodeURIComponent(productId)}/tokens/${encodeURIComponent(purchaseToken)}:acknowledge`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+
+      if (!response.ok) {
+        logger.warn({ status: response.status, productId }, 'Google Play acknowledge returned non-2xx — leaving to client/RTDN');
+        return;
+      }
+
+      logger.info({ productId }, 'acknowledged Google Play purchase server-side');
+    } catch (err) {
+      logger.warn({ err, productId }, 'Google Play acknowledge request failed — leaving to client/RTDN');
+    }
   }
 }

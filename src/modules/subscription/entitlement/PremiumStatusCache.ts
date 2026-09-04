@@ -11,6 +11,12 @@ export interface EntitlementSource {
 export interface EntitlementCacheStore {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, mode: 'EX', ttlSeconds: number): Promise<unknown>;
+  del(key: string): Promise<unknown>;
+}
+
+/** Redis key holding one user's cached premium/free entitlement. */
+export function premiumEntitlementCacheKey(userId: string): string {
+  return `entitlement:premium:${userId}`;
 }
 
 /**
@@ -31,7 +37,7 @@ export class PremiumStatusCache {
   ) {}
 
   async isPremium(userId: string): Promise<boolean> {
-    const key = `entitlement:premium:${userId}`;
+    const key = premiumEntitlementCacheKey(userId);
 
     try {
       const cached = await this.store.get(key);

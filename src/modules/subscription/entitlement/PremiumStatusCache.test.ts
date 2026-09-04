@@ -8,6 +8,9 @@ function makeStore(initial: Record<string, string> = {}): EntitlementCacheStore 
     set: jest.fn(async (key: string, value: string) => {
       data[key] = value;
     }),
+    del: jest.fn(async (key: string) => {
+      delete data[key];
+    }),
   };
 }
 
@@ -48,6 +51,9 @@ describe('PremiumStatusCache', () => {
         throw new Error('redis down');
       }),
       set: jest.fn(async () => {
+        throw new Error('redis down');
+      }),
+      del: jest.fn(async () => {
         throw new Error('redis down');
       }),
     };

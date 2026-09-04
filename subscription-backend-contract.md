@@ -55,8 +55,12 @@ Backend must:
    `purchaseToken` + `linkedPurchaseToken` chain, `obfuscatedExternalAccountId`
    if you set one at purchase time — the app currently doesn't, so bind on
    first-seen and reject if the token is already bound to another user).
-4. Acknowledge to Google if you verify server-side before the client does
-   (either side acknowledging within 3 days is fine; the client also will).
+4. Acknowledge to Google. The backend now does this server-side
+   (`purchases.subscriptions.acknowledge`) whenever the Play API reports the
+   purchase as active + `ACKNOWLEDGEMENT_STATE_PENDING` — best-effort, it never
+   fails the verify response. The client's `completePurchase()` and the RTDN
+   reconcile path stay as backups (either side acknowledging within 3 days is
+   fine).
 5. Upsert the user's entitlement row and return it.
 
 `200 OK` → `Entitlement`. Errors: `400 INVALID_TOKEN`, `409 TOKEN_ALREADY_LINKED`,
