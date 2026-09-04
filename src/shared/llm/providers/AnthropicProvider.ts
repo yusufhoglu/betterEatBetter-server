@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { IntegrationError } from '../../errors/IntegrationError';
 import { llmTokensTotal } from '../../observability/metrics';
+import { createModuleLogger } from '../../observability/logger';
 import type { LlmClient } from '../LlmClient';
 import type {
   LlmCompleteRequest,
@@ -22,6 +23,7 @@ type ContentBlock = Anthropic.ContentBlock;
 
 const DEFAULT_FEATURE = 'unknown';
 const DEFAULT_MAX_TOKENS = 4096;
+const logger = createModuleLogger('llm');
 
 export interface AnthropicProviderOptions {
   readonly apiKey: string;
@@ -53,7 +55,7 @@ export class AnthropicProvider implements LlmClient {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
     };
-    recordUsage(request.feature, usage);
+    recordUsage(request.feature, request.model ?? this.model, usage);
 
     return {
       message: fromAnthropicContent(response.content),
@@ -78,17 +80,29 @@ export class AnthropicProvider implements LlmClient {
     }
 
     const finalMessage = await stream.finalMessage();
-    recordUsage(request.feature, {
+    recordUsage(request.feature, request.model ?? this.model, {
       inputTokens: finalMessage.usage.input_tokens,
       outputTokens: finalMessage.usage.output_tokens,
     });
   }
 }
 
-function recordUsage(feature: string | undefined, usage: LlmUsage): void {
+/**
+ * Bumps the aggregate `llm_tokens_total` counter AND logs the per-call usage.
+ * The counter answers "how many tokens does feature X burn over time"; the log
+ * line is what makes a SINGLE conversation's cost answerable — every log line
+ * automatically carries `traceId` (== conversationId for chatbot/dietician) via
+ * the tracer's pino mixin, so it's queryable in Grafana/Loki as
+ * `{service="node-backend"} |= "llm usage" | traceId="<conversationId>"`.
+ */
+function recordUsage(feature: string | undefined, model: string, usage: LlmUsage): void {
   const featureLabel = feature ?? DEFAULT_FEATURE;
   llmTokensTotal.inc({ provider: 'anthropic', feature: featureLabel, type: 'input' }, usage.inputTokens);
   llmTokensTotal.inc({ provider: 'anthropic', feature: featureLabel, type: 'output' }, usage.outputTokens);
+  logger.info(
+    { provider: 'anthropic', feature: featureLabel, model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
+    'llm usage',
+  );
 }
 
 /**

@@ -11,6 +11,11 @@ jest.mock('../config/env', () => ({
     LLM_PREMIUM_BURST_SLOTS: 4,
     LLM_MAX_QUEUE_DEPTH: 200,
     OPENAI_MAX_RETRIES: 3,
+    // The providers now import shared/observability/logger (per-call usage
+    // logging) — that module constructs a real pino instance at import time
+    // and needs a valid LOG_LEVEL, unlike the rest of this mock's fields.
+    LOG_LEVEL: 'info' as const,
+    NODE_ENV: 'test' as const,
   },
 }));
 

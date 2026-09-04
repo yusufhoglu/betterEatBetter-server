@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { IntegrationError } from '../../errors/IntegrationError';
 import { llmTokensTotal } from '../../observability/metrics';
+import { createModuleLogger } from '../../observability/logger';
 import type { LlmClient } from '../LlmClient';
 import type {
   LlmCompleteRequest,
@@ -19,6 +20,7 @@ type ChatCompletionToolChoiceOption = OpenAI.Chat.Completions.ChatCompletionTool
 type ChatCompletionMessage = OpenAI.Chat.Completions.ChatCompletionMessage;
 
 const DEFAULT_FEATURE = 'unknown';
+const logger = createModuleLogger('llm');
 
 export interface OpenAiProviderOptions {
   readonly apiKey: string;
@@ -70,7 +72,7 @@ export class OpenAiProvider implements LlmClient {
       inputTokens: response.usage?.prompt_tokens ?? 0,
       outputTokens: response.usage?.completion_tokens ?? 0,
     };
-    recordUsage(request.feature, usage);
+    recordUsage(request.feature, request.model ?? this.model, usage);
 
     return {
       message: fromOpenAiMessage(choice.message),
@@ -107,7 +109,7 @@ export class OpenAiProvider implements LlmClient {
         };
       }
     }
-    recordUsage(request.feature, usage);
+    recordUsage(request.feature, request.model ?? this.model, usage);
   }
 }
 
@@ -232,10 +234,22 @@ function* iterateErrorChain(err: unknown): Iterable<unknown> {
   }
 }
 
-function recordUsage(feature: string | undefined, usage: LlmUsage): void {
+/**
+ * Bumps the aggregate `llm_tokens_total` counter AND logs the per-call usage.
+ * The counter answers "how many tokens does feature X burn over time"; the log
+ * line is what makes a SINGLE conversation's cost answerable — every log line
+ * automatically carries `traceId` (== conversationId for chatbot/dietician) via
+ * the tracer's pino mixin, so it's queryable in Grafana/Loki as
+ * `{service="node-backend"} |= "llm usage" | traceId="<conversationId>"`.
+ */
+function recordUsage(feature: string | undefined, model: string, usage: LlmUsage): void {
   const featureLabel = feature ?? DEFAULT_FEATURE;
   llmTokensTotal.inc({ provider: 'openai', feature: featureLabel, type: 'input' }, usage.inputTokens);
   llmTokensTotal.inc({ provider: 'openai', feature: featureLabel, type: 'output' }, usage.outputTokens);
+  logger.info(
+    { provider: 'openai', feature: featureLabel, model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
+    'llm usage',
+  );
 }
 
 function toOpenAiMessages(request: { messages: LlmMessage[]; system?: string }): ChatCompletionMessageParam[] {
