@@ -3,6 +3,7 @@ import { authMiddleware } from '../../../shared/auth/authMiddleware';
 import { cacheRedisClient } from '../../../shared/cache/redisCacheClient';
 import { env } from '../../../shared/config/env';
 import { createLlmClient } from '../../../shared/llm/llmClientFactory';
+import { resolveModel } from '../../../shared/llm/modelTiers';
 import { prisma } from '../../../shared/persistence/db';
 import { PrismaBodyMeasurementRepository } from '../../body-analytics/adapters/repository/PrismaBodyMeasurementRepository';
 import { PrismaMealLogReadModelRepository } from '../../body-analytics/adapters/repository/PrismaMealLogReadModelRepository';
@@ -38,13 +39,17 @@ import { RunDieticianTurn } from '../use-cases/RunDieticianTurn';
 import { DieticianAnalyticsTool } from '../use-cases/tools/DieticianAnalyticsTool';
 import { DieticianMealDataTool } from '../use-cases/tools/DieticianMealDataTool';
 import { ProposeMealLogTool } from '../use-cases/tools/ProposeMealLogTool';
+import { ProvideRecipeTool } from '../use-cases/tools/ProvideRecipeTool';
+import { RateMealTool } from '../use-cases/tools/RateMealTool';
 import { DieticianController } from './DieticianController';
 
 export function dieticianRoutes(): Router {
   const router = Router();
 
   const conversationRepository = new PrismaDieticianConversationRepository(prisma);
-  const llmDieticianPort = new TieredLlmDieticianAdapter(createLlmClient());
+  const llmClient = createLlmClient();
+  const llmDieticianPort = new TieredLlmDieticianAdapter(llmClient);
+  const cheapModel = resolveModel('cheap');
 
   const mealItemRepository = new PrismaMealItemRepository(prisma);
   const userProfileRepository = new PrismaUserProfileRepository(prisma);
@@ -73,6 +78,8 @@ export function dieticianRoutes(): Router {
     new DieticianMealDataTool(getDayNutrientTotals, new GetLoggedMealTypesForDateRange(mealItemRepository)),
     new DieticianAnalyticsTool(getBodyStats, getMealAverages),
     new ProposeMealLogTool(recognizeFromText),
+    new RateMealTool(recognizeFromText, llmClient, cheapModel),
+    new ProvideRecipeTool(llmClient, cheapModel),
   ];
 
   const runDieticianTurn = new RunDieticianTurn(

@@ -6,10 +6,13 @@ import { buildDieticianContextBlock } from '../domain/dieticianContext';
 import type { DieticianConversation } from '../domain/DieticianConversation';
 import { needsAssistedLane } from '../domain/DieticianIntent';
 import type { DieticianMessage } from '../domain/DieticianMessage';
+import { encodeRatingMessage, encodeRecipeMessage } from '../domain/cardMessageCodec';
 import type { DieticianStreamChunk } from '../domain/DieticianStreamChunk';
 import type { MealLogProposal } from '../domain/MealLogProposal';
+import type { MealRating } from '../domain/MealRating';
 import { summarizeProposalForLlm } from '../domain/mealProposalUtils';
 import { encodeProposalMessage } from '../domain/proposalMessageCodec';
+import type { Recipe } from '../domain/Recipe';
 import {
   DIETICIAN_ADVICE_GUARD,
   DIETICIAN_SMALLTALK_GUARD,
@@ -37,6 +40,18 @@ interface TextSink {
 function toLlmMessage(message: DieticianMessage): LlmMessage {
   if (message.proposal) {
     return { role: 'assistant', content: summarizeProposalForLlm(message.proposal) };
+  }
+  if (message.rating) {
+    return {
+      role: 'assistant',
+      content: `Rated "${message.rating.mealName}" ${message.rating.score}/10. Fix: ${message.rating.fixNote}`,
+    };
+  }
+  if (message.recipe) {
+    return {
+      role: 'assistant',
+      content: `Provided recipe "${message.recipe.title}" (${message.recipe.calories} kcal).`,
+    };
   }
   return { role: message.role, content: message.content };
 }
@@ -123,9 +138,8 @@ export class RunDieticianTurn {
     baseMessages: LlmMessage[],
     allowProposal: boolean,
   ): AsyncGenerator<DieticianStreamChunk, LlmMessage[], undefined> {
-    const armedTools = allowProposal
-      ? this.tools
-      : this.tools.filter((tool) => !tool.yieldsProposal);
+    // propose_meal_log is armed only on log_help; rating/recipe cards (and plain tools) stay armed everywhere.
+    const armedTools = this.tools.filter((tool) => tool.yieldsCard !== 'proposal' || allowProposal);
     const toolDefinitions = armedTools.map((tool) => tool.definition);
 
     let workingMessages = baseMessages;
@@ -151,15 +165,15 @@ export class RunDieticianTurn {
             })
           : { error: `Unknown tool: ${toolCall.name}` };
 
-        if (tool?.yieldsProposal) {
-          const proposal = output as MealLogProposal;
-          await this.conversationRepository.appendMessage(
-            input.conversationId,
-            'assistant',
-            encodeProposalMessage(proposal),
-            'live',
-          );
-          yield { type: 'proposal', proposal };
+        if (tool?.yieldsCard) {
+          const encoded =
+            tool.yieldsCard === 'proposal'
+              ? encodeProposalMessage(output as MealLogProposal)
+              : tool.yieldsCard === 'rating'
+                ? encodeRatingMessage(output as MealRating)
+                : encodeRecipeMessage(output as Recipe);
+          await this.conversationRepository.appendMessage(input.conversationId, 'assistant', encoded, 'live');
+          yield { type: tool.yieldsCard, [tool.yieldsCard]: output } as DieticianStreamChunk;
         }
 
         workingMessages = [

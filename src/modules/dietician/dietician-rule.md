@@ -36,7 +36,8 @@
 - **Sonsuz tool-calling korumasi**: `DIETICIAN_MAX_GATHER_TURNS` (varsayilan 3). Asilirsa
   loop zorla kesilir, eldeki mesajlarla `streamAdvice` cagrilir.
 - **`propose_meal_log` sadece `intent === 'log_help'` iken armed edilir.** Diger turlarda
-  tool listesinden cikarilir (`yieldsProposal` filtresi).
+  tool listesinden cikarilir; `rate_meal` ve `provide_recipe` ise her turda armed kalir
+  (`DieticianTool.yieldsCard` — `'proposal' | 'rating' | 'recipe'` — genellenmis filtre).
 - **stream ortasinda hata** — `chatbot-rule.md`'deki sozlesmenin AYNISI: yarim metin
   KAYDEDILMEZ, `STREAM_INTERRUPTED` (IntegrationError) firlatilir, controller SSE `error`
   event'i yollar, turnCount ARTMAZ.
@@ -58,6 +59,9 @@ Boylece dietician kullaniciyi bir tool round-trip harcamadan tanir. Volatile/agi
 - `DieticianAnalyticsTool` -> `body-analytics` `GetBodyStats` + `GetMealAverages`.
 - `ProposeMealLogTool` -> `food-recognition` `RecognizeFromText`. SADECE yeni draft uretir;
   draft revizyonu chatbot akisidir, burada YOK.
+- `RateMealTool` -> `food-recognition` `RecognizeFromText` (makrolar) + CHEAP structured call
+  (skor/not). `ProvideRecipeTool` -> tek CHEAP structured call (tarif). Ikisi de YAZMAZ;
+  `yieldsCard` ile `'rating'` / `'recipe'` kart uretir (`Change 1-3`, `dietician-backend-changes.md`).
 - Her tool `DieticianTool` sekli: `definition` (`LlmToolDefinition`) + `execute(...)`.
 - `chatbot` modulunden HICBIR SEY import edilmez (kendi `MealLogProposal`, kendi codec,
   kendi `trimHistory` re-export'u degil dogrudan `shared/llm/conversation/trimHistory`).

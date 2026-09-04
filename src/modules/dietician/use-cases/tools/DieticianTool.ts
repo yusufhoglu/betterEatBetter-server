@@ -7,8 +7,8 @@ import type { LlmMessage, LlmToolDefinition } from '../../../../shared/llm/types
  */
 export interface DieticianTool {
   readonly definition: LlmToolDefinition;
-  /** When true, execute()'s output is also yielded as a `{type:'proposal'}` stream chunk. */
-  readonly yieldsProposal?: boolean;
+  /** When set, execute()'s output is also yielded as this stream-chunk type + persisted as a card message. */
+  readonly yieldsCard?: 'proposal' | 'rating' | 'recipe';
   execute(
     userId: string,
     input: Record<string, unknown>,

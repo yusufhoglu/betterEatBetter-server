@@ -1,4 +1,6 @@
 import type { MealLogProposal } from './MealLogProposal';
+import type { MealRating } from './MealRating';
+import type { Recipe } from './Recipe';
 
 export type DieticianMessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
@@ -16,5 +18,7 @@ export interface DieticianMessage {
   content: string;
   origin: DieticianMessageOrigin;
   proposal?: MealLogProposal;
+  rating?: MealRating;
+  recipe?: Recipe;
   createdAt: Date;
 }

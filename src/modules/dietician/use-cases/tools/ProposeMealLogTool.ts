@@ -30,7 +30,7 @@ export class ProposeMealLogTool implements DieticianTool {
     },
   };
 
-  readonly yieldsProposal = true;
+  readonly yieldsCard = 'proposal' as const;
 
   constructor(private readonly recognizeFromText: RecognizeFromText) {}
 

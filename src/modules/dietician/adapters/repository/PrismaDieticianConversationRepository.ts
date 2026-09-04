@@ -12,6 +12,7 @@ import type {
   DieticianMessageOrigin,
   DieticianMessageRole,
 } from '../../domain/DieticianMessage';
+import { decodeRatingMessage, decodeRecipeMessage } from '../../domain/cardMessageCodec';
 import { decodeProposalMessage } from '../../domain/proposalMessageCodec';
 import type { DieticianConversationRepositoryPort } from '../../ports/DieticianConversationRepositoryPort';
 
@@ -27,13 +28,18 @@ function parseDigest(value: Prisma.JsonValue | null): ConversationDigest | null 
 
 function toDomainMessage(row: PrismaDieticianMessage): DieticianMessage {
   const proposal = decodeProposalMessage(row.content);
+  const rating = decodeRatingMessage(row.content);
+  const recipe = decodeRecipeMessage(row.content);
+  const isCard = Boolean(proposal || rating || recipe);
   return {
     id: row.id,
     conversationId: row.conversationId,
     role: row.role as DieticianMessageRole,
-    content: proposal ? '' : row.content,
+    content: isCard ? '' : row.content,
     origin: row.origin as DieticianMessageOrigin,
     ...(proposal ? { proposal } : {}),
+    ...(rating ? { rating } : {}),
+    ...(recipe ? { recipe } : {}),
     createdAt: row.createdAt,
   };
 }

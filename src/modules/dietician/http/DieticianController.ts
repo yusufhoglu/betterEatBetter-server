@@ -79,10 +79,19 @@ function resolveLocalDate(timeZone: string, requestedDate?: string): Date {
 }
 
 function writeSseChunk(res: Response, chunk: DieticianStreamChunk): void {
-  if (chunk.type === 'text') {
-    res.write(`event: text\ndata: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
-  } else {
-    res.write(`event: proposal\ndata: ${JSON.stringify({ proposal: chunk.proposal })}\n\n`);
+  switch (chunk.type) {
+    case 'text':
+      res.write(`event: text\ndata: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
+      break;
+    case 'proposal':
+      res.write(`event: proposal\ndata: ${JSON.stringify({ proposal: chunk.proposal })}\n\n`);
+      break;
+    case 'rating':
+      res.write(`event: rating\ndata: ${JSON.stringify({ rating: chunk.rating })}\n\n`);
+      break;
+    case 'recipe':
+      res.write(`event: recipe\ndata: ${JSON.stringify({ recipe: chunk.recipe })}\n\n`);
+      break;
   }
 }
 

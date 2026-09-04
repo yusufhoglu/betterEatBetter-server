@@ -2,6 +2,8 @@ import { IntegrationError } from '../../../shared/errors/IntegrationError';
 import type { LlmMessage } from '../../../shared/llm/types';
 import type { DieticianStreamChunk } from '../domain/DieticianStreamChunk';
 import type { MealLogProposal } from '../domain/MealLogProposal';
+import type { MealRating } from '../domain/MealRating';
+import type { Recipe } from '../domain/Recipe';
 import {
   FakeDailySnapshotPort,
   FakePlanContextPort,
@@ -25,10 +27,32 @@ class FakeDataTool implements DieticianTool {
 
 class FakeProposeTool implements DieticianTool {
   readonly calls: Array<Record<string, unknown>> = [];
-  readonly yieldsProposal = true;
+  readonly yieldsCard = 'proposal' as const;
   readonly definition = { name: 'propose_meal_log', description: 'fake', inputSchema: { type: 'object' } };
   constructor(private readonly result: MealLogProposal) {}
   async execute(_userId: string, input: Record<string, unknown>): Promise<MealLogProposal> {
+    this.calls.push(input);
+    return this.result;
+  }
+}
+
+class FakeRateMealTool implements DieticianTool {
+  readonly calls: Array<Record<string, unknown>> = [];
+  readonly yieldsCard = 'rating' as const;
+  readonly definition = { name: 'rate_meal', description: 'fake', inputSchema: { type: 'object' } };
+  constructor(private readonly result: MealRating) {}
+  async execute(_userId: string, input: Record<string, unknown>): Promise<MealRating> {
+    this.calls.push(input);
+    return this.result;
+  }
+}
+
+class FakeRecipeTool implements DieticianTool {
+  readonly calls: Array<Record<string, unknown>> = [];
+  readonly yieldsCard = 'recipe' as const;
+  readonly definition = { name: 'provide_recipe', description: 'fake', inputSchema: { type: 'object' } };
+  constructor(private readonly result: Recipe) {}
+  async execute(_userId: string, input: Record<string, unknown>): Promise<Recipe> {
     this.calls.push(input);
     return this.result;
   }
@@ -48,6 +72,27 @@ const fakeProposal: MealLogProposal = {
       createdAt: new Date('2026-09-03T00:00:00.000Z'),
     },
   ],
+};
+
+const fakeRating: MealRating = {
+  mealName: 'chicken sandwich',
+  score: 6.5,
+  macros: { totalCalories: 450, totalProteinGrams: 30, totalCarbsGrams: 40, totalFatGrams: 15 },
+  flaggedMacro: 'carbs',
+  goodNote: 'Good protein for the portion.',
+  fixNote: 'Swap the white bread for whole grain.',
+};
+
+const fakeRecipe: Recipe = {
+  title: 'High-protein chicken bowl',
+  timeMinutes: 20,
+  servings: 1,
+  calories: 550,
+  proteinGrams: 45,
+  carbsGrams: 40,
+  fatGrams: 18,
+  ingredients: [{ name: 'chicken breast', amount: '150g' }],
+  steps: ['Grill the chicken.', 'Serve over rice with vegetables.'],
 };
 
 function build(overrides: {
@@ -178,6 +223,65 @@ describe('RunDieticianTurn', () => {
     expect(conversation?.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'assistant']);
     expect(conversation?.messages[1]?.proposal).toMatchObject({ rawDescription: 'chicken sandwich' });
     expect(conversation?.messages[2]?.content).toBe('Logged as a draft — confirm when ready.');
+  });
+
+  it('rate_meal and provide_recipe stay armed regardless of intent, unlike propose_meal_log', async () => {
+    const proposeTool = new FakeProposeTool(fakeProposal);
+    const rateTool = new FakeRateMealTool(fakeRating);
+    const recipeTool = new FakeRecipeTool(fakeRecipe);
+    const { llm, runTurn } = build({ tools: [proposeTool, rateTool, recipeTool] });
+    llm.setIntent('advice');
+    llm.setGatherResults([{ content: '' }]);
+
+    await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'advice pls', today: TODAY }));
+
+    const toolNames = llm.gatherCalls[0]!.tools.map((t) => t.name);
+    expect(toolNames).toEqual(['rate_meal', 'provide_recipe']);
+  });
+
+  it('rate_meal: yields a rating chunk immediately, persists it, then streams advice', async () => {
+    const rateTool = new FakeRateMealTool(fakeRating);
+    const { llm, runTurn, repository } = build({ tools: [rateTool] });
+    llm.setIntent('advice');
+    llm.setGatherResults([
+      { content: '', toolCalls: [{ id: 't1', name: 'rate_meal', input: { description: 'chicken sandwich' } }] },
+      { content: '' },
+    ]);
+    llm.setAdviceChunks(['Not bad — swap the bread next time.']);
+
+    const chunks = await collect(
+      runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'rate my chicken sandwich', today: TODAY }),
+    );
+
+    expect(chunks[0]).toEqual({ type: 'rating', rating: fakeRating });
+    expect(textOf(chunks)).toBe('Not bad — swap the bread next time.');
+
+    const conversation = await repository.findById('user-1', 'c1');
+    expect(conversation?.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'assistant']);
+    expect(conversation?.messages[1]?.rating).toEqual(fakeRating);
+    expect(conversation?.messages[1]?.content).toBe('');
+  });
+
+  it('provide_recipe: yields a recipe chunk immediately, persists it, then streams advice', async () => {
+    const recipeTool = new FakeRecipeTool(fakeRecipe);
+    const { llm, runTurn, repository } = build({ tools: [recipeTool] });
+    llm.setIntent('advice');
+    llm.setGatherResults([
+      { content: '', toolCalls: [{ id: 't1', name: 'provide_recipe', input: { request: 'high protein dinner' } }] },
+      { content: '' },
+    ]);
+    llm.setAdviceChunks(['Here is a quick one.']);
+
+    const chunks = await collect(
+      runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'give me a high protein dinner recipe', today: TODAY }),
+    );
+
+    expect(chunks[0]).toEqual({ type: 'recipe', recipe: fakeRecipe });
+    expect(textOf(chunks)).toBe('Here is a quick one.');
+
+    const conversation = await repository.findById('user-1', 'c1');
+    expect(conversation?.messages[1]?.recipe).toEqual(fakeRecipe);
+    expect(conversation?.messages[1]?.content).toBe('');
   });
 
   it('forces synthesis once maxGatherTurns is reached', async () => {

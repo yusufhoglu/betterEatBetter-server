@@ -7,6 +7,7 @@ import type {
   DieticianMessageOrigin,
   DieticianMessageRole,
 } from '../../domain/DieticianMessage';
+import { decodeRatingMessage, decodeRecipeMessage } from '../../domain/cardMessageCodec';
 import { decodeProposalMessage } from '../../domain/proposalMessageCodec';
 import type { DieticianConversationRepositoryPort } from '../../ports/DieticianConversationRepositoryPort';
 
@@ -55,13 +56,18 @@ export class InMemoryDieticianConversationRepository implements DieticianConvers
     }
 
     const proposal = decodeProposalMessage(content);
+    const rating = decodeRatingMessage(content);
+    const recipe = decodeRecipeMessage(content);
+    const isCard = Boolean(proposal || rating || recipe);
     const message: DieticianMessage = {
       id: randomUUID(),
       conversationId,
       role,
-      content: proposal ? '' : content,
+      content: isCard ? '' : content,
       origin,
       ...(proposal ? { proposal } : {}),
+      ...(rating ? { rating } : {}),
+      ...(recipe ? { recipe } : {}),
       createdAt: new Date(),
     };
     conversation.messages.push(message);

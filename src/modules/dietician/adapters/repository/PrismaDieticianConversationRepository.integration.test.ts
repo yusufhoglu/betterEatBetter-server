@@ -2,6 +2,9 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import type { PrismaClient } from '@prisma/client';
 import { execSync } from 'node:child_process';
 import type { ConversationDigest } from '../../domain/ConversationDigest';
+import { encodeRatingMessage, encodeRecipeMessage } from '../../domain/cardMessageCodec';
+import type { MealRating } from '../../domain/MealRating';
+import type { Recipe } from '../../domain/Recipe';
 import type { PrismaDieticianConversationRepository as RepoType } from './PrismaDieticianConversationRepository';
 
 const DIGEST: ConversationDigest = {
@@ -72,6 +75,43 @@ describe('PrismaDieticianConversationRepository (integration)', () => {
     expect(conversation?.turnCount).toBe(2);
     expect(conversation?.digestTurn).toBe(2);
     expect(conversation?.digest).toEqual(DIGEST);
+  });
+
+  it('round-trips a rating card message with content decoded back and empty on the row', async () => {
+    await repository.findOrCreate('user-6', 'd-6');
+    const rating: MealRating = {
+      mealName: 'chicken sandwich',
+      score: 6.5,
+      macros: { totalCalories: 450, totalProteinGrams: 30, totalCarbsGrams: 40, totalFatGrams: 15 },
+      flaggedMacro: 'carbs',
+      goodNote: 'Good protein for the portion.',
+      fixNote: 'Swap the white bread for whole grain.',
+    };
+    await repository.appendMessage('d-6', 'assistant', encodeRatingMessage(rating), 'live');
+
+    const conversation = await repository.findById('user-6', 'd-6');
+    expect(conversation?.messages[0]?.rating).toEqual(rating);
+    expect(conversation?.messages[0]?.content).toBe('');
+  });
+
+  it('round-trips a recipe card message with content decoded back and empty on the row', async () => {
+    await repository.findOrCreate('user-7', 'd-7');
+    const recipe: Recipe = {
+      title: 'High-protein chicken bowl',
+      timeMinutes: 20,
+      servings: 1,
+      calories: 550,
+      proteinGrams: 45,
+      carbsGrams: 40,
+      fatGrams: 18,
+      ingredients: [{ name: 'chicken breast', amount: '150g' }],
+      steps: ['Grill the chicken.', 'Serve over rice with vegetables.'],
+    };
+    await repository.appendMessage('d-7', 'assistant', encodeRecipeMessage(recipe), 'live');
+
+    const conversation = await repository.findById('user-7', 'd-7');
+    expect(conversation?.messages[0]?.recipe).toEqual(recipe);
+    expect(conversation?.messages[0]?.content).toBe('');
   });
 
   it('returns null from findById for a conversation owned by another user', async () => {
