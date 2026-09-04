@@ -128,7 +128,7 @@ describe('subscription-purchase-rtdn-flow (E2E)', () => {
     // Step 2: Google sends an RTDN that the subscription was canceled
     const notification = Buffer.from(
       JSON.stringify({
-        packageName: 'com.bettereatbetter.better_eat_better',
+        packageName: 'com.hembul.foodtracker',
         subscriptionNotification: { purchaseToken: PURCHASE_TOKEN, subscriptionId: 'premium_yearly', notificationType: 3 },
       }),
     ).toString('base64');

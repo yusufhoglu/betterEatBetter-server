@@ -30,7 +30,8 @@ Play Console product ids the app expects (base plans, one each):
 | `premium_monthly` | monthly |
 | `premium_yearly` | yearly |
 
-Android package name: `com.bettereatbetter.better_eat_better`.
+Android package name: `com.hembul.foodtracker` (must match the app's
+`applicationId` and the `GOOGLE_PLAY_PACKAGE_NAME` env var).
 
 ## Endpoints
 
