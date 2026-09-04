@@ -151,24 +151,10 @@ const envSchema = z.object({
       message: "ANTHROPIC_API_KEY is required when LLM_PROVIDER='anthropic'",
     });
   }
-  if (data.NOTIFICATIONS_ENABLED) {
-    const requiredWhenEnabled: Array<keyof typeof data> = [
-      'FCM_SERVICE_ACCOUNT_JSON',
-      'APNS_KEY_ID',
-      'APNS_TEAM_ID',
-      'APNS_AUTH_KEY',
-      'APNS_BUNDLE_ID',
-    ];
-    for (const key of requiredWhenEnabled) {
-      if (!data[key]) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: [key],
-          message: `${key} is required when NOTIFICATIONS_ENABLED is true`,
-        });
-      }
-    }
-  }
+  // No notifications-specific check here: push goes through FCM, whose
+  // credentials resolve via GoogleAuth (inline FCM_SERVICE_ACCOUNT_JSON,
+  // GOOGLE_APPLICATION_CREDENTIALS, gcloud ADC, or the GCP metadata server), so
+  // there is no single env var that must be present when NOTIFICATIONS_ENABLED.
   if (data.LOKI_URL) {
     if (data.LOKI_URL.endsWith(LOKI_PUSH_ENDPOINT_SUFFIX)) {
       ctx.addIssue({

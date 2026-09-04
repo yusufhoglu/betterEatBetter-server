@@ -17,9 +17,7 @@ import type { BaseJobPayload } from '../../../shared/queue/jobTypes';
 import { registerRepeatableJob } from '../../../shared/scheduling/cronRunner';
 import { runWithContext } from '../../../shared/observability/tracer';
 import { MeNotificationPreferencesAdapter } from '../adapters/preferences/MeNotificationPreferencesAdapter';
-import { ApnsPushAdapter } from '../adapters/push/ApnsPushAdapter';
 import { FcmPushAdapter } from '../adapters/push/FcmPushAdapter';
-import { PlatformRoutingPushSender } from '../adapters/push/PlatformRoutingPushSender';
 import { PrismaDeviceTokenRepository } from '../adapters/repository/PrismaDeviceTokenRepository';
 import { WeeklySummaryAdapter } from '../adapters/summary/WeeklySummaryAdapter';
 import { DailyTrackingCompletionAdapter } from '../adapters/tracking/DailyTrackingCompletionAdapter';
@@ -45,8 +43,10 @@ const SCHEDULES: ReadonlyArray<{ name: ScheduledJobName; pattern: string }> = [
 function buildDependencies() {
   const repository = new PrismaDeviceTokenRepository(prisma);
   const preferencesPort = new MeNotificationPreferencesAdapter(new PrismaMePreferencesRepository(prisma));
-  const pushSender = new PlatformRoutingPushSender(new FcmPushAdapter(), new ApnsPushAdapter());
-  const sendPushToUser = new SendPushToUser(repository, pushSender);
+  // Both platforms go through FCM — the mobile app registers FCM tokens for iOS
+  // too, and FCM relays those to APNs. ApnsPushAdapter is kept for a possible
+  // future direct-APNs path but is not wired here.
+  const sendPushToUser = new SendPushToUser(repository, new FcmPushAdapter());
 
   const dayLogsPort = new NutritionLoggingDayLogsAdapter(
     new GetLoggedMealTypesForDateRange(new PrismaMealItemRepository(prisma)),

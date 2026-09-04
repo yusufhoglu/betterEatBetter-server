@@ -23,9 +23,9 @@ ports/
 
 adapters/
   repository/PrismaDeviceTokenRepository
-  push/FcmPushAdapter            — FCM HTTP v1 (google-auth-library + fetch)
-  push/ApnsPushAdapter           — APNs HTTP/2 (node:http2 + jsonwebtoken ES256)
-  push/PlatformRoutingPushSender — platform'a gore FCM/APNs secer
+  push/FcmPushAdapter            — FCM HTTP v1, HER IKI platform (GoogleAuth/ADC + fetch)
+  push/ApnsPushAdapter           — APNs HTTP/2 (node:http2 + jsonwebtoken ES256) — WIRE EDILMEDI
+  push/PlatformRoutingPushSender — platform'a gore FCM/APNs secer — WIRE EDILMEDI
   preferences/MeNotificationPreferencesAdapter
   tracking/DailyTrackingCompletionAdapter
   summary/WeeklySummaryAdapter
@@ -85,8 +85,9 @@ sayfalar ve **her cihazin kendi saat dilimine** gore filtreler.
 | `streak-saver` | `*/30 * * * *` | `streakSaver` acik + yerel saat `STREAK_SAVER_LOCAL_HOUR` + gun tamamlanmadi + `currentStreak >= 1` | `streak:<userId>:<dateKey>` |
 | `weekly-report` | `0 * * * *` | `weeklyReport` acik + yerel gun `WEEKLY_REPORT_WEEKDAY` + yerel saat `WEEKLY_REPORT_LOCAL_HOUR` | `weekly:<userId>:<isoWeekKey>` |
 
-Gonderim `SendPushToUser` uzerinden — kullanicinin TUM cihazlarina gider,
-saglayicinin `invalid_token` dedigi satirlar silinir.
+Gonderim `SendPushToUser` -> `FcmPushAdapter` uzerinden (iOS dahil; FCM APNs'e
+relay eder) — kullanicinin TUM cihazlarina gider, saglayicinin `invalid_token`
+dedigi satirlar silinir.
 
 ## Sequence — device token kayit
 
@@ -117,7 +118,7 @@ sequenceDiagram
     participant Pref as NotificationPreferencesPort
     participant Guard as SendGuard (Redis)
     participant Send as SendPushToUser
-    participant Push as PlatformRoutingPushSender
+    participant Push as FcmPushAdapter
 
     Cron->>Worker: fire (fresh traceId)
     Worker->>Job: execute(now)
@@ -128,7 +129,7 @@ sequenceDiagram
         Job->>Guard: claim(key, ttl)
         alt claim == true
             Job->>Send: execute(userId, title, body)
-            Send->>Push: send(message)  (platform'a gore FCM/APNs)
+            Send->>Push: send(message)  (iOS + Android, FCM HTTP v1)
             Push-->>Send: sent | invalid_token | error
             Send->>Repo: deleteByToken (invalid_token ise)
         end
@@ -137,14 +138,16 @@ sequenceDiagram
 
 ## Env
 
-`shared/config/env.ts` — hepsi opsiyonel, kimlik env'leri `NOTIFICATIONS_ENABLED`
-iken zorunlu:
+`shared/config/env.ts` — hepsi opsiyonel; FCM kimligi `GoogleAuth` ile cozuldugu
+icin `NOTIFICATIONS_ENABLED` iken bile zorunlu env YOK.
 
 ```
 NOTIFICATIONS_ENABLED=false
-FCM_SERVICE_ACCOUNT_JSON=      FCM_PROJECT_ID=            (JSON'daki project_id'ye duser)
-APNS_KEY_ID=  APNS_TEAM_ID=  APNS_AUTH_KEY=(.p8 PEM)  APNS_BUNDLE_ID=  APNS_ENVIRONMENT=sandbox
+# FCM kimligi (ilk eslesen): FCM_SERVICE_ACCOUNT_JSON -> GOOGLE_APPLICATION_CREDENTIALS
+#   -> `gcloud auth application-default login` -> GCP metadata server
+FCM_SERVICE_ACCOUNT_JSON=      FCM_PROJECT_ID=   (yoksa auth.getProjectId() cozer)
 STREAK_SAVER_LOCAL_HOUR=21     WEEKLY_REPORT_WEEKDAY=1 (0=Paz..6=Cmt)   WEEKLY_REPORT_LOCAL_HOUR=9
+# APNS_* sadece ileride DOGRUDAN APNs yoluna gecilirse (varsayilan degil)
 ```
 
 ## Bilinen eksikler / sonraki adimlar

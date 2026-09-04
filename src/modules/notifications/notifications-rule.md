@@ -22,21 +22,24 @@ public use-case'leri.
 
 ## Push gonderimi — `PushSenderPort` arkasinda
 
-- Provider kodu (FCM HTTP v1, APNs HTTP/2) `adapters/push/` disina SIZMAZ.
-  Use-case'ler ve job'lar `PlatformRoutingPushSender`'a bagimlidir, somut
-  adapter'lara degil.
-- Yeni SDK EKLENMEZ: FCM `google-auth-library` (JWT) + `fetch`, APNs
-  `node:http2` + `jsonwebtoken` (ES256). `GoogleReceiptAdapter` /
-  `GooglePubSubVerifier` ile ayni desen.
-- Her adapter kendi `buildResiliencePolicy` instance'ini bir kere kurar
-  (circuit breaker paylasilmali). Retry SADECE `retryable: true` olan
-  `IntegrationError`'da.
+- **Her iki platform da FCM HTTP v1 uzerinden.** Mobil, iOS icin de
+  `firebase_messaging` FCM token'i kaydeder; FCM bunu APNs'e relay eder.
+  `notificationScheduler.ts` `SendPushToUser`'a dogrudan `FcmPushAdapter` verir.
+  `ApnsPushAdapter` + `PlatformRoutingPushSender` ileride DOGRUDAN APNs yolu
+  istenirse diye duruyor, wire EDILMEDI.
+- Provider kodu `adapters/push/` disina SIZMAZ; use-case/job'lar `PushSenderPort`'a bagimlidir.
+- Yeni SDK EKLENMEZ: FCM `google-auth-library` (`GoogleAuth`) + `fetch`.
+  `GoogleReceiptAdapter` deseni.
+- **FCM kimligi `GoogleAuth` ile cozulur**, ilk eslesen kazanir:
+  `FCM_SERVICE_ACCOUNT_JSON` (inline) -> `GOOGLE_APPLICATION_CREDENTIALS`
+  (dosya yolu) -> `gcloud auth application-default login` -> GCP metadata
+  server. GCP'de key dosyasi GEREKMEZ. `FCM_PROJECT_ID` yoksa
+  `auth.getProjectId()` cozer.
+- `buildResiliencePolicy` instance'i bir kere kurulur (circuit breaker
+  paylasilmali). Retry SADECE `retryable: true` `IntegrationError`'da.
 - `PushSendResult` uc durum: `sent` | `invalid_token` | `error{retryable}`.
-  `invalid_token` gelince cagiran (`SendPushToUser`) satiri SILER — olu
-  token'lar bir daha denenmez.
-- APNs/FCM kimlik env'leri (`FCM_SERVICE_ACCOUNT_JSON`, `APNS_*`) sadece
-  `NOTIFICATIONS_ENABLED` iken zorunludur (`env.ts` superRefine), tipki
-  `LOKI_*` gibi.
+  `invalid_token` gelince `SendPushToUser` satiri SILER.
+- `NOTIFICATIONS_ENABLED` icin `env.ts`'de zorunlu env YOK (kimlik ADC ile gelebilir).
 
 ## Zamanlanmis job'lar — tek cron, "su an kimler uygun"
 

@@ -3,9 +3,12 @@ import { FcmPushAdapter } from './FcmPushAdapter';
 import type { PushMessage } from '../../ports/PushSenderPort';
 
 jest.mock('google-auth-library', () => ({
-  JWT: class {
-    async getAccessToken(): Promise<{ token: string }> {
-      return { token: 'fake-access-token' };
+  GoogleAuth: class {
+    async getAccessToken(): Promise<string> {
+      return 'fake-access-token';
+    }
+    async getProjectId(): Promise<string> {
+      return 'test-project';
     }
   },
 }));

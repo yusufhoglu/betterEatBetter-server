@@ -1,4 +1,4 @@
-import { JWT } from 'google-auth-library';
+import { GoogleAuth } from 'google-auth-library';
 import type { IPolicy } from 'cockatiel';
 import { env } from '../../../../shared/config/env';
 import { DomainError } from '../../../../shared/errors/DomainError';
@@ -12,42 +12,35 @@ const logger = createModuleLogger('notifications');
 const FCM_MESSAGING_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
 const TIMEOUT_MS = 10_000;
 
-interface ServiceAccount {
-  client_email: string;
-  private_key: string;
-  project_id?: string;
-}
-
-/** Sends a single notification via the FCM HTTP v1 API (Android device tokens). */
+/**
+ * Sends a single notification via the FCM HTTP v1 API. Handles both Android
+ * (FCM registration tokens) and iOS (FCM tokens that FCM relays to APNs) — the
+ * mobile app obtains both from `firebase_messaging`.
+ *
+ * Credentials resolve through `GoogleAuth`, in order:
+ *   1. `FCM_SERVICE_ACCOUNT_JSON` if set (inline JSON — handy for local/CI)
+ *   2. `GOOGLE_APPLICATION_CREDENTIALS` file path
+ *   3. gcloud Application Default Credentials (`gcloud auth application-default login`)
+ *   4. GCP metadata server (Cloud Run / GCE / GKE)
+ * so no service-account key file is required when running on GCP.
+ */
 export class FcmPushAdapter implements PushSenderPort {
-  private readonly jwtClient: JWT;
-  private readonly projectId: string;
+  private readonly auth: GoogleAuth;
   private readonly policy: IPolicy;
+  private projectIdPromise: Promise<string> | undefined;
 
   constructor(
     serviceAccountJson: string | undefined = env.FCM_SERVICE_ACCOUNT_JSON,
-    projectId: string | undefined = env.FCM_PROJECT_ID,
+    private readonly configuredProjectId: string | undefined = env.FCM_PROJECT_ID,
     policy?: IPolicy,
   ) {
-    if (!serviceAccountJson) {
-      throw new Error('FCM_SERVICE_ACCOUNT_JSON is required to build FcmPushAdapter');
-    }
-
-    const credentials = JSON.parse(serviceAccountJson) as ServiceAccount;
-    this.projectId = projectId ?? credentials.project_id ?? '';
-    if (!this.projectId) {
-      throw new Error('FCM project id missing — set FCM_PROJECT_ID or include project_id in the service account JSON');
-    }
-
-    this.jwtClient = new JWT({
-      email: credentials.client_email,
-      key: credentials.private_key,
+    this.auth = new GoogleAuth({
       scopes: [FCM_MESSAGING_SCOPE],
+      ...(serviceAccountJson ? { credentials: JSON.parse(serviceAccountJson) } : {}),
     });
 
     this.policy =
-      policy ??
-      buildResiliencePolicy({ timeoutMs: TIMEOUT_MS, circuitBreakerThreshold: 5, retryAttempts: 2 });
+      policy ?? buildResiliencePolicy({ timeoutMs: TIMEOUT_MS, circuitBreakerThreshold: 5, retryAttempts: 2 });
   }
 
   async send(message: PushMessage): Promise<PushSendResult> {
@@ -65,18 +58,34 @@ export class FcmPushAdapter implements PushSenderPort {
     }
   }
 
+  private async resolveProjectId(): Promise<string> {
+    if (this.configuredProjectId) {
+      return this.configuredProjectId;
+    }
+    this.projectIdPromise ??= this.auth.getProjectId();
+    const projectId = await this.projectIdPromise;
+    if (!projectId) {
+      throw new IntegrationError('FCM_AUTH_ERROR', 'Could not resolve the FCM project id', false);
+    }
+    return projectId;
+  }
+
   private async doSend(message: PushMessage): Promise<PushSendResult> {
     let accessToken: string | null | undefined;
+    let projectId: string;
     try {
-      ({ token: accessToken } = await this.jwtClient.getAccessToken());
+      [accessToken, projectId] = await Promise.all([this.auth.getAccessToken(), this.resolveProjectId()]);
     } catch (err) {
+      if (err instanceof IntegrationError) {
+        throw err;
+      }
       logger.error({ err }, 'failed to obtain FCM access token');
       throw new IntegrationError('FCM_AUTH_ERROR', 'Could not authenticate with FCM', true);
     }
 
     let response: Response;
     try {
-      response = await fetch(`https://fcm.googleapis.com/v1/projects/${this.projectId}/messages:send`, {
+      response = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
