@@ -103,6 +103,25 @@ const envSchema = z.object({
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().min(1),
   GOOGLE_PLAY_RTDN_AUDIENCE: z.string().min(1),
 
+  // notifications module — push delivery + scheduled jobs. All optional; the
+  // credential vars become required only when NOTIFICATIONS_ENABLED (see the
+  // superRefine block below), the same way LOKI_* are conditionally required.
+  // Not z.coerce.boolean() — that coerces the string "false" to true. This
+  // switch must default OFF and only turn on for an explicit "true".
+  NOTIFICATIONS_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  FCM_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  FCM_PROJECT_ID: z.string().optional(),
+  APNS_KEY_ID: z.string().optional(),
+  APNS_TEAM_ID: z.string().optional(),
+  APNS_AUTH_KEY: z.string().optional(),
+  APNS_BUNDLE_ID: z.string().optional(),
+  APNS_ENVIRONMENT: z.enum(['sandbox', 'production']).default('sandbox'),
+  // Local wall-clock hour (0-23) the streak-saver nudge fires at.
+  STREAK_SAVER_LOCAL_HOUR: z.coerce.number().int().min(0).max(23).default(21),
+  // Weekly report: local weekday (0 = Sunday .. 6 = Saturday) and hour it fires.
+  WEEKLY_REPORT_WEEKDAY: z.coerce.number().int().min(0).max(6).default(1),
+  WEEKLY_REPORT_LOCAL_HOUR: z.coerce.number().int().min(0).max(23).default(9),
+
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   LOKI_URL: z.string().url().optional(),
   LOKI_USER_ID: z.string().optional(),
@@ -131,6 +150,24 @@ const envSchema = z.object({
       path: ['ANTHROPIC_API_KEY'],
       message: "ANTHROPIC_API_KEY is required when LLM_PROVIDER='anthropic'",
     });
+  }
+  if (data.NOTIFICATIONS_ENABLED) {
+    const requiredWhenEnabled: Array<keyof typeof data> = [
+      'FCM_SERVICE_ACCOUNT_JSON',
+      'APNS_KEY_ID',
+      'APNS_TEAM_ID',
+      'APNS_AUTH_KEY',
+      'APNS_BUNDLE_ID',
+    ];
+    for (const key of requiredWhenEnabled) {
+      if (!data[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} is required when NOTIFICATIONS_ENABLED is true`,
+        });
+      }
+    }
   }
   if (data.LOKI_URL) {
     if (data.LOKI_URL.endsWith(LOKI_PUSH_ENDPOINT_SUFFIX)) {

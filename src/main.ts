@@ -2,6 +2,7 @@
 import './modules/food-recognition/jobs/recognizePhotoJob';
 import './modules/food-recognition/jobs/standardizeAndCopyJob';
 import './modules/subscription/jobs/processPlayRtdnJob';
+import { registerNotificationSchedules } from './modules/notifications/jobs/notificationScheduler';
 import express from 'express';
 import { PrismaMealLogReadModelRepository } from './modules/body-analytics/adapters/repository/PrismaMealLogReadModelRepository';
 import { ConsumeOutboxEventsJob } from './modules/body-analytics/jobs/consumeOutboxEventsJob';
@@ -103,5 +104,8 @@ startFoodEntryCleanupPolling();
 
 app.listen(port, () => {
   logger.info({ port, env: env.NODE_ENV }, 'server started');
+  void registerNotificationSchedules().catch((error) => {
+    logger.error({ err: error }, 'failed to register scheduled notifications');
+  });
 });
 

@@ -1,78 +1,155 @@
-# Notifications Modulu Developer Doc
+# Notifications Modulu — Developer Doc
 
-Bu modul su anda tam uygulanmamis durumda. Buna ragmen hedeflenen mimari acik: cihaz token kaydi, kullanici tercihleriyle senkron push gonderimi ve zamanlanmis bildirim job'lari.
+Push bildirim altyapisi: cihaz token kaydi, saglayici-agnostik push gonderimi
+ve kullanicinin yerel saatine gore calisan zamanlanmis bildirim job'lari.
+
+Kurallar ve nuanslar icin `notifications-rule.md`.
 
 ## Mimari Ozeti
 
-- `http/notificationsRoutes.ts` su anda bos; public endpoint yok.
-- `use-cases/RegisterDeviceToken.ts` cihaz token kaydinin uygulama servisi olacak.
-- `ports/DeviceTokenRepositoryPort.ts` token kaliciligini, `PushSenderPort.ts` ise FCM/APNS gonderimini soyutlar.
-- `adapters/repository/PrismaDeviceTokenRepository.ts`, `adapters/push/FcmPushAdapter.ts`, `ApnsPushAdapter.ts` kalicilik ve provider implementasyonlarini saglar.
-- `jobs/` altinda meal reminder, streak saver ve weekly report background akislari icin placeholder dosyalar var.
+```
+domain/
+  DeviceToken.ts        — DevicePlatform + DeviceToken tipi
+  localWallClock.ts     — instant + IANA tz -> {hour, minute, weekday, dateKey, isoWeekKey}
+  matchReminderSlot.ts  — "HH:MM" hedefi 15 dk'lik yarim-acik slota giriyor mu
+  NotificationCopy.ts   — en/tr lokalize {title, body} builder'lari
+
+ports/
+  DeviceTokenRepositoryPort   — upsertByToken / deleteByToken / listByUserId / listPage
+  PushSenderPort              — send(PushMessage) -> sent | invalid_token | error
+  NotificationPreferencesPort — me modulune kopru (read-only)
+  DayCompletionPort           — daily-tracking'e kopru (streak saver)
+  WeeklySummaryPort           — daily-tracking + body-analytics'e kopru (weekly report)
+
+adapters/
+  repository/PrismaDeviceTokenRepository
+  push/FcmPushAdapter            — FCM HTTP v1 (google-auth-library + fetch)
+  push/ApnsPushAdapter           — APNs HTTP/2 (node:http2 + jsonwebtoken ES256)
+  push/PlatformRoutingPushSender — platform'a gore FCM/APNs secer
+  preferences/MeNotificationPreferencesAdapter
+  tracking/DailyTrackingCompletionAdapter
+  summary/WeeklySummaryAdapter
+
+use-cases/
+  RegisterDeviceToken     — POST /notifications/device-token
+  UnregisterDeviceToken   — DELETE /notifications/device-token
+  SendPushToUser          — (internal) kullanicinin tum cihazlarina gonderir, olu token'lari budar
+
+jobs/
+  notificationScheduler   — 'notifications-scheduled' queue + worker + registerNotificationSchedules()
+  MealReminderScheduler   — export class MealReminderJob   (her 15 dk)
+  StreakSaverAlertJob     — export class StreakSaverAlertJob (her 30 dk)
+  WeeklyReportJob         — export class WeeklyReportJob     (saat basi)
+  SendGuard               — RedisSendGuard (SET NX EX) + MemoizingSendGuard
+  deviceIteration         — paginateDevices() + PreferenceCache
+```
 
 ## Endpointler
 
-Su an router'a mount edilmis aktif bir endpoint yok. `notificationsRoutes()` bos donuyor.
+Ikisi de `authMiddleware` arkasinda; `userId` = `req.auth.userId`.
 
-## Sequence Diagramlari
+### `POST /notifications/device-token`
 
-### Mevcut durum
+```jsonc
+// request
+{
+  "token": "fcm-or-apns-token",
+  "platform": "ios" | "android",
+  "timezone": "Europe/Istanbul",   // IANA — dogrulanir
+  "locale": "en" | "tr"            // opsiyonel; yoksa Accept-Language
+}
+// response 200
+{ "id": "<device token row id>" }
+```
+
+Ayni `token` ile tekrar cagirmak satiri gunceller (owner/tz/locale tazelenir),
+yeni satir acmaz.
+
+### `DELETE /notifications/device-token`
+
+```jsonc
+{ "token": "fcm-or-apns-token" }   // -> 204, idempotent
+```
+
+Cikis (logout) veya cihazda bildirimler kapatildiginda cagrilir.
+
+## Zamanlanmis Job'lar
+
+`NOTIFICATIONS_ENABLED=true` degilse hicbiri kaydedilmez (`main.ts` acilista
+`registerNotificationSchedules()` cagirir). Uc job da tum cihaz token'larini
+sayfalar ve **her cihazin kendi saat dilimine** gore filtreler.
+
+| Job | Cron | Kosul | Guard anahtari |
+|---|---|---|---|
+| `meal-reminders` | `*/15 * * * *` | `masterEnabled` + ilgili ogun acik + yerel saat `HH:MM` slotuna girdi | `meal:<userId>:<dateKey>:<meal>` |
+| `streak-saver` | `*/30 * * * *` | `streakSaver` acik + yerel saat `STREAK_SAVER_LOCAL_HOUR` + gun tamamlanmadi + `currentStreak >= 1` | `streak:<userId>:<dateKey>` |
+| `weekly-report` | `0 * * * *` | `weeklyReport` acik + yerel gun `WEEKLY_REPORT_WEEKDAY` + yerel saat `WEEKLY_REPORT_LOCAL_HOUR` | `weekly:<userId>:<isoWeekKey>` |
+
+Gonderim `SendPushToUser` uzerinden — kullanicinin TUM cihazlarina gider,
+saglayicinin `invalid_token` dedigi satirlar silinir.
+
+## Sequence — device token kayit
 
 ```mermaid
 sequenceDiagram
     actor Client
-    participant Router as notificationsRoutes
+    participant Ctl as NotificationsController
+    participant UC as RegisterDeviceToken
+    participant Repo as PrismaDeviceTokenRepository
 
-    Client->>Router: /notifications/*
-    Router-->>Client: no mounted endpoint
+    Client->>Ctl: POST /notifications/device-token {token, platform, timezone}
+    Ctl->>UC: execute(userId, ...)
+    UC->>UC: validate platform + IANA tz
+    UC->>Repo: upsertByToken (where token)
+    Repo-->>UC: DeviceToken
+    UC-->>Ctl: { id }
+    Ctl-->>Client: 200
 ```
 
-### Hedeflenen device token kayit akisi
+## Sequence — zamanlanmis job
 
 ```mermaid
 sequenceDiagram
-    actor Client
-    participant Controller as NotificationsController
-    participant UseCase as RegisterDeviceToken
-    participant Repo as DeviceTokenRepositoryPort
+    participant Cron as BullMQ repeatable
+    participant Worker as notificationScheduled worker
+    participant Job as MealReminder/StreakSaver/WeeklyReport
+    participant Repo as DeviceTokenRepository
+    participant Pref as NotificationPreferencesPort
+    participant Guard as SendGuard (Redis)
+    participant Send as SendPushToUser
+    participant Push as PlatformRoutingPushSender
 
-    Client->>Controller: device token + platform
-    Controller->>UseCase: execute(userId, token)
-    UseCase->>Repo: upsert device token
-    UseCase-->>Controller: ok
-    Controller-->>Client: 200/201
+    Cron->>Worker: fire (fresh traceId)
+    Worker->>Job: execute(now)
+    loop her cihaz token sayfasi
+        Job->>Repo: listPage(cursor)
+        Job->>Job: resolveLocalWallClock(now, device.timezone)
+        Job->>Pref: get(userId)  (run icinde cache'li)
+        Job->>Guard: claim(key, ttl)
+        alt claim == true
+            Job->>Send: execute(userId, title, body)
+            Send->>Push: send(message)  (platform'a gore FCM/APNs)
+            Push-->>Send: sent | invalid_token | error
+            Send->>Repo: deleteByToken (invalid_token ise)
+        end
+    end
 ```
 
-### Hedeflenen background job akislari
+## Env
 
-```mermaid
-sequenceDiagram
-    participant Scheduler as cronRunner/scheduledJobRegistry
-    participant Job as Notification Job
-    participant Source as tracking/analytics/preferences
-    participant Push as PushSenderPort
+`shared/config/env.ts` — hepsi opsiyonel, kimlik env'leri `NOTIFICATIONS_ENABLED`
+iken zorunlu:
 
-    Scheduler->>Job: trigger
-    Job->>Source: read eligible users/data
-    Source-->>Job: recipients + content
-    Job->>Push: send push payload
-    Push-->>Job: provider response
+```
+NOTIFICATIONS_ENABLED=false
+FCM_SERVICE_ACCOUNT_JSON=      FCM_PROJECT_ID=            (JSON'daki project_id'ye duser)
+APNS_KEY_ID=  APNS_TEAM_ID=  APNS_AUTH_KEY=(.p8 PEM)  APNS_BUNDLE_ID=  APNS_ENVIRONMENT=sandbox
+STREAK_SAVER_LOCAL_HOUR=21     WEEKLY_REPORT_WEEKDAY=1 (0=Paz..6=Cmt)   WEEKLY_REPORT_LOCAL_HOUR=9
 ```
 
-## Gelistirme Rehberi
+## Bilinen eksikler / sonraki adimlar
 
-- Bu modulu implement ederken ilk adim device token registration endpoint'ini bitirmek olmali; job'lar ondan sonra anlamli hale gelir.
-- Push provider kodunu use-case veya job icine gommek yerine `PushSenderPort` arkasinda tutun. Ayni mesaj hem FCM hem APNS'e gidebilmeli.
-- Notification tercihleri `me` modulunde tutuluyor. Job'lar bu tercihleri okuyup filtrelemeli; kendi preference kopyalarini olusturmayin.
-- Streak saver ve weekly report gibi job'lar veri okumak icin `daily-tracking` ve `body-analytics` public use-case veya adaptorlerine gitmeli; repository kopyalamayin.
-
-## Ornek Best Practice
-
-Dogru:
-
-```ts
-await deviceTokenRepository.upsert({ userId, platform, token });
-await pushSender.send({ tokens, title, body, data });
-```
-
-Yanlis: her job icinde APNS ve FCM request formatini elle kurup tekrar tekrar yazmak.
+- `recognizePhotoJob`'daki "push notification code emitted" TODO'su hala
+  `SendPushToUser`'a baglanmadi (foto tanima hatasi push'u).
+- `waterReminders` tercihi var ama job'u yok.
+- Push basina metrik sayaci (`prom-client`) eklenmedi.
