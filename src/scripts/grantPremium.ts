@@ -1,25 +1,32 @@
-// Dev tool: grants (or refreshes) a permanent premium entitlement for one
-// user, by upserting a manual `subscriptions` row and invalidating that
-// user's cached entitlement so it takes effect immediately.
-//
-// Usage: npm run grant:premium -- <email>
-require('dotenv').config();
-require('ts-node/register/transpile-only');
+import 'dotenv/config';
+import { PrismaClient } from '@prisma/client';
+import { cacheRedisClient } from '../shared/cache/redisCacheClient';
+import { premiumEntitlementCacheKey } from '../modules/subscription/entitlement/PremiumStatusCache';
+
+/**
+ * Dev/ops tool: grants (or refreshes) a permanent premium entitlement for one
+ * user, by upserting a manual `subscriptions` row and invalidating that
+ * user's cached entitlement so it takes effect immediately.
+ *
+ * Ships compiled (dist/src/scripts/grantPremium.js) rather than as a
+ * scripts/*.cjs dev script — it needs to run inside the production
+ * container, which has no TypeScript toolchain (devDependencies pruned,
+ * no `src/` beyond schema+migrations) but does have the full `dist/`
+ * build baked in.
+ *
+ * Usage: npm run grant:premium -- <email>
+ */
 
 const GRANT_PRODUCT_ID = 'admin_grant';
 const GRANT_PROVIDER = 'manual';
 
-async function main() {
+async function main(): Promise<void> {
   const email = process.argv[2];
   if (!email) {
     console.error('Usage: npm run grant:premium -- <email>');
     process.exitCode = 1;
     return;
   }
-
-  const { PrismaClient } = require('@prisma/client');
-  const { cacheRedisClient } = require('../src/shared/cache/redisCacheClient');
-  const { premiumEntitlementCacheKey } = require('../src/modules/subscription/entitlement/PremiumStatusCache');
 
   const prisma = new PrismaClient();
 
