@@ -18,6 +18,7 @@
     "test:http": "jest --runInBand --testPathPattern=test/http/.*\\.smoke\\.test\\.ts$",
     "test:http:local": "node scripts/run-http-smoke-tests.cjs",
     "db:create:smoke": "node scripts/create-smoke-db.cjs",
+    "grant:premium": "node scripts/grant-premium.cjs",
     "test:all": "jest",
     "import:usda": "ts-node src/modules/food-recognition/adapters/search/importUsdaData.ts",
     "prisma:generate": "prisma generate",
