@@ -34,7 +34,9 @@ const QUEUE_NAME = 'notifications-scheduled';
 type ScheduledJobName = 'meal-reminders' | 'streak-saver' | 'weekly-report';
 
 const SCHEDULES: ReadonlyArray<{ name: ScheduledJobName; pattern: string }> = [
-  { name: 'meal-reminders', pattern: '*/15 * * * *' },
+  // Must match MealReminderJob's SLOT_WIDTH_MINUTES — the match window and
+  // the tick interval have to be equal for exactly-one-tick-per-target to hold.
+  { name: 'meal-reminders', pattern: '*/5 * * * *' },
   { name: 'streak-saver', pattern: '*/30 * * * *' },
   { name: 'weekly-report', pattern: '0 * * * *' },
 ];

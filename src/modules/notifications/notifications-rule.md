@@ -45,7 +45,7 @@ public use-case'leri.
 
 - `shared-rule.md` §Scheduling: kullanici basina repeatable job ACILMAZ. Uc
   sabit cron var (`notificationScheduler.ts`):
-  - `meal-reminders` — `*/15 * * * *`
+  - `meal-reminders` — `*/5 * * * *` (SLOT_WIDTH_MINUTES ile ayni deger olmali)
   - `streak-saver` — `*/30 * * * *`
   - `weekly-report` — `0 * * * *`
 - Her job TUM cihaz token'larini `listPage` ile sayfalar, her cihaz icin

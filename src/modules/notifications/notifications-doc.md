@@ -81,7 +81,7 @@ sayfalar ve **her cihazin kendi saat dilimine** gore filtreler.
 
 | Job | Cron | Kosul | Guard anahtari |
 |---|---|---|---|
-| `meal-reminders` | `*/15 * * * *` | `masterEnabled` + ilgili ogun acik + yerel saat `HH:MM` slotuna girdi | `meal:<userId>:<dateKey>:<meal>` |
+| `meal-reminders` | `*/5 * * * *` | `masterEnabled` + ilgili ogun acik + yerel saat `HH:MM` slotuna girdi | `meal:<userId>:<dateKey>:<meal>` |
 | `streak-saver` | `*/30 * * * *` | `streakSaver` acik + yerel saat `STREAK_SAVER_LOCAL_HOUR` + gun tamamlanmadi + `currentStreak >= 1` | `streak:<userId>:<dateKey>` |
 | `weekly-report` | `0 * * * *` | `weeklyReport` acik + yerel gun `WEEKLY_REPORT_WEEKDAY` + yerel saat `WEEKLY_REPORT_LOCAL_HOUR` | `weekly:<userId>:<isoWeekKey>` |
 

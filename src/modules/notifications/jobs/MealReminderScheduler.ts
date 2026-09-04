@@ -10,7 +10,10 @@ import type { SendGuardPort } from './SendGuard';
 
 const logger = createModuleLogger('notifications');
 
-const SLOT_WIDTH_MINUTES = 15;
+// Must match the cron pattern registered for this job in notificationScheduler.ts
+// (currently */5) — the match window and the tick interval have to be equal
+// for exactly-one-tick-per-target-per-day to hold (see matchReminderSlot).
+const SLOT_WIDTH_MINUTES = 5;
 const GUARD_TTL_SECONDS = 20 * 60;
 const MEALS: readonly MealSlot[] = ['breakfast', 'lunch', 'dinner'];
 
