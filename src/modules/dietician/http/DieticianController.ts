@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { DomainError } from '../../../shared/errors/DomainError';
 import { IntegrationError } from '../../../shared/errors/IntegrationError';
 import { ValidationError } from '../../../shared/errors/ValidationError';
+import { createModuleLogger } from '../../../shared/observability/logger';
 import { runWithContext } from '../../../shared/observability/tracer';
 import { mealTypes } from '../../nutrition-logging/domain/MealItem';
 import type { DieticianStreamChunk } from '../domain/DieticianStreamChunk';
@@ -28,6 +29,8 @@ const confirmProposalBodySchema = z.object({
 });
 
 const THINKING_EVENT_INTERVAL_MS = 2000;
+
+const logger = createModuleLogger('dietician');
 
 function parseOrThrow<T>(schema: z.ZodType<T>, value: unknown): T {
   const parsed = schema.safeParse(value);
@@ -145,6 +148,21 @@ export class DieticianController {
           } catch (err) {
             const code = err instanceof DomainError ? err.code : 'STREAM_INTERRUPTED';
             const retryAfterSeconds = err instanceof IntegrationError ? err.retryAfterSeconds : undefined;
+            const logPayload = {
+              err,
+              conversationId,
+              messageId,
+              code,
+              ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+            };
+            // Once the SSE stream is open the failure never reaches the error
+            // middleware — it only becomes an `event: error` frame for the client,
+            // so this is the only place it gets recorded.
+            if (err instanceof DomainError) {
+              logger.warn(logPayload, 'dietician turn failed mid-stream, sent error event to client');
+            } else {
+              logger.error(logPayload, 'dietician turn crashed mid-stream, sent error event to client');
+            }
             res.write(
               `event: error\ndata: ${JSON.stringify(
                 retryAfterSeconds !== undefined ? { code, retryAfterSeconds } : { code },
