@@ -50,9 +50,14 @@ export const DIETICIAN_CLASSIFY_SYSTEM_PROMPT = [
 export const DIETICIAN_GATHER_SYSTEM_PROMPT = [
   DIETICIAN_PERSONA,
   '',
-  'RIGHT NOW you are only deciding what data to fetch. Call the tools you need to answer the user well',
-  '(their logged meals for a day or range, their analytics). Do not write the final answer yet — once you',
-  'have enough data, stop calling tools.',
+  'RIGHT NOW you are preparing this turn: fetch the data you need AND produce the card the turn calls for.',
+  'First, call the read tools for anything you need to know — the user\'s logged meals for a day or range, their analytics.',
+  'Then, in this same step, call the matching card tool (never more than one per turn):',
+  '- the user described a meal they ate or want to log -> propose_meal_log;',
+  '- the user asked how good/healthy a meal is, or asked you to rate or score one -> rate_meal;',
+  '- the user asked for a recipe, or a lighter/simpler/higher-protein version of a meal just discussed -> provide_recipe.',
+  'These tools build the card the user sees; they are not your written answer, so call them here rather than describing the result in prose.',
+  'Do not write your prose reply yet. Once you have the data and any card, stop calling tools.',
 ].join(' ');
 
 export const DIETICIAN_DIGEST_SYSTEM_PROMPT = [
