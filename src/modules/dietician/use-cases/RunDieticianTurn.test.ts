@@ -1,5 +1,6 @@
 import { IntegrationError } from '../../../shared/errors/IntegrationError';
 import type { LlmMessage } from '../../../shared/llm/types';
+import type { DieticianIntent } from '../domain/DieticianIntent';
 import type { DieticianStreamChunk } from '../domain/DieticianStreamChunk';
 import type { MealLogProposal } from '../domain/MealLogProposal';
 import type { MealRating } from '../domain/MealRating';
@@ -282,6 +283,42 @@ describe('RunDieticianTurn', () => {
     const conversation = await repository.findById('user-1', 'c1');
     expect(conversation?.messages[1]?.recipe).toEqual(fakeRecipe);
     expect(conversation?.messages[1]?.content).toBe('');
+  });
+
+  it('forces the card tool on the first gather turn for card intents', async () => {
+    const cases: Array<[DieticianIntent, string]> = [
+      ['log_help', 'propose_meal_log'],
+      ['rate_meal', 'rate_meal'],
+      ['recipe', 'provide_recipe'],
+    ];
+    for (const [intent, toolName] of cases) {
+      const proposeTool = new FakeProposeTool(fakeProposal);
+      const rateTool = new FakeRateMealTool(fakeRating);
+      const recipeTool = new FakeRecipeTool(fakeRecipe);
+      const { llm, runTurn } = build({ tools: [proposeTool, rateTool, recipeTool] });
+      llm.setIntent(intent);
+      llm.setGatherResults([
+        { content: '', toolCalls: [{ id: 't1', name: toolName, input: { description: 'x', request: 'x' } }] },
+        { content: '' },
+      ]);
+
+      await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'msg', today: TODAY }));
+
+      expect(llm.gatherCalls[0]!.forceToolChoice).toEqual({ toolName });
+      // only the first turn is forced
+      expect(llm.gatherCalls[1]?.forceToolChoice).toBeUndefined();
+    }
+  });
+
+  it('does not force any tool for the advice / quick_fact intents', async () => {
+    const rateTool = new FakeRateMealTool(fakeRating);
+    const { llm, runTurn } = build({ tools: [new FakeDataTool(), rateTool] });
+    llm.setIntent('advice');
+    llm.setGatherResults([{ content: '' }]);
+
+    await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'what should I eat?', today: TODAY }));
+
+    expect(llm.gatherCalls[0]!.forceToolChoice).toBeUndefined();
   });
 
   it('forces synthesis once maxGatherTurns is reached', async () => {

@@ -49,11 +49,16 @@ export class TieredLlmDieticianAdapter implements LlmDieticianPort {
     return result.intent;
   }
 
-  async runContextGathering(messages: LlmMessage[], tools: LlmToolDefinition[]): Promise<DieticianTurnResult> {
+  async runContextGathering(
+    messages: LlmMessage[],
+    tools: LlmToolDefinition[],
+    forceToolChoice?: { toolName: string },
+  ): Promise<DieticianTurnResult> {
     const response = await this.llmClient.complete({
       system: DIETICIAN_GATHER_SYSTEM_PROMPT,
       messages,
       tools,
+      ...(forceToolChoice ? { forceToolChoice } : {}),
       model: this.cheapModel,
       feature: 'dietician:gather',
     });

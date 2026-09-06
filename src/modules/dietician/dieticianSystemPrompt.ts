@@ -39,11 +39,15 @@ export const DIETICIAN_SMALLTALK_GUARD = [
 ].join(' ');
 
 export const DIETICIAN_CLASSIFY_SYSTEM_PROMPT = [
-  'Classify the LAST user message in a dietician conversation into exactly one category:',
+  'Classify the LAST user message in a dietician conversation into exactly one category.',
+  'The message may be in any language (often Turkish) — classify by meaning, not by keywords.',
+  '- "log_help": describes a meal they ate or want to log and wants help logging it.',
+  '- "rate_meal": asks how good / how healthy / how bad a specific meal is, or to rate, score or judge one.',
+  '- "recipe": explicitly asks for a recipe, or for a lighter / simpler / higher-protein version of a meal just discussed.',
   '- "advice": wants recommendations, plan changes, "what should I eat", "review my day", macro help.',
   '- "quick_fact": a bounded nutrition question ("how much protein in an egg", "is olive oil healthy").',
-  '- "log_help": describes a meal they ate / want to log and wants help logging it.',
   '- "smalltalk": greeting, thanks, chit-chat, or anything not about their nutrition.',
+  'A plain meal suggestion request ("what should I eat for dinner?") is "advice", not "recipe".',
   'Return exactly one structured result.',
 ].join(' ');
 

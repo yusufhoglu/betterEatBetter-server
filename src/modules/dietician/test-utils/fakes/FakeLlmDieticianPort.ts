@@ -17,7 +17,11 @@ const DEFAULT_DIGEST: ConversationDigest = {
 /** Scriptable fake for the tiered LLM seam. */
 export class FakeLlmDieticianPort implements LlmDieticianPort {
   readonly classifyCalls: Array<{ message: string; recentMessages: LlmMessage[] }> = [];
-  readonly gatherCalls: Array<{ messages: LlmMessage[]; tools: LlmToolDefinition[] }> = [];
+  readonly gatherCalls: Array<{
+    messages: LlmMessage[];
+    tools: LlmToolDefinition[];
+    forceToolChoice?: { toolName: string };
+  }> = [];
   readonly adviceCalls: LlmMessage[][] = [];
   readonly smalltalkCalls: LlmMessage[][] = [];
   readonly summarizeCalls: SummarizeConversationInput[] = [];
@@ -64,8 +68,12 @@ export class FakeLlmDieticianPort implements LlmDieticianPort {
     return this.intent;
   }
 
-  async runContextGathering(messages: LlmMessage[], tools: LlmToolDefinition[]): Promise<DieticianTurnResult> {
-    this.gatherCalls.push({ messages, tools });
+  async runContextGathering(
+    messages: LlmMessage[],
+    tools: LlmToolDefinition[],
+    forceToolChoice?: { toolName: string },
+  ): Promise<DieticianTurnResult> {
+    this.gatherCalls.push({ messages, tools, forceToolChoice });
     const index = Math.min(this.gatherCalls.length - 1, this.gatherResults.length - 1);
     return this.gatherResults[index]!;
   }

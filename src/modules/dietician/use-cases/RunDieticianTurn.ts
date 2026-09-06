@@ -4,7 +4,7 @@ import type { LlmMessage } from '../../../shared/llm/types';
 import { createModuleLogger } from '../../../shared/observability/logger';
 import { buildDieticianContextBlock } from '../domain/dieticianContext';
 import type { DieticianConversation } from '../domain/DieticianConversation';
-import { needsAssistedLane } from '../domain/DieticianIntent';
+import { forcedCardToolForIntent, needsAssistedLane, type DieticianIntent } from '../domain/DieticianIntent';
 import type { DieticianMessage } from '../domain/DieticianMessage';
 import { encodeRatingMessage, encodeRecipeMessage } from '../domain/cardMessageCodec';
 import type { DieticianStreamChunk } from '../domain/DieticianStreamChunk';
@@ -119,7 +119,7 @@ export class RunDieticianTurn {
         sink,
       );
     } else {
-      const gathered = yield* this.gatherContext(input, baseMessages, intent === 'log_help');
+      const gathered = yield* this.gatherContext(input, baseMessages, intent);
       yield* this.streamAndPersist(
         input.conversationId,
         [...gathered, { role: 'system', content: DIETICIAN_ADVICE_GUARD }],
@@ -136,16 +136,28 @@ export class RunDieticianTurn {
   private async *gatherContext(
     input: RunDieticianTurnInput,
     baseMessages: LlmMessage[],
-    allowProposal: boolean,
+    intent: DieticianIntent,
   ): AsyncGenerator<DieticianStreamChunk, LlmMessage[], undefined> {
     // propose_meal_log is armed only on log_help; rating/recipe cards (and plain tools) stay armed everywhere.
+    const allowProposal = intent === 'log_help';
     const armedTools = this.tools.filter((tool) => tool.yieldsCard !== 'proposal' || allowProposal);
     const toolDefinitions = armedTools.map((tool) => tool.definition);
+
+    // The cheap gather model is unreliable at choosing to call the card tool on
+    // its own (worse still outside English). When the classified intent maps to
+    // a card, force that tool on the first gather turn so the card always fires.
+    const forcedCardTool = forcedCardToolForIntent(intent);
+    const canForce = forcedCardTool !== null && armedTools.some((tool) => tool.definition.name === forcedCardTool);
+    let cardForced = false;
 
     let workingMessages = baseMessages;
 
     for (let turn = 0; turn < this.maxGatherTurns; turn++) {
-      const result = await this.llm.runContextGathering(workingMessages, toolDefinitions);
+      const forceToolChoice = canForce && !cardForced ? { toolName: forcedCardTool! } : undefined;
+      const result = await this.llm.runContextGathering(workingMessages, toolDefinitions, forceToolChoice);
+      if (forceToolChoice) {
+        cardForced = true;
+      }
 
       if (!result.toolCalls || result.toolCalls.length === 0) {
         return workingMessages;

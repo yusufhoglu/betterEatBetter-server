@@ -198,7 +198,12 @@ From `dieticianSystemPrompt.ts`. These are the behaviours mobile can rely on:
    present the prose is one or two sentences (`DIETICIAN_ADVICE_GUARD`).
 2. **Cards are opt-in by intent.** A meal *suggestion* is prose. A recipe is a
    card only on an explicit ask (or an accepted offer). A rating is a card only
-   on an explicit "how good is…" / "rate this".
+   on an explicit "how good is…" / "rate this". The turn classifier
+   (`DieticianIntent`) decides this up front; when it returns `log_help` /
+   `rate_meal` / `recipe` the gather stage **forces** the matching tool
+   (`forcedCardToolForIntent`) rather than trusting the cheap model to pick it —
+   the previous prompt-only approach silently dropped the card, most often on
+   non-English turns.
 3. **Never paste raw tool output, JSON, or field names into the prose.** The
    card is the structured surface; the prose is plain coach language.
 4. **Language mirrors the user.** Prose is in the user's language, including

@@ -67,6 +67,18 @@ describe('TieredLlmDieticianAdapter', () => {
 
     expect(result.content).toBe('let me check');
     expect(client.completeRequests[0]).toMatchObject({ model: 'cheap-model', feature: 'dietician:gather' });
+    expect(client.completeRequests[0]!.forceToolChoice).toBeUndefined();
+  });
+
+  it('runContextGathering forwards forceToolChoice to the client', async () => {
+    const { client, adapter } = build();
+
+    const result = await adapter.runContextGathering([{ role: 'user', content: 'rate this' }], [], {
+      toolName: 'rate_meal',
+    });
+
+    expect(client.completeRequests[0]!.forceToolChoice).toEqual({ toolName: 'rate_meal' });
+    expect(result.toolCalls?.[0]?.name).toBe('rate_meal');
   });
 
   it('streamAdvice uses the PRIME model and the dietician:advice feature', async () => {

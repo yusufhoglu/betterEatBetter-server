@@ -23,8 +23,16 @@ export interface LlmDieticianPort {
   /** Cheap tier, structured output. Routes the turn. */
   classifyIntent(input: { message: string; recentMessages: LlmMessage[] }): Promise<DieticianIntent>;
 
-  /** Cheap tier. One tool-calling turn of the data-gathering loop. */
-  runContextGathering(messages: LlmMessage[], tools: LlmToolDefinition[]): Promise<DieticianTurnResult>;
+  /**
+   * Cheap tier. One tool-calling turn of the data-gathering loop. When
+   * `forceToolChoice` is set the model is made to call exactly that tool this
+   * turn (used to guarantee the card tool fires regardless of model/language).
+   */
+  runContextGathering(
+    messages: LlmMessage[],
+    tools: LlmToolDefinition[],
+    forceToolChoice?: { toolName: string },
+  ): Promise<DieticianTurnResult>;
 
   /** Prime tier. Streams the final user-facing answer. */
   streamAdvice(messages: LlmMessage[]): AsyncIterable<string>;
