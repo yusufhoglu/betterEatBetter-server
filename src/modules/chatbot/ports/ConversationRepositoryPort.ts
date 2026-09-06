@@ -1,9 +1,16 @@
 import type { Conversation } from '../domain/Conversation';
+import type { ConversationSummary } from '../domain/ConversationSummary';
 import type { Message, MessageRole } from '../domain/Message';
 
 export interface ConversationRepositoryPort {
   /** Returns the conversation (with ordered messages) if it exists and is owned by userId, else null. */
   findById(userId: string, conversationId: string): Promise<Conversation | null>;
+
+  /**
+   * The user's non-empty conversations, newest activity first, capped at `limit`.
+   * Conversations that were materialized but never messaged are omitted.
+   */
+  listByUser(userId: string, limit: number): Promise<ConversationSummary[]>;
 
   /**
    * Loads the conversation if it exists (must be owned by userId), otherwise

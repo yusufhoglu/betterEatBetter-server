@@ -15,6 +15,7 @@ Bu modul LLM tabanli konusma deneyimini, tool-calling ile repo icindeki diger mo
 | Method | Path | Aciklama |
 | --- | --- | --- |
 | `POST` | `/chat/:conversationId/messages` | Mesaj gonderir, gerekirse tool kullanarak cevap uretir |
+| `GET` | `/chat/conversations?limit=30` | Kullanicinin bos olmayan konusmalari; en son aktivite once. `{ conversations: [{ id, createdAt, lastMessageAt, messageCount, title, preview }] }` |
 | `GET` | `/chat/:conversationId` | Konusma gecmisini getirir; yoksa bos conversation olusturup dondurur |
 | `POST` | `/chat/:conversationId/proposals/photo` | Food photo sonucundan meal proposal seed eder |
 | `POST` | `/chat/:conversationId/proposals/confirm` | Meal proposal'i nutrition logging'e yazar |

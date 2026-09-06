@@ -68,4 +68,27 @@ describe('PrismaConversationRepository (integration)', () => {
   it('returns null from findById for an unknown conversation id', async () => {
     await expect(repository.findById('user-1', 'does-not-exist')).resolves.toBeNull();
   });
+
+  it('lists a user\'s non-empty conversations newest-first with derived title/preview', async () => {
+    await repository.findOrCreate('list-user', 'list-older');
+    await repository.appendMessage('list-older', 'user', 'what should I eat for breakfast?');
+    await repository.appendMessage('list-older', 'assistant', 'Greek yogurt with berries.');
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    await repository.findOrCreate('list-user', 'list-newer');
+    await repository.appendMessage('list-newer', 'user', 'log a coffee');
+
+    await repository.findOrCreate('list-user', 'list-empty');
+
+    const summaries = await repository.listByUser('list-user', 30);
+
+    expect(summaries.map((s) => s.id)).toEqual(['list-newer', 'list-older']);
+    expect(summaries[0]).toMatchObject({ title: 'log a coffee', messageCount: 1 });
+    expect(summaries[1]).toMatchObject({
+      title: 'what should I eat for breakfast?',
+      preview: 'Greek yogurt with berries.',
+      messageCount: 2,
+    });
+  });
 });

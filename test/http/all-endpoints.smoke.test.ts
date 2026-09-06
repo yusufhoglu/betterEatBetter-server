@@ -580,6 +580,44 @@ describe('all endpoint smoke tests', () => {
         .set('Authorization', bearer(session.accessToken));
       expect(deleteMyMealRes.status).toBe(204);
 
+      // Saved dietician recipes — full payload (ingredients + steps) round-trips,
+      // and an attached photo enqueues the standardize-and-copy job (mocked).
+      const recipePhotoId = randomUUID();
+      const createSavedRecipeRes = await request(app)
+        .post('/saved-recipes')
+        .set('Authorization', bearer(session.accessToken))
+        .send({
+          recipe: {
+            title: 'High-protein chicken bowl',
+            timeMinutes: 20,
+            servings: 1,
+            calories: 550,
+            proteinGrams: 45,
+            carbsGrams: 40,
+            fatGrams: 18,
+            ingredients: [{ name: 'chicken breast', amount: '150g' }],
+            steps: ['Grill the chicken.', 'Serve over rice.'],
+            why: 'Fits your remaining protein for today.',
+          },
+          mealPhotoId: recipePhotoId,
+        });
+      expect(createSavedRecipeRes.status).toBe(201);
+      expect(createSavedRecipeRes.body.recipe.ingredients).toHaveLength(1);
+      expect(createSavedRecipeRes.body.recipe.steps).toHaveLength(2);
+      expect(createSavedRecipeRes.body.mealPhotoId).toBe(recipePhotoId);
+
+      const listSavedRecipesRes = await request(app)
+        .get('/saved-recipes')
+        .set('Authorization', bearer(session.accessToken));
+      expect(listSavedRecipesRes.status).toBe(200);
+      expect(listSavedRecipesRes.body).toHaveLength(1);
+      expect(listSavedRecipesRes.body[0].recipe.title).toBe('High-protein chicken bowl');
+
+      const deleteSavedRecipeRes = await request(app)
+        .delete(`/saved-recipes/${createSavedRecipeRes.body.id}`)
+        .set('Authorization', bearer(session.accessToken));
+      expect(deleteSavedRecipeRes.status).toBe(204);
+
       const subscriptionPlansRes = await request(app)
         .get('/subscription/plans')
         .set('Authorization', bearer(session.accessToken));
@@ -1175,6 +1213,7 @@ async function resetDatabase(prisma: PrismaClient): Promise<void> {
       "conversations",
       "subscriptions",
       "saved_meals",
+      "saved_recipes",
       "favorite_recipes",
       "notification_preferences",
       "unit_preferences",

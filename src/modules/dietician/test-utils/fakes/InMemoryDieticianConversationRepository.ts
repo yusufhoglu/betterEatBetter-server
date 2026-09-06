@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { NotFoundError } from '../../../../shared/errors/NotFoundError';
 import type { ConversationDigest } from '../../domain/ConversationDigest';
+import type { DieticianConversationSummary } from '../../domain/ConversationSummary';
+import { deriveDieticianPreview, deriveDieticianTitle } from '../../domain/ConversationSummary';
 import type { DieticianConversation } from '../../domain/DieticianConversation';
 import type {
   DieticianMessage,
@@ -13,6 +15,13 @@ import type { DieticianConversationRepositoryPort } from '../../ports/DieticianC
 
 export class InMemoryDieticianConversationRepository implements DieticianConversationRepositoryPort {
   private readonly conversations = new Map<string, DieticianConversation>();
+  /** Monotonic clock so message ordering is deterministic in fast tests. */
+  private clock = 0;
+
+  private nextTimestamp(): Date {
+    this.clock += 1;
+    return new Date(this.clock);
+  }
 
   async findById(userId: string, conversationId: string): Promise<DieticianConversation | null> {
     const conversation = this.conversations.get(conversationId);
@@ -34,7 +43,7 @@ export class InMemoryDieticianConversationRepository implements DieticianConvers
     const created: DieticianConversation = {
       id: conversationId,
       userId,
-      createdAt: new Date(),
+      createdAt: this.nextTimestamp(),
       turnCount: 0,
       digest: null,
       digestTurn: 0,
@@ -68,10 +77,30 @@ export class InMemoryDieticianConversationRepository implements DieticianConvers
       ...(proposal ? { proposal } : {}),
       ...(rating ? { rating } : {}),
       ...(recipe ? { recipe } : {}),
-      createdAt: new Date(),
+      createdAt: this.nextTimestamp(),
     };
     conversation.messages.push(message);
     return { ...message };
+  }
+
+  async listByUser(userId: string, limit: number): Promise<DieticianConversationSummary[]> {
+    return [...this.conversations.values()]
+      .filter((conversation) => conversation.userId === userId && conversation.messages.length > 0)
+      .map((conversation) => {
+        const messages = conversation.messages;
+        const firstUser = messages.find((message) => message.role === 'user');
+        return {
+          id: conversation.id,
+          createdAt: conversation.createdAt,
+          lastMessageAt: messages[messages.length - 1]!.createdAt,
+          messageCount: messages.length,
+          turnCount: conversation.turnCount,
+          title: deriveDieticianTitle(firstUser?.content),
+          preview: deriveDieticianPreview(messages[messages.length - 1]!.content),
+        };
+      })
+      .sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime())
+      .slice(0, limit);
   }
 
   async saveDigest(conversationId: string, digest: ConversationDigest, atTurn: number): Promise<void> {

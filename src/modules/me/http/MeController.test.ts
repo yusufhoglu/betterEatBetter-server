@@ -2,6 +2,7 @@ import express from 'express';
 import type { RequestHandler } from 'express';
 import request from 'supertest';
 import { errorMapperMiddleware } from '../../../shared/errors/errorMapper';
+import { NotFoundError } from '../../../shared/errors/NotFoundError';
 
 jest.mock('../../../shared/rateLimiting/dailyQuota', () => ({
   peekDailyQuota: jest.fn(async (_key: string, limit: number) => ({
@@ -41,6 +42,13 @@ function buildApp() {
       mealPhotoId: null,
     },
   ];
+  const savedRecipes: Array<{
+    id: string;
+    recipe: unknown;
+    imageUrl: string | null;
+    mealPhotoId: string | null;
+    createdAt: string;
+  }> = [];
   const myMeals: Array<{
     id: string;
     title: string;
@@ -225,6 +233,30 @@ function buildApp() {
           myMeals.splice(index, 1);
         }
       },
+      listSavedRecipes: async () => savedRecipes,
+      createSavedRecipe: async (input: {
+        userId?: string;
+        recipe: unknown;
+        mealPhotoId?: string | null;
+        mealPhotoOwnerId?: string | null;
+      }) => {
+        const created = {
+          id: `saved-recipe-${savedRecipes.length + 1}`,
+          recipe: input.recipe,
+          imageUrl: null,
+          mealPhotoId: input.mealPhotoId ?? null,
+          createdAt: '2026-09-06T00:00:00.000Z',
+        };
+        savedRecipes.push(created);
+        return created;
+      },
+      deleteSavedRecipe: async (_userId: string, id: string) => {
+        const index = savedRecipes.findIndex((item) => item.id === id);
+        if (index < 0) {
+          throw new NotFoundError('SAVED_RECIPE_NOT_FOUND', 'Saved recipe was not found');
+        }
+        savedRecipes.splice(index, 1);
+      },
     } as never,
     {
       getNotificationPreferences: async () => ({
@@ -245,6 +277,23 @@ function buildApp() {
       }),
       upsertUnitPreferences: async (_userId: string, input: unknown) => input,
     } as never,
+    {
+      execute: async (input: {
+        userId: string;
+        recipe: unknown;
+        mealPhotoId?: string | null;
+      }) => {
+        const created = {
+          id: `saved-recipe-${savedRecipes.length + 1}`,
+          recipe: input.recipe,
+          imageUrl: null,
+          mealPhotoId: input.mealPhotoId ?? null,
+          createdAt: '2026-09-06T00:00:00.000Z',
+        };
+        savedRecipes.push(created);
+        return created;
+      },
+    } as never,
   );
 
   const fakeAuthMiddleware: RequestHandler = (req, _res, next) => {
@@ -263,6 +312,9 @@ function buildApp() {
   app.post('/my-meals', fakeAuthMiddleware, controller.handlePostMyMeal);
   app.patch('/my-meals/:id', fakeAuthMiddleware, controller.handlePatchMyMeal);
   app.delete('/my-meals/:id', fakeAuthMiddleware, controller.handleDeleteMyMeal);
+  app.get('/saved-recipes', fakeAuthMiddleware, controller.handleGetSavedRecipes);
+  app.post('/saved-recipes', fakeAuthMiddleware, controller.handlePostSavedRecipe);
+  app.delete('/saved-recipes/:id', fakeAuthMiddleware, controller.handleDeleteSavedRecipe);
   app.patch('/notification-preferences', fakeAuthMiddleware, controller.handlePatchNotificationPreferences);
   app.use(errorMapperMiddleware);
 
@@ -448,5 +500,66 @@ describe('MeController', () => {
     const res = await request(app).delete('/my-meals/meal-1');
 
     expect(res.status).toBe(204);
+  });
+
+  const fullRecipe = {
+    title: 'High-protein chicken bowl',
+    subtitle: 'Quick weeknight dinner',
+    timeMinutes: 20,
+    servings: 1,
+    calories: 550,
+    proteinGrams: 45,
+    carbsGrams: 40,
+    fatGrams: 18,
+    ingredients: [
+      { name: 'chicken breast', amount: '150g' },
+      { name: 'brown rice', amount: '1 cup cooked' },
+    ],
+    steps: ['Grill the chicken.', 'Serve over rice with vegetables.'],
+    why: 'Hits your remaining protein target for today.',
+  };
+
+  test('POST /saved-recipes stores the full recipe and returns 201', async () => {
+    const app = buildApp();
+
+    const res = await request(app).post('/saved-recipes').send({ recipe: fullRecipe });
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBe('saved-recipe-1');
+    expect(res.body.recipe).toEqual(fullRecipe);
+    expect(res.body.imageUrl).toBeNull();
+  });
+
+  test('POST /saved-recipes rejects a malformed recipe with 400', async () => {
+    const app = buildApp();
+
+    const { steps: _dropped, ...withoutSteps } = fullRecipe;
+    const res = await request(app).post('/saved-recipes').send({ recipe: withoutSteps });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_SAVED_RECIPE');
+  });
+
+  test('GET /saved-recipes returns the stored cards', async () => {
+    const app = buildApp();
+
+    await request(app).post('/saved-recipes').send({ recipe: fullRecipe });
+    const res = await request(app).get('/saved-recipes');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].recipe.title).toBe('High-protein chicken bowl');
+  });
+
+  test('DELETE /saved-recipes/:id returns 204, then 404 when already gone', async () => {
+    const app = buildApp();
+
+    const created = await request(app).post('/saved-recipes').send({ recipe: fullRecipe });
+    const deleteRes = await request(app).delete(`/saved-recipes/${created.body.id}`);
+    expect(deleteRes.status).toBe(204);
+
+    const secondDelete = await request(app).delete(`/saved-recipes/${created.body.id}`);
+    expect(secondDelete.status).toBe(404);
+    expect(secondDelete.body.error.code).toBe('SAVED_RECIPE_NOT_FOUND');
   });
 });

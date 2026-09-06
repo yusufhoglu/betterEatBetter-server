@@ -10,6 +10,8 @@ import { mealTypes } from '../../nutrition-logging/domain/MealItem';
 import type { ChatStreamChunk } from '../domain/ChatStreamChunk';
 import type { ConfirmMealProposal } from '../use-cases/ConfirmMealProposal';
 import type { GetConversationHistory } from '../use-cases/GetConversationHistory';
+import type { ListConversations } from '../use-cases/ListConversations';
+import { DEFAULT_CONVERSATION_LIST_LIMIT } from '../use-cases/ListConversations';
 import type { SeedPhotoMealProposal } from '../use-cases/SeedPhotoMealProposal';
 import type { SendMessage } from '../use-cases/SendMessage';
 
@@ -21,6 +23,10 @@ const sendMessageBodySchema = z.object({
 
 const seedPhotoProposalBodySchema = z.object({
   mealPhotoId: z.string().min(1),
+});
+
+const listConversationsQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).optional(),
 });
 
 const confirmProposalBodySchema = z.object({
@@ -102,6 +108,7 @@ export class ChatController {
   constructor(
     private readonly sendMessage: SendMessage,
     private readonly getConversationHistory: GetConversationHistory,
+    private readonly listConversations: ListConversations,
     private readonly seedPhotoMealProposal: SeedPhotoMealProposal,
     private readonly confirmMealProposal: ConfirmMealProposal,
   ) {}
@@ -177,6 +184,19 @@ export class ChatController {
       const conversationId = requireConversationId(req);
       const conversation = await this.getConversationHistory.execute(req.auth!.userId, conversationId);
       res.status(200).json(conversation);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  handleListConversations = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { limit } = parseOrThrow(listConversationsQuerySchema, req.query);
+      const conversations = await this.listConversations.execute(
+        req.auth!.userId,
+        limit ?? DEFAULT_CONVERSATION_LIST_LIMIT,
+      );
+      res.status(200).json({ conversations });
     } catch (error) {
       next(error);
     }

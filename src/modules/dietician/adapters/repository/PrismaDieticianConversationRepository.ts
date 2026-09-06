@@ -6,6 +6,8 @@ import type {
 } from '@prisma/client';
 import { NotFoundError } from '../../../../shared/errors/NotFoundError';
 import { conversationDigestSchema, type ConversationDigest } from '../../domain/ConversationDigest';
+import type { DieticianConversationSummary } from '../../domain/ConversationSummary';
+import { deriveDieticianPreview, deriveDieticianTitle } from '../../domain/ConversationSummary';
 import type { DieticianConversation } from '../../domain/DieticianConversation';
 import type {
   DieticianMessage,
@@ -102,8 +104,58 @@ export class PrismaDieticianConversationRepository implements DieticianConversat
     const row = await this.db.dieticianMessage.create({
       data: { conversationId, role, content, origin },
     });
+    await this.db.dieticianConversation.update({
+      where: { id: conversationId },
+      data: { lastMessageAt: row.createdAt },
+    });
 
     return toDomainMessage(row);
+  }
+
+  async listByUser(userId: string, limit: number): Promise<DieticianConversationSummary[]> {
+    const rows = await this.db.dieticianConversation.findMany({
+      where: { userId, lastMessageAt: { not: null } },
+      orderBy: { lastMessageAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        createdAt: true,
+        lastMessageAt: true,
+        turnCount: true,
+        _count: { select: { messages: true } },
+      },
+    });
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const ids = rows.map((row) => row.id);
+    const [firstUserMessages, lastMessages] = await Promise.all([
+      this.db.dieticianMessage.findMany({
+        where: { conversationId: { in: ids }, role: 'user' },
+        orderBy: [{ conversationId: 'asc' }, { createdAt: 'asc' }],
+        distinct: ['conversationId'],
+        select: { conversationId: true, content: true },
+      }),
+      this.db.dieticianMessage.findMany({
+        where: { conversationId: { in: ids } },
+        orderBy: [{ conversationId: 'asc' }, { createdAt: 'desc' }],
+        distinct: ['conversationId'],
+        select: { conversationId: true, content: true },
+      }),
+    ]);
+    const firstUserByConversation = new Map(firstUserMessages.map((m) => [m.conversationId, m.content]));
+    const lastByConversation = new Map(lastMessages.map((m) => [m.conversationId, m.content]));
+
+    return rows.map((row) => ({
+      id: row.id,
+      createdAt: row.createdAt,
+      lastMessageAt: row.lastMessageAt as Date,
+      messageCount: row._count.messages,
+      turnCount: row.turnCount,
+      title: deriveDieticianTitle(firstUserByConversation.get(row.id)),
+      preview: deriveDieticianPreview(lastByConversation.get(row.id)),
+    }));
   }
 
   async saveDigest(conversationId: string, digest: ConversationDigest, atTurn: number): Promise<void> {

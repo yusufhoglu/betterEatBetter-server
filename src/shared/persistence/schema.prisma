@@ -35,6 +35,7 @@ model User {
   deviceTokens           DeviceToken[]
   favoriteRecipes        FavoriteRecipe[]
   savedMeals             SavedMeal[]
+  savedRecipes           SavedRecipe[]
   subscriptions          Subscription[]
   socialPosts            SocialPost[]
   socialComments         SocialComment[]
@@ -283,6 +284,35 @@ model SavedMeal {
   @@map("saved_meals")
 }
 
+// A dietician-generated recipe the user chose to keep. Stores the full Recipe
+// domain object (dietician module) — scalar fields as columns, `ingredients`
+// (RecipeIngredient[]) and `steps` (string[]) as JSON. `mealPhotoId` /
+// `mealPhotoOwnerId` point at an optional user-attached photo, re-signed on read
+// exactly like SavedMeal. No dedupe — each save is a deliberate action.
+model SavedRecipe {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String
+  subtitle         String?
+  timeMinutes      Int
+  servings         Int
+  calories         Int
+  proteinGrams     Int
+  carbsGrams       Int
+  fatGrams         Int
+  fiberGrams       Int?
+  ingredients      Json
+  steps            Json
+  why              String?
+  mealPhotoId      String?
+  mealPhotoOwnerId String?
+  createdAt        DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("saved_recipes")
+}
+
 model Subscription {
   id            String    @id @default(uuid())
   userId        String
@@ -315,9 +345,14 @@ model Conversation {
   id        String    @id @default(uuid())
   userId    String
   createdAt DateTime  @default(now())
+  // Denormalized max(messages.createdAt) — kept current on every appendMessage
+  // so "list my conversations, newest first" is a single indexed query.
+  // Null for a conversation that was materialized but never messaged.
+  lastMessageAt DateTime?
   messages  Message[]
 
   @@index([userId])
+  @@index([userId, lastMessageAt(sort: Desc)])
   @@map("conversations")
 }
 
@@ -344,9 +379,12 @@ model DieticianConversation {
   turnCount  Int                @default(0)
   digest     Json?
   digestTurn Int                @default(0)
+  // See Conversation.lastMessageAt — same denormalization, same purpose.
+  lastMessageAt DateTime?
   messages   DieticianMessage[]
 
   @@index([userId])
+  @@index([userId, lastMessageAt(sort: Desc)])
   @@map("dietician_conversations")
 }
 

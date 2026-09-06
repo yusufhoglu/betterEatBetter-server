@@ -31,6 +31,14 @@ class FakeGetConversationHistory {
   }
 }
 
+class FakeListConversations {
+  constructor(private readonly summaries: unknown[] = []) {}
+
+  async execute(): Promise<unknown[]> {
+    return this.summaries;
+  }
+}
+
 class FakeSeedPhotoMealProposal {
   async execute(): Promise<{ rawDescription: string; entries: [] }> {
     return { rawDescription: 'seeded photo estimate', entries: [] };
@@ -55,6 +63,7 @@ class FakeDomainError extends DomainError {
 function createApp(
   sendMessage: FakeSendMessage,
   conversation: Conversation = { id: 'conv-1', userId: 'user-1', createdAt: new Date(), messages: [] },
+  conversationSummaries: unknown[] = [],
 ) {
   const app = express();
   app.use(express.json());
@@ -66,11 +75,13 @@ function createApp(
   const controller = new ChatController(
     sendMessage as never,
     new FakeGetConversationHistory(conversation) as never,
+    new FakeListConversations(conversationSummaries) as never,
     new FakeSeedPhotoMealProposal() as never,
     new FakeConfirmMealProposal() as never,
   );
 
   app.post('/chat/:conversationId/messages', controller.handleSendMessage);
+  app.get('/chat/conversations', controller.handleListConversations);
   app.get('/chat/:conversationId', controller.handleGetConversationHistory);
   app.post('/chat/:conversationId/proposals/photo', controller.handleSeedPhotoProposal);
   app.post('/chat/:conversationId/proposals/confirm', controller.handleConfirmMealProposal);
@@ -180,6 +191,25 @@ describe('ChatController', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.messages[0].proposal).toEqual({ rawDescription: 'ayran', entries: [] });
+  });
+
+  it('lists the caller\'s conversations', async () => {
+    const summaries = [
+      {
+        id: 'conv-2',
+        createdAt: '2026-09-04T00:00:00.000Z',
+        lastMessageAt: '2026-09-04T10:00:00.000Z',
+        messageCount: 3,
+        title: 'dinner ideas',
+        preview: 'try grilled salmon',
+      },
+    ];
+    const app = createApp(new FakeSendMessage(), undefined, summaries);
+
+    const res = await request(app).get('/chat/conversations');
+
+    expect(res.status).toBe(200);
+    expect(res.body.conversations).toEqual(summaries);
   });
 
   it('seeds a photo-based proposal', async () => {

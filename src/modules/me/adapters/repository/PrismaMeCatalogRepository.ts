@@ -1,4 +1,11 @@
-import type { FavoriteRecipeCard, MeCatalogRepositoryPort, MyMealCard } from '../../ports/MeCatalogRepositoryPort';
+import type { Prisma } from '@prisma/client';
+import type {
+  FavoriteRecipeCard,
+  MeCatalogRepositoryPort,
+  MyMealCard,
+  SavedRecipeCard,
+} from '../../ports/MeCatalogRepositoryPort';
+import type { Recipe, RecipeIngredient } from '../../../dietician/domain/Recipe';
 import { NotFoundError } from '../../../../shared/errors/NotFoundError';
 import { createFinalDownloadUrl } from '../../../../shared/storage/presignedUrl';
 
@@ -90,9 +97,56 @@ interface SavedMealDelegate {
   }): Promise<SavedMealRow[]>;
 }
 
+interface SavedRecipeRow {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  timeMinutes: number;
+  servings: number;
+  calories: number;
+  proteinGrams: number;
+  carbsGrams: number;
+  fatGrams: number;
+  fiberGrams: number | null;
+  ingredients: Prisma.JsonValue;
+  steps: Prisma.JsonValue;
+  why: string | null;
+  mealPhotoId: string | null;
+  mealPhotoOwnerId: string | null;
+  createdAt: Date;
+}
+
+interface SavedRecipeDelegate {
+  create(args: {
+    data: {
+      userId: string;
+      title: string;
+      subtitle: string | null;
+      timeMinutes: number;
+      servings: number;
+      calories: number;
+      proteinGrams: number;
+      carbsGrams: number;
+      fatGrams: number;
+      fiberGrams: number | null;
+      ingredients: Prisma.InputJsonValue;
+      steps: Prisma.InputJsonValue;
+      why: string | null;
+      mealPhotoId: string | null;
+      mealPhotoOwnerId: string | null;
+    };
+  }): Promise<SavedRecipeRow>;
+  deleteMany(args: { where: { id: string; userId: string } }): Promise<{ count: number }>;
+  findMany(args: {
+    where: { userId: string };
+    orderBy: { createdAt: 'desc' };
+  }): Promise<SavedRecipeRow[]>;
+}
+
 interface MeCatalogDb {
   favoriteRecipe: FavoriteRecipeDelegate;
   savedMeal: SavedMealDelegate;
+  savedRecipe: SavedRecipeDelegate;
 }
 
 export class PrismaMeCatalogRepository implements MeCatalogRepositoryPort {
@@ -311,6 +365,89 @@ export class PrismaMeCatalogRepository implements MeCatalogRepositoryPort {
 
     if (result.count === 0) {
       throw new NotFoundError('SAVED_MEAL_NOT_FOUND', 'Saved meal was not found');
+    }
+  }
+
+  /** Rebuilds the full Recipe object and re-signs the attached photo (if any) on every read. */
+  private async toSavedRecipeCard(row: SavedRecipeRow): Promise<SavedRecipeCard> {
+    const recipe: Recipe = {
+      title: row.title,
+      timeMinutes: row.timeMinutes,
+      servings: row.servings,
+      calories: row.calories,
+      proteinGrams: row.proteinGrams,
+      carbsGrams: row.carbsGrams,
+      fatGrams: row.fatGrams,
+      ingredients: (row.ingredients as unknown as RecipeIngredient[]) ?? [],
+      steps: (row.steps as unknown as string[]) ?? [],
+      ...(row.subtitle !== null ? { subtitle: row.subtitle } : {}),
+      ...(row.fiberGrams !== null ? { fiberGrams: row.fiberGrams } : {}),
+      ...(row.why !== null ? { why: row.why } : {}),
+    };
+
+    let imageUrl: string | null = null;
+    if (row.mealPhotoId && row.mealPhotoOwnerId) {
+      imageUrl = await createFinalDownloadUrl(row.mealPhotoOwnerId, row.mealPhotoId).catch(
+        () => null,
+      );
+    }
+
+    return {
+      id: row.id,
+      recipe,
+      imageUrl,
+      mealPhotoId: row.mealPhotoId,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  async listSavedRecipes(userId: string): Promise<SavedRecipeCard[]> {
+    const rows = await this.db.savedRecipe.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return Promise.all(rows.map((row) => this.toSavedRecipeCard(row)));
+  }
+
+  async createSavedRecipe(input: {
+    userId: string;
+    recipe: Recipe;
+    mealPhotoId?: string | null;
+    mealPhotoOwnerId?: string | null;
+  }): Promise<SavedRecipeCard> {
+    const { recipe } = input;
+    const mealPhotoId = input.mealPhotoId ?? null;
+    const row = await this.db.savedRecipe.create({
+      data: {
+        userId: input.userId,
+        title: recipe.title,
+        subtitle: recipe.subtitle ?? null,
+        timeMinutes: recipe.timeMinutes,
+        servings: recipe.servings,
+        calories: recipe.calories,
+        proteinGrams: recipe.proteinGrams,
+        carbsGrams: recipe.carbsGrams,
+        fatGrams: recipe.fatGrams,
+        fiberGrams: recipe.fiberGrams ?? null,
+        ingredients: recipe.ingredients as unknown as Prisma.InputJsonValue,
+        steps: recipe.steps as unknown as Prisma.InputJsonValue,
+        why: recipe.why ?? null,
+        mealPhotoId,
+        // A freshly uploaded photo belongs to the caller; an explicit owner is
+        // only meaningful for a photo already stored elsewhere.
+        mealPhotoOwnerId: mealPhotoId ? input.mealPhotoOwnerId ?? input.userId : null,
+      },
+    });
+    return this.toSavedRecipeCard(row);
+  }
+
+  async deleteSavedRecipe(userId: string, id: string): Promise<void> {
+    const result = await this.db.savedRecipe.deleteMany({
+      where: { id, userId },
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundError('SAVED_RECIPE_NOT_FOUND', 'Saved recipe was not found');
     }
   }
 }

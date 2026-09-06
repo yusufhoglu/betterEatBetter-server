@@ -1,12 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import { NotFoundError } from '../../../../shared/errors/NotFoundError';
 import type { Conversation } from '../../domain/Conversation';
+import type { ConversationSummary } from '../../domain/ConversationSummary';
+import { deriveConversationPreview, deriveConversationTitle } from '../../domain/ConversationSummary';
 import type { Message, MessageRole } from '../../domain/Message';
 import { decodeProposalMessage } from '../../domain/proposalMessageCodec';
 import type { ConversationRepositoryPort } from '../../ports/ConversationRepositoryPort';
 
 export class InMemoryConversationRepository implements ConversationRepositoryPort {
   private readonly conversations = new Map<string, Conversation>();
+  /** Monotonic clock so message ordering is deterministic in fast tests. */
+  private clock = 0;
+
+  private nextTimestamp(): Date {
+    this.clock += 1;
+    return new Date(this.clock);
+  }
 
   async findById(userId: string, conversationId: string): Promise<Conversation | null> {
     const conversation = this.conversations.get(conversationId);
@@ -25,7 +34,7 @@ export class InMemoryConversationRepository implements ConversationRepositoryPor
       return cloneConversation(existing);
     }
 
-    const created: Conversation = { id: conversationId, userId, createdAt: new Date(), messages: [] };
+    const created: Conversation = { id: conversationId, userId, createdAt: this.nextTimestamp(), messages: [] };
     this.conversations.set(conversationId, created);
     return cloneConversation(created);
   }
@@ -43,10 +52,29 @@ export class InMemoryConversationRepository implements ConversationRepositoryPor
       role,
       content: proposal ? '' : content,
       ...(proposal ? { proposal } : {}),
-      createdAt: new Date(),
+      createdAt: this.nextTimestamp(),
     };
     conversation.messages.push(message);
     return { ...message };
+  }
+
+  async listByUser(userId: string, limit: number): Promise<ConversationSummary[]> {
+    return [...this.conversations.values()]
+      .filter((conversation) => conversation.userId === userId && conversation.messages.length > 0)
+      .map((conversation) => {
+        const messages = conversation.messages;
+        const firstUser = messages.find((message) => message.role === 'user');
+        return {
+          id: conversation.id,
+          createdAt: conversation.createdAt,
+          lastMessageAt: messages[messages.length - 1]!.createdAt,
+          messageCount: messages.length,
+          title: deriveConversationTitle(firstUser?.content),
+          preview: deriveConversationPreview(messages[messages.length - 1]!.content),
+        };
+      })
+      .sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime())
+      .slice(0, limit);
   }
 }
 

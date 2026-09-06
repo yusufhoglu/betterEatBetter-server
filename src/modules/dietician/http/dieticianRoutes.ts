@@ -35,6 +35,7 @@ import { PrismaDieticianConversationRepository } from '../adapters/repository/Pr
 import { dieticianRateLimiter } from '../rateLimiting/dieticianRateLimiter';
 import { ConfirmMealProposal } from '../use-cases/ConfirmMealProposal';
 import { GetDieticianConversation } from '../use-cases/GetDieticianConversation';
+import { ListDieticianConversations } from '../use-cases/ListDieticianConversations';
 import { RunDieticianTurn } from '../use-cases/RunDieticianTurn';
 import { DieticianAnalyticsTool } from '../use-cases/tools/DieticianAnalyticsTool';
 import { DieticianMealDataTool } from '../use-cases/tools/DieticianMealDataTool';
@@ -97,9 +98,15 @@ export function dieticianRoutes(): Router {
     planContextPort,
     dailySnapshotPort,
   );
+  const listDieticianConversations = new ListDieticianConversations(conversationRepository);
   const confirmMealProposal = new ConfirmMealProposal(conversationRepository, logMealEntries, replaceMealSlotEntries);
 
-  const controller = new DieticianController(runDieticianTurn, getDieticianConversation, confirmMealProposal);
+  const controller = new DieticianController(
+    runDieticianTurn,
+    getDieticianConversation,
+    listDieticianConversations,
+    confirmMealProposal,
+  );
 
   const premiumContext = premiumContextMiddleware(
     new PremiumStatusCache(
@@ -116,6 +123,8 @@ export function dieticianRoutes(): Router {
     dieticianRateLimiter,
     controller.handleSendMessage,
   );
+  // `/conversations` must precede `/:conversationId` — Express matches in order.
+  router.get('/conversations', authMiddleware, controller.handleListConversations);
   router.get('/:conversationId', authMiddleware, controller.handleGetConversation);
   router.post('/:conversationId/proposals/confirm', authMiddleware, controller.handleConfirmMealProposal);
 

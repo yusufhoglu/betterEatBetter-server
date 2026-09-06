@@ -101,6 +101,35 @@ you get a normal JSON error instead of an SSE stream:
   has no logged data — hide or placeholder the header card.
 - `digest` is internal state; the UI can ignore it.
 
+### 2b. `GET /dietician/conversations?limit=30` — the user's coaching threads
+
+Lets the client resume the latest thread / show a history browser **without
+persisting anything locally**. `limit` optional (default 30, max 100).
+
+`200`:
+```json
+{
+  "conversations": [
+    {
+      "id": "…",
+      "createdAt": "2026-09-03T…Z",
+      "lastMessageAt": "2026-09-05T…Z",
+      "messageCount": 8,
+      "turnCount": 4,
+      "title": "what should I eat for dinner?" | null,
+      "preview": "Have grilled chicken with…" | null
+    }
+  ]
+}
+```
+
+- Newest activity first (`lastMessageAt` desc).
+- Threads that were `GET`-materialized but never messaged are **omitted**.
+- `title` = first user message, trimmed to ~80 chars; `preview` = last message
+  with readable text, trimmed to ~160. Both `null` when the thread only holds
+  card messages (proposal/rating/recipe) — render a fallback label.
+- Only ever returns the caller's own threads.
+
 ### 3. `POST /dietician/:conversationId/proposals/confirm` — save a proposed meal
 
 Body:

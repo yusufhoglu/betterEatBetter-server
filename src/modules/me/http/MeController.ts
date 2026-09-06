@@ -12,6 +12,8 @@ import type { GetActivePlan } from '../../onboarding-plan/use-cases/GetActivePla
 import type { UpdatePlan } from '../../onboarding-plan/use-cases/UpdatePlan';
 import type { UpdateProfileMeasurements } from '../../onboarding-plan/use-cases/UpdateProfileMeasurements';
 import type { GetSubscriptionEntitlement } from '../../subscription/use-cases/GetSubscriptionEntitlement';
+import { recipeSchema } from '../../dietician/domain/Recipe';
+import type { SaveDieticianRecipe } from '../use-cases/SaveDieticianRecipe';
 import type { MeCatalogRepositoryPort } from '../ports/MeCatalogRepositoryPort';
 import type { MePreferencesRepositoryPort, NotificationPreferencesPatch } from '../ports/MePreferencesRepositoryPort';
 
@@ -108,6 +110,14 @@ const myMealCreateSchema = z.object({
   mealPhotoOwnerId: z.string().uuid().nullable().optional(),
 });
 
+const savedRecipeCreateSchema = z.object({
+  recipe: recipeSchema,
+  // Optional user-attached photo. `mealPhotoId` alone ⇒ a freshly uploaded photo
+  // owned by the caller; both ⇒ a photo already stored under another user.
+  mealPhotoId: z.string().uuid().nullable().optional(),
+  mealPhotoOwnerId: z.string().uuid().nullable().optional(),
+});
+
 const myMealUpdateSchema = z
   .object({
     title: z.string().trim().min(1).optional(),
@@ -160,6 +170,7 @@ export class MeController {
     private readonly getSubscriptionEntitlement: GetSubscriptionEntitlement,
     private readonly catalogRepository: MeCatalogRepositoryPort,
     private readonly preferencesRepository: MePreferencesRepositoryPort,
+    private readonly saveDieticianRecipe: SaveDieticianRecipe,
   ) {}
 
   private async buildProfileResponse(userId: string) {
@@ -465,6 +476,42 @@ export class MeController {
         throw new ValidationError('INVALID_PARAMS', 'id is required');
       }
       await this.catalogRepository.deleteMyMeal(req.auth!.userId, req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  handleGetSavedRecipes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await this.catalogRepository.listSavedRecipes(req.auth!.userId));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  handlePostSavedRecipe = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const input = parseOrThrow(savedRecipeCreateSchema, req.body, 'INVALID_SAVED_RECIPE');
+      res.status(201).json(
+        await this.saveDieticianRecipe.execute({
+          userId: req.auth!.userId,
+          recipe: input.recipe,
+          mealPhotoId: input.mealPhotoId,
+          mealPhotoOwnerId: input.mealPhotoOwnerId,
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  handleDeleteSavedRecipe = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.params.id) {
+        throw new ValidationError('INVALID_PARAMS', 'id is required');
+      }
+      await this.catalogRepository.deleteSavedRecipe(req.auth!.userId, req.params.id);
       res.status(204).send();
     } catch (error) {
       next(error);

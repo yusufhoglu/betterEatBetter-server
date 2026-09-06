@@ -187,8 +187,20 @@ Exactly as Change 1 (`RECIPE_MESSAGE_PREFIX`, `decodeRecipeMessage`,
 
 The mobile recipe view's **Log this meal** button sends a normal
 `"log the <title>"` message — that hits the existing `log_help` → `propose_meal_log`
-path. Nothing to build. "Save recipe" + "add photo" are **on-device only**;
-there is no recipe-collection endpoint and the app doesn't expect one.
+path. Nothing to build.
+
+### 2e. "Save recipe" → `me` module collection (added later)
+
+Originally on-device only. Now backed by the `me` module:
+
+- `POST /me/saved-recipes` `{ recipe: Recipe, mealPhotoId?, mealPhotoOwnerId? }` → `201`
+- `GET /me/saved-recipes` → `SavedRecipeCard[]` (`{ id, recipe, imageUrl, mealPhotoId, createdAt }`)
+- `DELETE /me/saved-recipes/:id` → `204`
+
+New `SavedRecipe` Prisma model stores the full `Recipe` (scalars as columns,
+`ingredients`/`steps` as JSON). An optional user-attached photo reuses the
+food-recognition `standardize-and-copy` job (`SaveDieticianRecipe` use-case) and
+is re-signed on read like `SavedMeal`. No dedupe. See `me-doc.md`.
 
 ---
 

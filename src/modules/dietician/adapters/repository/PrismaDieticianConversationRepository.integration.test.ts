@@ -114,6 +114,31 @@ describe('PrismaDieticianConversationRepository (integration)', () => {
     expect(conversation?.messages[0]?.content).toBe('');
   });
 
+  it('lists a user\'s non-empty threads newest-first with derived title/preview and turn count', async () => {
+    await repository.findOrCreate('list-user', 'list-older');
+    await repository.appendMessage('list-older', 'user', 'plan my week');
+    await repository.appendMessage('list-older', 'assistant', 'Start with a protein target.');
+    await repository.incrementTurnCount('list-older');
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    await repository.findOrCreate('list-user', 'list-newer');
+    await repository.appendMessage('list-newer', 'user', 'quick check-in');
+
+    await repository.findOrCreate('list-user', 'list-empty');
+
+    const summaries = await repository.listByUser('list-user', 30);
+
+    expect(summaries.map((s) => s.id)).toEqual(['list-newer', 'list-older']);
+    expect(summaries[0]).toMatchObject({ title: 'quick check-in', messageCount: 1 });
+    expect(summaries[1]).toMatchObject({
+      title: 'plan my week',
+      preview: 'Start with a protein target.',
+      messageCount: 2,
+      turnCount: 1,
+    });
+  });
+
   it('returns null from findById for a conversation owned by another user', async () => {
     await repository.findOrCreate('user-4', 'd-4');
     await expect(repository.findById('intruder', 'd-4')).resolves.toBeNull();

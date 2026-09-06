@@ -14,6 +14,7 @@ import { PrismaSubscriptionRepository } from '../../subscription/adapters/reposi
 import { GetSubscriptionEntitlement } from '../../subscription/use-cases/GetSubscriptionEntitlement';
 import { PrismaMeCatalogRepository } from '../adapters/repository/PrismaMeCatalogRepository';
 import { PrismaMePreferencesRepository } from '../adapters/repository/PrismaMePreferencesRepository';
+import { SaveDieticianRecipe } from '../use-cases/SaveDieticianRecipe';
 import { MeController } from './MeController';
 
 export function meRoutes(): Router {
@@ -22,6 +23,7 @@ export function meRoutes(): Router {
   const userRepository = new PrismaUserRepository();
   const userProfileRepository = new PrismaUserProfileRepository(prisma);
   const planRepository = new PrismaPlanRepository(prisma);
+  const catalogRepository = new PrismaMeCatalogRepository(prisma);
   const controller = new MeController(
     new GetUserAccountProfile(userRepository),
     new UpdateUserAccountProfile(userRepository),
@@ -30,8 +32,9 @@ export function meRoutes(): Router {
     new UpdatePlan(userProfileRepository, planRepository),
     new UpdateProfileMeasurements(userProfileRepository, planRepository),
     new GetSubscriptionEntitlement(new PrismaSubscriptionRepository(prisma)),
-    new PrismaMeCatalogRepository(prisma),
+    catalogRepository,
     new PrismaMePreferencesRepository(prisma),
+    new SaveDieticianRecipe(catalogRepository),
   );
 
   router.get('/profile', authMiddleware, controller.handleGetProfile);
@@ -50,6 +53,9 @@ export function meRoutes(): Router {
   router.post('/my-meals', authMiddleware, controller.handlePostMyMeal);
   router.patch('/my-meals/:id', authMiddleware, controller.handlePatchMyMeal);
   router.delete('/my-meals/:id', authMiddleware, controller.handleDeleteMyMeal);
+  router.get('/saved-recipes', authMiddleware, controller.handleGetSavedRecipes);
+  router.post('/saved-recipes', authMiddleware, controller.handlePostSavedRecipe);
+  router.delete('/saved-recipes/:id', authMiddleware, controller.handleDeleteSavedRecipe);
   router.get('/subscription/plans', authMiddleware, controller.handleGetSubscriptionPlans);
 
   return router;

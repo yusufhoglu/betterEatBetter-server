@@ -10,6 +10,8 @@ import { mealTypes } from '../../nutrition-logging/domain/MealItem';
 import type { DieticianStreamChunk } from '../domain/DieticianStreamChunk';
 import type { ConfirmMealProposal } from '../use-cases/ConfirmMealProposal';
 import type { GetDieticianConversation } from '../use-cases/GetDieticianConversation';
+import type { ListDieticianConversations } from '../use-cases/ListDieticianConversations';
+import { DEFAULT_DIETICIAN_CONVERSATION_LIST_LIMIT } from '../use-cases/ListDieticianConversations';
 import type { RunDieticianTurn } from '../use-cases/RunDieticianTurn';
 
 const sendMessageBodySchema = z.object({
@@ -19,6 +21,10 @@ const sendMessageBodySchema = z.object({
 
 const getConversationQuerySchema = z.object({
   timeZone: z.string().min(1),
+});
+
+const listConversationsQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).optional(),
 });
 
 const confirmProposalBodySchema = z.object({
@@ -107,6 +113,7 @@ export class DieticianController {
   constructor(
     private readonly runDieticianTurn: RunDieticianTurn,
     private readonly getDieticianConversation: GetDieticianConversation,
+    private readonly listDieticianConversations: ListDieticianConversations,
     private readonly confirmMealProposal: ConfirmMealProposal,
   ) {}
 
@@ -189,6 +196,19 @@ export class DieticianController {
         resolveLocalDate(timeZone),
       );
       res.status(200).json(view);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  handleListConversations = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { limit } = parseOrThrow(listConversationsQuerySchema, req.query);
+      const conversations = await this.listDieticianConversations.execute(
+        req.auth!.userId,
+        limit ?? DEFAULT_DIETICIAN_CONVERSATION_LIST_LIMIT,
+      );
+      res.status(200).json({ conversations });
     } catch (error) {
       next(error);
     }

@@ -34,6 +34,7 @@ import { ChatController } from './ChatController';
 import { chatRateLimiter } from '../rateLimiting/chatRateLimiter';
 import { ConfirmMealProposal } from '../use-cases/ConfirmMealProposal';
 import { GetConversationHistory } from '../use-cases/GetConversationHistory';
+import { ListConversations } from '../use-cases/ListConversations';
 import { SeedPhotoMealProposal } from '../use-cases/SeedPhotoMealProposal';
 import { DEFAULT_MAX_TOOL_TURNS, SendMessage } from '../use-cases/SendMessage';
 import { AnalyticsSummaryTool } from '../use-cases/tools/AnalyticsSummaryTool';
@@ -76,6 +77,7 @@ export function chatRoutes(): Router {
     env.MAX_CONTEXT_MESSAGES ?? DEFAULT_MAX_CONTEXT_MESSAGES,
   );
   const getConversationHistory = new GetConversationHistory(conversationRepository);
+  const listConversations = new ListConversations(conversationRepository);
   const seedPhotoMealProposal = new SeedPhotoMealProposal(conversationRepository, foodEntryRepository);
   const confirmMealProposal = new ConfirmMealProposal(
     conversationRepository,
@@ -86,6 +88,7 @@ export function chatRoutes(): Router {
   const controller = new ChatController(
     sendMessage,
     getConversationHistory,
+    listConversations,
     seedPhotoMealProposal,
     confirmMealProposal,
   );
@@ -105,6 +108,8 @@ export function chatRoutes(): Router {
     chatRateLimiter,
     controller.handleSendMessage,
   );
+  // `/conversations` must precede `/:conversationId` — Express matches in order.
+  router.get('/conversations', authMiddleware, controller.handleListConversations);
   router.get('/:conversationId', authMiddleware, controller.handleGetConversationHistory);
   router.post('/:conversationId/proposals/photo', authMiddleware, controller.handleSeedPhotoProposal);
   router.post('/:conversationId/proposals/confirm', authMiddleware, controller.handleConfirmMealProposal);

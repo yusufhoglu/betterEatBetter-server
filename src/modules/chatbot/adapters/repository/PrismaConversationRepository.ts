@@ -1,6 +1,8 @@
 import type { Conversation as PrismaConversation, Message as PrismaMessage, PrismaClient } from '@prisma/client';
 import { NotFoundError } from '../../../../shared/errors/NotFoundError';
 import type { Conversation } from '../../domain/Conversation';
+import type { ConversationSummary } from '../../domain/ConversationSummary';
+import { deriveConversationPreview, deriveConversationTitle } from '../../domain/ConversationSummary';
 import type { Message, MessageRole } from '../../domain/Message';
 import { decodeProposalMessage } from '../../domain/proposalMessageCodec';
 import type { ConversationRepositoryPort } from '../../ports/ConversationRepositoryPort';
@@ -70,7 +72,55 @@ export class PrismaConversationRepository implements ConversationRepositoryPort 
     const row = await this.db.message.create({
       data: { conversationId, role, content },
     });
+    await this.db.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessageAt: row.createdAt },
+    });
 
     return toDomainMessage(row);
+  }
+
+  async listByUser(userId: string, limit: number): Promise<ConversationSummary[]> {
+    const rows = await this.db.conversation.findMany({
+      where: { userId, lastMessageAt: { not: null } },
+      orderBy: { lastMessageAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        createdAt: true,
+        lastMessageAt: true,
+        _count: { select: { messages: true } },
+      },
+    });
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const ids = rows.map((row) => row.id);
+    const [firstUserMessages, lastMessages] = await Promise.all([
+      this.db.message.findMany({
+        where: { conversationId: { in: ids }, role: 'user' },
+        orderBy: [{ conversationId: 'asc' }, { createdAt: 'asc' }],
+        distinct: ['conversationId'],
+        select: { conversationId: true, content: true },
+      }),
+      this.db.message.findMany({
+        where: { conversationId: { in: ids } },
+        orderBy: [{ conversationId: 'asc' }, { createdAt: 'desc' }],
+        distinct: ['conversationId'],
+        select: { conversationId: true, content: true },
+      }),
+    ]);
+    const firstUserByConversation = new Map(firstUserMessages.map((m) => [m.conversationId, m.content]));
+    const lastByConversation = new Map(lastMessages.map((m) => [m.conversationId, m.content]));
+
+    return rows.map((row) => ({
+      id: row.id,
+      createdAt: row.createdAt,
+      lastMessageAt: row.lastMessageAt as Date,
+      messageCount: row._count.messages,
+      title: deriveConversationTitle(firstUserByConversation.get(row.id)),
+      preview: deriveConversationPreview(lastByConversation.get(row.id)),
+    }));
   }
 }
