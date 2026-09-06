@@ -17,6 +17,15 @@ import type {
 } from '../../ports/LlmDieticianPort';
 
 /**
+ * Mechanical stages (classify / gather / digest / smalltalk) ask for the
+ * smallest reasoning budget; the user-facing advice answer gets a little more.
+ * Both are no-ops on a non-reasoning `cheap` model — the provider drops the
+ * field — but they matter whenever a tier is pointed at a gpt-5/o-series model.
+ */
+const MECHANICAL_REASONING_EFFORT = 'minimal' as const;
+const ADVICE_REASONING_EFFORT = 'low' as const;
+
+/**
  * The only file in this module allowed to touch `shared/llm/`. Picks the model
  * tier per method — cheap for classify/gather/digest, prime for advice — and
  * tags every call with a distinct `dietician:*` feature so `llm_tokens_total`
@@ -41,6 +50,7 @@ export class TieredLlmDieticianAdapter implements LlmDieticianPort {
         system: DIETICIAN_CLASSIFY_SYSTEM_PROMPT,
         messages,
         model: this.cheapModel,
+        reasoningEffort: MECHANICAL_REASONING_EFFORT,
         feature: 'dietician:classify',
       },
       resultSchema: dieticianIntentSchema,
@@ -60,6 +70,7 @@ export class TieredLlmDieticianAdapter implements LlmDieticianPort {
       tools,
       ...(forceToolChoice ? { forceToolChoice } : {}),
       model: this.cheapModel,
+      reasoningEffort: MECHANICAL_REASONING_EFFORT,
       feature: 'dietician:gather',
     });
 
@@ -74,6 +85,7 @@ export class TieredLlmDieticianAdapter implements LlmDieticianPort {
       system: DIETICIAN_PERSONA,
       messages,
       model: this.primeModel,
+      reasoningEffort: ADVICE_REASONING_EFFORT,
       feature: 'dietician:advice',
     });
   }
@@ -83,6 +95,7 @@ export class TieredLlmDieticianAdapter implements LlmDieticianPort {
       system: DIETICIAN_PERSONA,
       messages,
       model: this.cheapModel,
+      reasoningEffort: MECHANICAL_REASONING_EFFORT,
       feature: 'dietician:smalltalk',
     });
   }
@@ -105,6 +118,7 @@ export class TieredLlmDieticianAdapter implements LlmDieticianPort {
         system: DIETICIAN_DIGEST_SYSTEM_PROMPT,
         messages,
         model: this.cheapModel,
+        reasoningEffort: MECHANICAL_REASONING_EFFORT,
         feature: 'dietician:digest',
       },
       resultSchema: conversationDigestSchema,

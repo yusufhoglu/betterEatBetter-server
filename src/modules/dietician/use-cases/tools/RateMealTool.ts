@@ -11,11 +11,15 @@ const RATE_MEAL_SYSTEM_PROMPT = [
   "Score the described meal 0-10 against the user's plan and today's intake (given as context) —",
   'higher means a better fit for their goal and remaining budget. Flag at most one macro as "high"',
   '(protein/carbs/fat) only if one is clearly disproportionate, else null.',
-  'goodNote: one sentence on what is working. fixNote: one sentence with the single most useful change.',
+  'mealName: a short name for the meal. goodNote: one sentence on what is working.',
+  'fixNote: one sentence with the single most useful change.',
+  'Write mealName, goodNote and fixNote in the same language the user is writing in',
+  '(infer it from their messages below; it is often Turkish). Do not answer in English if they are not.',
   'Return exactly one structured result.',
 ].join(' ');
 
 const rateMealResultSchema = z.object({
+  mealName: z.string(),
   score: z.number().min(0).max(10),
   flaggedMacro: z.enum(['protein', 'carbs', 'fat']).nullable(),
   goodNote: z.string(),
@@ -66,12 +70,16 @@ export class RateMealTool implements DieticianTool {
 
     const recognized = await this.recognizeFromText.execute({ text: description, userId });
 
+    const lastUserMessage = [...context.messages].reverse().find((message) => message.role === 'user');
+
     const scored = await requestStructuredOutput({
       client: this.llmClient,
       request: {
         system: RATE_MEAL_SYSTEM_PROMPT,
         messages: [
           ...context.messages.filter((message) => message.role === 'system'),
+          // Carries the user's language + phrasing into this isolated call.
+          ...(lastUserMessage ? [lastUserMessage] : []),
           {
             role: 'user',
             content:
@@ -81,13 +89,14 @@ export class RateMealTool implements DieticianTool {
           },
         ],
         model: this.cheapModel,
+        reasoningEffort: 'minimal',
         feature: 'dietician:rate_meal',
       },
       resultSchema: rateMealResultSchema,
     });
 
     return {
-      mealName: description,
+      mealName: scored.mealName.trim() || description,
       score: scored.score,
       macros: recognized.macros,
       flaggedMacro: scored.flaggedMacro,

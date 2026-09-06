@@ -50,3 +50,23 @@ export const llmTokensTotal = new Counter({
   labelNames: ['provider', 'feature', 'type'] as const,
   registers: [metricsRegistry],
 });
+
+// Dietician chat is a multi-stage LLM pipeline; these split the user's wait so
+// Grafana can show avg / p95 per stage and per lane (smalltalk vs assisted).
+const DIETICIAN_LATENCY_BUCKETS = [0.25, 0.5, 1, 2, 3, 5, 8, 13, 21, 34, 55] as const;
+
+export const dieticianTurnDurationSeconds = new Histogram({
+  name: 'dietician_turn_duration_seconds',
+  help: 'Dietician chat turn latency in seconds, split by pipeline stage (prep|gather|stream|total)',
+  labelNames: ['stage', 'lane', 'outcome'] as const,
+  buckets: [...DIETICIAN_LATENCY_BUCKETS],
+  registers: [metricsRegistry],
+});
+
+export const dieticianTurnTtfbSeconds = new Histogram({
+  name: 'dietician_turn_ttfb_seconds',
+  help: 'Dietician time-to-first-token: turn start to the first streamed chunk the user sees',
+  labelNames: ['lane', 'outcome'] as const,
+  buckets: [...DIETICIAN_LATENCY_BUCKETS],
+  registers: [metricsRegistry],
+});

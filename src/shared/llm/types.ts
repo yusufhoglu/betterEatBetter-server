@@ -36,6 +36,13 @@ export interface LlmForceToolChoice {
 
 export type LlmStopReason = 'end_turn' | 'tool_use' | 'max_tokens';
 
+/**
+ * Reasoning budget hint for reasoning-model providers (OpenAI gpt-5 / o-series).
+ * Lower means a faster time-to-first-token at some cost to answer depth.
+ * Providers and models that don't support it ignore the field.
+ */
+export type LlmReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+
 export interface LlmUsage {
   readonly inputTokens: number;
   readonly outputTokens: number;
@@ -50,6 +57,8 @@ export interface LlmCompleteRequest {
   readonly forceToolChoice?: LlmForceToolChoice;
   readonly maxTokens?: number;
   readonly temperature?: number;
+  /** See {@link LlmReasoningEffort}. Honoured only by reasoning-capable models. */
+  readonly reasoningEffort?: LlmReasoningEffort;
   /** Tags token usage for `llm_tokens_total` (shared/observability/metrics.ts). */
   readonly feature?: string;
 }
@@ -67,5 +76,7 @@ export interface LlmStreamCompleteRequest {
   readonly system?: string;
   readonly maxTokens?: number;
   readonly temperature?: number;
+  /** See {@link LlmReasoningEffort}. Honoured only by reasoning-capable models. */
+  readonly reasoningEffort?: LlmReasoningEffort;
   readonly feature?: string;
 }

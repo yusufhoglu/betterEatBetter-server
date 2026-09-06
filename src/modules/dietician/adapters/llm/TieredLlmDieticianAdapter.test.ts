@@ -57,7 +57,11 @@ describe('TieredLlmDieticianAdapter', () => {
     const intent = await adapter.classifyIntent({ message: 'protein in an egg?', recentMessages: [] });
 
     expect(intent).toBe('quick_fact');
-    expect(client.completeRequests[0]).toMatchObject({ model: 'cheap-model', feature: 'dietician:classify' });
+    expect(client.completeRequests[0]).toMatchObject({
+      model: 'cheap-model',
+      feature: 'dietician:classify',
+      reasoningEffort: 'minimal',
+    });
   });
 
   it('runContextGathering uses the cheap model and the dietician:gather feature', async () => {
@@ -88,7 +92,11 @@ describe('TieredLlmDieticianAdapter', () => {
       // drain
     }
 
-    expect(client.streamRequests[0]).toMatchObject({ model: 'prime-model', feature: 'dietician:advice' });
+    expect(client.streamRequests[0]).toMatchObject({
+      model: 'prime-model',
+      feature: 'dietician:advice',
+      reasoningEffort: 'low',
+    });
   });
 
   it('streamSmalltalk uses the cheap model and the dietician:smalltalk feature', async () => {
@@ -98,7 +106,11 @@ describe('TieredLlmDieticianAdapter', () => {
       // drain
     }
 
-    expect(client.streamRequests[0]).toMatchObject({ model: 'cheap-model', feature: 'dietician:smalltalk' });
+    expect(client.streamRequests[0]).toMatchObject({
+      model: 'cheap-model',
+      feature: 'dietician:smalltalk',
+      reasoningEffort: 'minimal',
+    });
   });
 
   it('summarizeConversation uses the cheap model and the dietician:digest feature', async () => {

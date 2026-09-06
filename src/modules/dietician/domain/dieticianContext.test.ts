@@ -37,7 +37,7 @@ describe('buildDieticianContextBlock', () => {
   it('renders the plan block with goal and macro targets', () => {
     const block = buildDieticianContextBlock({ plan, snapshot: null, digest: null });
     expect(block).toContain('Goal: lose weight');
-    expect(block).toContain('1800 kcal (140P / 160C / 60F g)');
+    expect(block).toContain('1800 kcal (140 g protein / 160 g carbs / 60 g fat)');
     expect(block).toContain('target 75 kg');
   });
 

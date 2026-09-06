@@ -8,6 +8,8 @@ import type { DieticianTool } from './DieticianTool';
 const PROVIDE_RECIPE_SYSTEM_PROMPT = [
   "Write one recipe that fits the request, sized to the calories the user has left today (given as context, if any).",
   'Keep it realistic and concrete: real ingredient amounts, ordered steps. `why` is one line tying it to their plan.',
+  'Write EVERY text field — title, subtitle, each ingredient name, every step, and `why` — in the same language the',
+  'user is writing in (infer it from their messages below; it is often Turkish). Do not answer in English if they are not.',
   'Return exactly one structured result.',
 ].join(' ');
 
@@ -53,12 +55,16 @@ export class ProvideRecipeTool implements DieticianTool {
     }
     const targetCalories = typeof input.targetCalories === 'number' ? input.targetCalories : undefined;
 
+    const lastUserMessage = [...context.messages].reverse().find((message) => message.role === 'user');
+
     return requestStructuredOutput({
       client: this.llmClient,
       request: {
         system: PROVIDE_RECIPE_SYSTEM_PROMPT,
         messages: [
           ...context.messages.filter((message) => message.role === 'system'),
+          // Carries the user's language + phrasing into this isolated call.
+          ...(lastUserMessage ? [lastUserMessage] : []),
           {
             role: 'user',
             content:
@@ -68,6 +74,7 @@ export class ProvideRecipeTool implements DieticianTool {
           },
         ],
         model: this.cheapModel,
+        reasoningEffort: 'minimal',
         feature: 'dietician:provide_recipe',
       },
       resultSchema: recipeSchema,

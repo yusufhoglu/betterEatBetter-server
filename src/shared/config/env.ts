@@ -53,11 +53,16 @@ const envSchema = z.object({
   // mechanical LLM work (classification, data-gathering, summarization);
   // `prime` is reserved for the user-facing answer that warrants a stronger
   // model. Both are plain provider model ids for the active LLM_PROVIDER.
-  LLM_MODEL_CHEAP: z.string().min(1).default('gpt-5-mini'),
+  // `cheap` is a fast, non-reasoning model on purpose — classification and
+  // tool-gathering turns are latency-sensitive and a reasoning model's hidden
+  // thinking dominates their wall-clock. `prime` stays a reasoning model for the
+  // final answer, but the dietician adapter caps its effort (see
+  // TieredLlmDieticianAdapter) to keep time-to-first-token low.
+  LLM_MODEL_CHEAP: z.string().min(1).default('gpt-4.1-mini'),
   LLM_MODEL_PRIME: z.string().min(1).default('gpt-5'),
 
   // dietician module — coaching conversation over the two model tiers.
-  DIETICIAN_MAX_GATHER_TURNS: z.coerce.number().int().positive().default(3),
+  DIETICIAN_MAX_GATHER_TURNS: z.coerce.number().int().positive().default(2),
   DIETICIAN_DIGEST_EVERY_N_TURNS: z.coerce.number().int().positive().default(6),
   DIETICIAN_MAX_CONTEXT_MESSAGES: z.coerce.number().int().positive().default(20),
   DIETICIAN_RATE_LIMIT_PER_USER: z.coerce.number().int().positive().default(12),
@@ -123,6 +128,10 @@ const envSchema = z.object({
   WEEKLY_REPORT_LOCAL_HOUR: z.coerce.number().int().min(0).max(23).default(9),
 
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  // Prometheus scrape auth. `GET /metrics` returns 404 until this is set, then
+  // requires `Authorization: Bearer <token>`. Keep the endpoint off the public
+  // internet regardless (shared-rule.md).
+  METRICS_TOKEN: z.string().min(1).optional(),
   LOKI_URL: z.string().url().optional(),
   LOKI_USER_ID: z.string().optional(),
   LOKI_API_TOKEN: z.string().optional(),

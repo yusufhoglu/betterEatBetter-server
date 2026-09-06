@@ -7,6 +7,7 @@ import type {
   LlmCompleteRequest,
   LlmCompleteResponse,
   LlmMessage,
+  LlmReasoningEffort,
   LlmStopReason,
   LlmStreamCompleteRequest,
   LlmToolCall,
@@ -49,15 +50,18 @@ export class OpenAiProvider implements LlmClient {
   }
 
   async complete(request: LlmCompleteRequest): Promise<LlmCompleteResponse> {
+    const model = request.model ?? this.model;
+    const reasoningEffort = resolveReasoningEffort(model, request.reasoningEffort);
     let response;
     try {
       response = await this.client.chat.completions.create({
-        model: request.model ?? this.model,
+        model,
         messages: toOpenAiMessages(request),
         tools: request.tools?.map(toOpenAiTool),
         tool_choice: toOpenAiToolChoice(request),
         max_tokens: request.maxTokens,
         temperature: request.temperature,
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       });
     } catch (err) {
       throw mapOpenAiError(err);
@@ -72,7 +76,7 @@ export class OpenAiProvider implements LlmClient {
       inputTokens: response.usage?.prompt_tokens ?? 0,
       outputTokens: response.usage?.completion_tokens ?? 0,
     };
-    recordUsage(request.feature, request.model ?? this.model, usage);
+    recordUsage(request.feature, model, usage);
 
     return {
       message: fromOpenAiMessage(choice.message),
@@ -82,13 +86,16 @@ export class OpenAiProvider implements LlmClient {
   }
 
   async *streamComplete(request: LlmStreamCompleteRequest): AsyncIterable<string> {
+    const model = request.model ?? this.model;
+    const reasoningEffort = resolveReasoningEffort(model, request.reasoningEffort);
     let stream;
     try {
       stream = await this.client.chat.completions.create({
-        model: request.model ?? this.model,
+        model,
         messages: toOpenAiMessages(request),
         max_tokens: request.maxTokens,
         temperature: request.temperature,
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
         stream: true,
         stream_options: { include_usage: true },
       });
@@ -109,8 +116,31 @@ export class OpenAiProvider implements LlmClient {
         };
       }
     }
-    recordUsage(request.feature, request.model ?? this.model, usage);
+    recordUsage(request.feature, model, usage);
   }
+}
+
+/**
+ * `reasoning_effort` is accepted only by the gpt-5 family and the o-series;
+ * gpt-4.x and earlier reject the field outright. The o-series additionally has
+ * no `minimal` level, so it is clamped up to `low` there.
+ */
+function resolveReasoningEffort(
+  model: string,
+  effort: LlmReasoningEffort | undefined,
+): LlmReasoningEffort | undefined {
+  if (!effort) {
+    return undefined;
+  }
+  const isGpt5 = /^gpt-5/.test(model);
+  const isOSeries = /^o[134]/.test(model);
+  if (!isGpt5 && !isOSeries) {
+    return undefined;
+  }
+  if (effort === 'minimal' && !isGpt5) {
+    return 'low';
+  }
+  return effort;
 }
 
 function mapOpenAiError(err: unknown): Error {

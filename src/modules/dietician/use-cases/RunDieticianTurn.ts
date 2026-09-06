@@ -1,7 +1,14 @@
+import { performance } from 'node:perf_hooks';
+import { DomainError } from '../../../shared/errors/DomainError';
 import { IntegrationError } from '../../../shared/errors/IntegrationError';
 import { trimHistory } from '../../../shared/llm/conversation/trimHistory';
 import type { LlmMessage } from '../../../shared/llm/types';
 import { createModuleLogger } from '../../../shared/observability/logger';
+import {
+  recordDieticianTurn,
+  type DieticianLane,
+  type DieticianTurnTimings,
+} from '../observability/dieticianTurnMetrics';
 import { buildDieticianContextBlock } from '../domain/dieticianContext';
 import type { DieticianConversation } from '../domain/DieticianConversation';
 import { forcedCardToolForIntent, needsAssistedLane, type DieticianIntent } from '../domain/DieticianIntent';
@@ -36,6 +43,16 @@ export interface RunDieticianTurnInput {
 interface TextSink {
   text: string;
 }
+
+/** What the gather loop hands back to the synthesis stage. */
+interface GatherOutcome {
+  messages: LlmMessage[];
+  /** How many cheap-tier gather calls were actually made this turn. */
+  gatherTurns: number;
+}
+
+const round = (ms: number | undefined): number | undefined =>
+  ms === undefined ? undefined : Math.round(ms);
 
 function toLlmMessage(message: DieticianMessage): LlmMessage {
   if (message.proposal) {
@@ -77,67 +94,123 @@ export class RunDieticianTurn {
   ) {}
 
   async *execute(input: RunDieticianTurnInput): AsyncIterable<DieticianStreamChunk> {
-    const conversation = await this.conversationRepository.findOrCreate(input.userId, input.conversationId);
-    const userMessage = await this.conversationRepository.appendMessage(
-      input.conversationId,
-      'user',
-      input.content,
-      'live',
-    );
+    const startedAt = performance.now();
+    const timings: DieticianTurnTimings = {};
+    let lane: DieticianLane = 'smalltalk';
+    let intentLabel = 'unknown';
+    let gatherTurns = 0;
+    let outcome = 'ok';
+    let firstChunkSeen = false;
 
-    const history = trimHistory(
-      [...conversation.messages, userMessage].map(toLlmMessage),
-      this.maxContextMessages,
-    );
-    const priorMessages = history.slice(0, -1).filter((message) => message.role !== 'system');
+    const noteFirstChunk = (): void => {
+      if (!firstChunkSeen) {
+        firstChunkSeen = true;
+        timings.ttfbMs = performance.now() - startedAt;
+      }
+    };
 
-    const intent = await this.llm.classifyIntent({ message: input.content, recentMessages: priorMessages });
-
-    const [plan, snapshot] = await Promise.all([
-      this.planContextPort.getPlanContext(input.userId).catch((err) => {
-        logger.warn({ err }, 'plan context lookup failed; continuing without it');
-        return null;
-      }),
-      this.dailySnapshotPort.getTodaySnapshot(input.userId, input.today).catch((err) => {
-        logger.warn({ err }, 'daily snapshot lookup failed; continuing without it');
-        return null;
-      }),
-    ]);
-
-    const contextBlock = buildDieticianContextBlock({ plan, snapshot, digest: conversation.digest });
-    const baseMessages: LlmMessage[] = contextBlock
-      ? [{ role: 'system', content: contextBlock }, ...history]
-      : history;
-
-    const sink: TextSink = { text: '' };
-
-    if (!needsAssistedLane(intent)) {
-      yield* this.streamAndPersist(
+    try {
+      const conversation = await this.conversationRepository.findOrCreate(input.userId, input.conversationId);
+      const userMessage = await this.conversationRepository.appendMessage(
         input.conversationId,
-        [...baseMessages, { role: 'system', content: DIETICIAN_SMALLTALK_GUARD }],
-        (messages) => this.llm.streamSmalltalk(messages),
-        sink,
+        'user',
+        input.content,
+        'live',
       );
-    } else {
-      const gathered = yield* this.gatherContext(input, baseMessages, intent);
-      yield* this.streamAndPersist(
-        input.conversationId,
-        [...gathered, { role: 'system', content: DIETICIAN_ADVICE_GUARD }],
-        (messages) => this.llm.streamAdvice(messages),
-        sink,
+
+      const history = trimHistory(
+        [...conversation.messages, userMessage].map(toLlmMessage),
+        this.maxContextMessages,
       );
+      const priorMessages = history.slice(0, -1).filter((message) => message.role !== 'system');
+
+      // classifyIntent needs none of the plan/snapshot data — run all three at once.
+      const prepStartedAt = performance.now();
+      const [intent, plan, snapshot] = await Promise.all([
+        this.llm.classifyIntent({ message: input.content, recentMessages: priorMessages }),
+        this.planContextPort.getPlanContext(input.userId).catch((err) => {
+          logger.warn({ err }, 'plan context lookup failed; continuing without it');
+          return null;
+        }),
+        this.dailySnapshotPort.getTodaySnapshot(input.userId, input.today).catch((err) => {
+          logger.warn({ err }, 'daily snapshot lookup failed; continuing without it');
+          return null;
+        }),
+      ]);
+      timings.prepMs = performance.now() - prepStartedAt;
+      intentLabel = intent;
+      lane = needsAssistedLane(intent) ? 'assisted' : 'smalltalk';
+
+      const contextBlock = buildDieticianContextBlock({ plan, snapshot, digest: conversation.digest });
+      const baseMessages: LlmMessage[] = contextBlock
+        ? [{ role: 'system', content: contextBlock }, ...history]
+        : history;
+
+      const sink: TextSink = { text: '' };
+
+      let synthesisMessages: LlmMessage[];
+      let streamFn: (messages: LlmMessage[]) => AsyncIterable<string>;
+
+      if (lane === 'smalltalk') {
+        synthesisMessages = [...baseMessages, { role: 'system', content: DIETICIAN_SMALLTALK_GUARD }];
+        streamFn = (messages) => this.llm.streamSmalltalk(messages);
+      } else {
+        const gatherStartedAt = performance.now();
+        const gatherIterator = this.gatherContext(input, baseMessages, intent);
+        let gatherStep = await gatherIterator.next();
+        while (!gatherStep.done) {
+          noteFirstChunk();
+          yield gatherStep.value;
+          gatherStep = await gatherIterator.next();
+        }
+        timings.gatherMs = performance.now() - gatherStartedAt;
+        gatherTurns = gatherStep.value.gatherTurns;
+        synthesisMessages = [
+          ...gatherStep.value.messages,
+          { role: 'system', content: DIETICIAN_ADVICE_GUARD },
+        ];
+        streamFn = (messages) => this.llm.streamAdvice(messages);
+      }
+
+      const streamStartedAt = performance.now();
+      for await (const chunk of this.streamAndPersist(input.conversationId, synthesisMessages, streamFn, sink)) {
+        noteFirstChunk();
+        yield chunk;
+      }
+      timings.streamMs = performance.now() - streamStartedAt;
+
+      const newTurnCount = await this.conversationRepository.incrementTurnCount(input.conversationId);
+      await this.refreshDigestIfDue(conversation, newTurnCount, history, sink.text);
+    } catch (err) {
+      outcome = err instanceof DomainError ? err.code : 'error';
+      throw err;
+    } finally {
+      timings.totalMs = performance.now() - startedAt;
+      logger.info(
+        {
+          event: 'dietician_turn_complete',
+          lane,
+          intent: intentLabel,
+          gatherTurns,
+          outcome,
+          ttfbMs: round(timings.ttfbMs),
+          prepMs: round(timings.prepMs),
+          gatherMs: round(timings.gatherMs),
+          streamMs: round(timings.streamMs),
+          totalMs: round(timings.totalMs),
+        },
+        'dietician turn complete',
+      );
+      recordDieticianTurn({ lane, outcome, timings });
     }
-
-    const newTurnCount = await this.conversationRepository.incrementTurnCount(input.conversationId);
-    await this.refreshDigestIfDue(conversation, newTurnCount, history, sink.text);
   }
 
-  /** Cheap-tier tool-calling loop. Returns the message list to hand to the prime model. */
+  /** Cheap-tier tool-calling loop. Returns the messages to hand to the prime model, plus call count. */
   private async *gatherContext(
     input: RunDieticianTurnInput,
     baseMessages: LlmMessage[],
     intent: DieticianIntent,
-  ): AsyncGenerator<DieticianStreamChunk, LlmMessage[], undefined> {
+  ): AsyncGenerator<DieticianStreamChunk, GatherOutcome, undefined> {
     // propose_meal_log is armed only on log_help; rating/recipe cards (and plain tools) stay armed everywhere.
     const allowProposal = intent === 'log_help';
     const armedTools = this.tools.filter((tool) => tool.yieldsCard !== 'proposal' || allowProposal);
@@ -160,7 +233,7 @@ export class RunDieticianTurn {
       }
 
       if (!result.toolCalls || result.toolCalls.length === 0) {
-        return workingMessages;
+        return { messages: workingMessages, gatherTurns: turn + 1 };
       }
 
       workingMessages = [
@@ -199,7 +272,7 @@ export class RunDieticianTurn {
       { conversationId: input.conversationId, maxGatherTurns: this.maxGatherTurns },
       'max gather turns reached, forcing synthesis',
     );
-    return workingMessages;
+    return { messages: workingMessages, gatherTurns: this.maxGatherTurns };
   }
 
   private async *streamAndPersist(

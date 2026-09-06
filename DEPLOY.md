@@ -80,6 +80,9 @@ curl -fsS https://$DOMAIN/health          # liveness
 curl -fsS https://$DOMAIN/health/ready    # DB + Redis reachability
 ```
 
+Metrics / dietician wait-time monitoring (Prometheus → Grafana Cloud): see
+[MONITORING.md](MONITORING.md).
+
 ### Inspecting the database from a laptop
 
 Postgres publishes on the server's loopback only (`127.0.0.1:5432`). Tunnel in:

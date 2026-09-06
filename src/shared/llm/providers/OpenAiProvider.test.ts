@@ -148,6 +148,34 @@ describe('OpenAiProvider', () => {
     );
   });
 
+  it('sends reasoning_effort only for reasoning-capable models, clamping minimal to low on the o-series', async () => {
+    createMock.mockResolvedValue({
+      choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+    const provider = new OpenAiProvider({ apiKey: 'test-key', model: 'gpt-4.1-mini' });
+
+    // gpt-4.x rejects the field entirely -> omitted
+    await provider.complete({ messages: [{ role: 'user', content: 'hi' }], reasoningEffort: 'minimal' });
+    expect(createMock.mock.calls[0]![0]).not.toHaveProperty('reasoning_effort');
+
+    // gpt-5 supports 'minimal' verbatim
+    await provider.complete({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'hi' }],
+      reasoningEffort: 'minimal',
+    });
+    expect(createMock.mock.calls[1]![0]).toMatchObject({ reasoning_effort: 'minimal' });
+
+    // o-series has no 'minimal' -> clamped to 'low'
+    await provider.complete({
+      model: 'o3-mini',
+      messages: [{ role: 'user', content: 'hi' }],
+      reasoningEffort: 'minimal',
+    });
+    expect(createMock.mock.calls[2]![0]).toMatchObject({ reasoning_effort: 'low' });
+  });
+
   it('streams text deltas via streamComplete', async () => {
     async function* fakeStream() {
       yield { choices: [{ delta: { content: 'Hello' } }] };

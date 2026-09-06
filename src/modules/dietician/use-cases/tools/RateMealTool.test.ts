@@ -18,6 +18,7 @@ class FakeTextEstimatorPort implements TextEstimatorPort {
 class FakeLlmClient implements LlmClient {
   readonly completeRequests: LlmCompleteRequest[] = [];
   structuredResult: Record<string, unknown> = {
+    mealName: 'Chicken sandwich',
     score: 6.5,
     flaggedMacro: 'carbs',
     goodNote: 'Good protein for the portion.',
@@ -66,7 +67,7 @@ describe('RateMealTool', () => {
     );
 
     expect(rating).toEqual({
-      mealName: 'chicken sandwich',
+      mealName: 'Chicken sandwich',
       score: 6.5,
       macros: { totalCalories: 450, totalProteinGrams: 30, totalCarbsGrams: 40, totalFatGrams: 15 },
       flaggedMacro: 'carbs',
@@ -75,7 +76,20 @@ describe('RateMealTool', () => {
     });
   });
 
-  it('forwards only the system messages from context as plan grounding for the scoring call', async () => {
+  it('falls back to the raw description when the model returns a blank mealName', async () => {
+    const { tool, llmClient } = buildTool(SUFFICIENT_ESTIMATE);
+    llmClient.structuredResult = { ...llmClient.structuredResult, mealName: '  ' };
+
+    const rating = await tool.execute(
+      'user-1',
+      { description: 'chicken sandwich' },
+      { conversationId: 'c1', messages: [] },
+    );
+
+    expect(rating.mealName).toBe('chicken sandwich');
+  });
+
+  it('grounds the scoring call with the system plan and the user\'s own message (for language)', async () => {
     const { tool, llmClient } = buildTool(SUFFICIENT_ESTIMATE);
 
     await tool.execute(
@@ -85,14 +99,14 @@ describe('RateMealTool', () => {
         conversationId: 'c1',
         messages: [
           { role: 'system', content: 'User plan: ...' },
-          { role: 'user', content: 'rate my lunch' },
+          { role: 'user', content: 'öğle yemeğimi değerlendir' },
         ],
       },
     );
 
     const request = llmClient.completeRequests[0]!;
     expect(request.messages.filter((m) => m.role === 'system')).toEqual([{ role: 'system', content: 'User plan: ...' }]);
-    expect(request.messages.some((m) => m.role === 'user')).toBe(true);
+    expect(request.messages.some((m) => m.role === 'user' && m.content === 'öğle yemeğimi değerlendir')).toBe(true);
   });
 
   it('throws for an empty description', async () => {

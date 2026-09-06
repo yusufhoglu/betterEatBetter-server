@@ -148,7 +148,12 @@ Referans: `backend-architecture.md` §3 ve §6.
 - Baştan tanımlanması gereken temel metrikler: `http_request_duration_seconds`,
   `queue_job_duration_seconds`, `queue_depth`, `integration_call_duration_seconds`,
   `circuit_breaker_state`, `nutrition_low_confidence_total`.
-- `GET /metrics` endpoint'i public DEĞİLDİR — internal network'e kapalı ya da auth'lu olmalı.
+- `GET /metrics` endpoint'i public DEĞİLDİR — `http/metricsRoutes.ts`'te implement edildi:
+  `METRICS_TOKEN` set değilse 404, set ise `Authorization: Bearer <token>` (timing-safe
+  karşılaştırma) ister. `main.ts`'te tracing/auth middleware'inden ÖNCE mount edilir.
+- Dietician turn latency'si `dietician_turn_duration_seconds{stage,lane,outcome}` +
+  `dietician_turn_ttfb_seconds{lane,outcome}` histogramlarında (stage = prep|gather|stream|total).
+  Kayıt: `modules/dietician/observability/dieticianTurnMetrics.ts`.
 
 ## LLM Client (`llm/`) — sağlayıcı-agnostik, çok amaçlı
 

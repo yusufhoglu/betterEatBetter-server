@@ -47,7 +47,7 @@ export function buildDieticianContextBlock(context: DieticianContext): string | 
         'User plan:',
         `- Goal: ${plan.goal} weight`,
         `- Daily target: ${Math.round(plan.dailyCalories)} kcal ` +
-          `(${Math.round(plan.proteinG)}P / ${Math.round(plan.carbsG)}C / ${Math.round(plan.fatG)}F g)`,
+          `(${Math.round(plan.proteinG)} g protein / ${Math.round(plan.carbsG)} g carbs / ${Math.round(plan.fatG)} g fat)`,
         `- Current weight: ${plan.currentWeightKg} kg` +
           (plan.targetWeightKg !== null ? `, target ${plan.targetWeightKg} kg` : ''),
         `- Training: ${plan.workoutsPerWeek} workouts/week · age ${plan.age} · ${plan.gender}`,

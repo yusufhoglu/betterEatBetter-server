@@ -81,6 +81,27 @@ describe('ProvideRecipeTool', () => {
     expect(userMessage?.content).toContain('Target calories: 480');
   });
 
+  it('forwards the user\'s own last message so the recipe comes back in their language', async () => {
+    const { tool, llmClient } = buildTool();
+
+    await tool.execute(
+      'user-1',
+      { request: 'hafif bir akşam yemeği' },
+      {
+        conversationId: 'c1',
+        messages: [
+          { role: 'system', content: 'User plan: ...' },
+          { role: 'user', content: 'bana hafif bir akşam yemeği tarifi ver' },
+        ],
+      },
+    );
+
+    const request = llmClient.completeRequests[0]!;
+    expect(
+      request.messages.some((m) => m.role === 'user' && m.content === 'bana hafif bir akşam yemeği tarifi ver'),
+    ).toBe(true);
+  });
+
   it('throws for an empty request', async () => {
     const { tool } = buildTool();
     await expect(tool.execute('user-1', {}, { conversationId: 'c1', messages: [] })).rejects.toThrow();
