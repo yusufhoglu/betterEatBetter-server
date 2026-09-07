@@ -13,8 +13,16 @@ export interface SaveDieticianRecipeInput {
   mealPhotoOwnerId?: string | null;
 }
 
+export interface UpdateSavedRecipeInput {
+  userId: string;
+  id: string;
+  recipe?: Recipe;
+  mealPhotoId?: string | null;
+  mealPhotoOwnerId?: string | null;
+}
+
 /**
- * Persists a dietician-generated recipe to the user's collection. When the
+ * Create / update a dietician-generated recipe in the user's collection. When a
  * request carries a freshly uploaded photo (a `mealPhotoId` with no explicit
  * owner), it reuses the food-recognition `standardize-and-copy` job to promote
  * `pending/<id>.jpg` → `users/<userId>/meals/<id>.jpg` so the read path can sign
@@ -26,20 +34,34 @@ export class SaveDieticianRecipe {
 
   async execute(input: SaveDieticianRecipeInput): Promise<SavedRecipeCard> {
     const card = await this.catalog.createSavedRecipe(input);
-
-    if (input.mealPhotoId && !input.mealPhotoOwnerId) {
-      const traceId = getTraceId() ?? input.mealPhotoId;
-      await standardizeAndCopyQueue.add(
-        'standardize-and-copy',
-        { mealPhotoId: input.mealPhotoId, userId: input.userId, traceId },
-        {
-          jobId: input.mealPhotoId,
-          attempts: JOB_RETRY_ATTEMPTS,
-          backoff: { type: 'fixed', delay: JOB_RETRY_BACKOFF_MS },
-        },
-      );
-    }
-
+    await this.finalizePhoto(input.userId, input.mealPhotoId, input.mealPhotoOwnerId);
     return card;
+  }
+
+  async update(input: UpdateSavedRecipeInput): Promise<SavedRecipeCard> {
+    const card = await this.catalog.updateSavedRecipe(input);
+    await this.finalizePhoto(input.userId, input.mealPhotoId, input.mealPhotoOwnerId);
+    return card;
+  }
+
+  /** A fresh upload (id, no owner) still lives under `pending/` — promote it to the user's bucket. */
+  private async finalizePhoto(
+    userId: string,
+    mealPhotoId?: string | null,
+    mealPhotoOwnerId?: string | null,
+  ): Promise<void> {
+    if (!mealPhotoId || mealPhotoOwnerId) {
+      return;
+    }
+    const traceId = getTraceId() ?? mealPhotoId;
+    await standardizeAndCopyQueue.add(
+      'standardize-and-copy',
+      { mealPhotoId, userId, traceId },
+      {
+        jobId: mealPhotoId,
+        attempts: JOB_RETRY_ATTEMPTS,
+        backoff: { type: 'fixed', delay: JOB_RETRY_BACKOFF_MS },
+      },
+    );
   }
 }

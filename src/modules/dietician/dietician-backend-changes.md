@@ -195,6 +195,7 @@ Originally on-device only. Now backed by the `me` module:
 
 - `POST /me/saved-recipes` `{ recipe: Recipe, mealPhotoId?, mealPhotoOwnerId? }` → `201`
 - `GET /me/saved-recipes` → `SavedRecipeCard[]` (`{ id, recipe, imageUrl, mealPhotoId, createdAt }`)
+- `PATCH /me/saved-recipes/:id` `{ recipe?, mealPhotoId?, mealPhotoOwnerId? }` → `200` (attach/replace/clear the photo, or replace the recipe)
 - `DELETE /me/saved-recipes/:id` → `204`
 
 New `SavedRecipe` Prisma model stores the full `Recipe` (scalars as columns,

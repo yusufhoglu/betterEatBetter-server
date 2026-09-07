@@ -86,5 +86,13 @@ export interface MeCatalogRepositoryPort {
     mealPhotoId?: string | null;
     mealPhotoOwnerId?: string | null;
   }): Promise<SavedRecipeCard>;
+  /** Partial update — any field left `undefined` is untouched; `mealPhotoId: null` clears the photo. */
+  updateSavedRecipe(input: {
+    userId: string;
+    id: string;
+    recipe?: Recipe;
+    mealPhotoId?: string | null;
+    mealPhotoOwnerId?: string | null;
+  }): Promise<SavedRecipeCard>;
   deleteSavedRecipe(userId: string, id: string): Promise<void>;
 }

@@ -105,6 +105,40 @@ describe('PrismaMeCatalogRepository — saved recipes (integration)', () => {
     expect(created.recipe).not.toHaveProperty('why');
   });
 
+  it('attaches, then clears, a photo via updateSavedRecipe', async () => {
+    const userId = await seedUser();
+    const created = await repository.createSavedRecipe({ userId, recipe: RECIPE });
+    const mealPhotoId = randomUUID();
+
+    const withPhoto = await repository.updateSavedRecipe({
+      userId,
+      id: created.id,
+      mealPhotoId,
+    });
+    expect(withPhoto.id).toBe(created.id);
+    expect(withPhoto.mealPhotoId).toBe(mealPhotoId);
+    expect(withPhoto.imageUrl).toBe('https://example.com/signed-recipe-photo');
+    expect(withPhoto.recipe).toEqual(RECIPE);
+
+    const cleared = await repository.updateSavedRecipe({
+      userId,
+      id: created.id,
+      mealPhotoId: null,
+    });
+    expect(cleared.mealPhotoId).toBeNull();
+    expect(cleared.imageUrl).toBeNull();
+  });
+
+  it('updateSavedRecipe rejects another user’s row', async () => {
+    const userId = await seedUser();
+    const otherUserId = await seedUser();
+    const created = await repository.createSavedRecipe({ userId, recipe: RECIPE });
+
+    await expect(
+      repository.updateSavedRecipe({ userId: otherUserId, id: created.id, mealPhotoId: null }),
+    ).rejects.toThrow('Saved recipe was not found');
+  });
+
   it('deletes only the caller’s row', async () => {
     const userId = await seedUser();
     const otherUserId = await seedUser();

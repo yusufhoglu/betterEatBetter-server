@@ -250,6 +250,26 @@ function buildApp() {
         savedRecipes.push(created);
         return created;
       },
+      updateSavedRecipe: async (input: {
+        userId?: string;
+        id: string;
+        recipe?: unknown;
+        mealPhotoId?: string | null;
+      }) => {
+        const index = savedRecipes.findIndex((item) => item.id === input.id);
+        if (index < 0) {
+          throw new NotFoundError('SAVED_RECIPE_NOT_FOUND', 'Saved recipe was not found');
+        }
+        const updated = {
+          ...savedRecipes[index]!,
+          ...(input.recipe !== undefined ? { recipe: input.recipe } : {}),
+          ...(input.mealPhotoId !== undefined
+            ? { mealPhotoId: input.mealPhotoId, imageUrl: input.mealPhotoId === null ? null : 'https://example.com/signed' }
+            : {}),
+        };
+        savedRecipes[index] = updated;
+        return updated;
+      },
       deleteSavedRecipe: async (_userId: string, id: string) => {
         const index = savedRecipes.findIndex((item) => item.id === id);
         if (index < 0) {
@@ -293,6 +313,29 @@ function buildApp() {
         savedRecipes.push(created);
         return created;
       },
+      update: async (input: {
+        userId: string;
+        id: string;
+        recipe?: unknown;
+        mealPhotoId?: string | null;
+      }) => {
+        const index = savedRecipes.findIndex((item) => item.id === input.id);
+        if (index < 0) {
+          throw new NotFoundError('SAVED_RECIPE_NOT_FOUND', 'Saved recipe was not found');
+        }
+        const updated = {
+          ...savedRecipes[index]!,
+          ...(input.recipe !== undefined ? { recipe: input.recipe } : {}),
+          ...(input.mealPhotoId !== undefined
+            ? {
+                mealPhotoId: input.mealPhotoId,
+                imageUrl: input.mealPhotoId === null ? null : 'https://example.com/signed',
+              }
+            : {}),
+        };
+        savedRecipes[index] = updated;
+        return updated;
+      },
     } as never,
   );
 
@@ -314,6 +357,7 @@ function buildApp() {
   app.delete('/my-meals/:id', fakeAuthMiddleware, controller.handleDeleteMyMeal);
   app.get('/saved-recipes', fakeAuthMiddleware, controller.handleGetSavedRecipes);
   app.post('/saved-recipes', fakeAuthMiddleware, controller.handlePostSavedRecipe);
+  app.patch('/saved-recipes/:id', fakeAuthMiddleware, controller.handlePatchSavedRecipe);
   app.delete('/saved-recipes/:id', fakeAuthMiddleware, controller.handleDeleteSavedRecipe);
   app.patch('/notification-preferences', fakeAuthMiddleware, controller.handlePatchNotificationPreferences);
   app.use(errorMapperMiddleware);
@@ -549,6 +593,42 @@ describe('MeController', () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
     expect(res.body[0].recipe.title).toBe('High-protein chicken bowl');
+  });
+
+  test('PATCH /saved-recipes/:id attaches a photo to an existing recipe', async () => {
+    const app = buildApp();
+
+    const created = await request(app).post('/saved-recipes').send({ recipe: fullRecipe });
+    const photoId = '11111111-1111-1111-1111-111111111111';
+    const res = await request(app)
+      .patch(`/saved-recipes/${created.body.id}`)
+      .send({ mealPhotoId: photoId });
+
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(created.body.id);
+    expect(res.body.mealPhotoId).toBe(photoId);
+    expect(res.body.recipe.title).toBe('High-protein chicken bowl');
+  });
+
+  test('PATCH /saved-recipes/:id rejects an empty body with 400', async () => {
+    const app = buildApp();
+
+    const created = await request(app).post('/saved-recipes').send({ recipe: fullRecipe });
+    const res = await request(app).patch(`/saved-recipes/${created.body.id}`).send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_SAVED_RECIPE_UPDATE');
+  });
+
+  test('PATCH /saved-recipes/:id 404s for an unknown id', async () => {
+    const app = buildApp();
+
+    const res = await request(app)
+      .patch('/saved-recipes/does-not-exist')
+      .send({ mealPhotoId: null });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('SAVED_RECIPE_NOT_FOUND');
   });
 
   test('DELETE /saved-recipes/:id returns 204, then 404 when already gone', async () => {

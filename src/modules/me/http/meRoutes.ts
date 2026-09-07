@@ -55,6 +55,7 @@ export function meRoutes(): Router {
   router.delete('/my-meals/:id', authMiddleware, controller.handleDeleteMyMeal);
   router.get('/saved-recipes', authMiddleware, controller.handleGetSavedRecipes);
   router.post('/saved-recipes', authMiddleware, controller.handlePostSavedRecipe);
+  router.patch('/saved-recipes/:id', authMiddleware, controller.handlePatchSavedRecipe);
   router.delete('/saved-recipes/:id', authMiddleware, controller.handleDeleteSavedRecipe);
   router.get('/subscription/plans', authMiddleware, controller.handleGetSubscriptionPlans);
 

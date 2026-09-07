@@ -613,6 +613,14 @@ describe('all endpoint smoke tests', () => {
       expect(listSavedRecipesRes.body).toHaveLength(1);
       expect(listSavedRecipesRes.body[0].recipe.title).toBe('High-protein chicken bowl');
 
+      // Attach a cooked-result photo to the already-saved recipe.
+      const patchSavedRecipeRes = await request(app)
+        .patch(`/saved-recipes/${createSavedRecipeRes.body.id}`)
+        .set('Authorization', bearer(session.accessToken))
+        .send({ mealPhotoId: randomUUID() });
+      expect(patchSavedRecipeRes.status).toBe(200);
+      expect(patchSavedRecipeRes.body.recipe.steps).toHaveLength(2);
+
       const deleteSavedRecipeRes = await request(app)
         .delete(`/saved-recipes/${createSavedRecipeRes.body.id}`)
         .set('Authorization', bearer(session.accessToken));

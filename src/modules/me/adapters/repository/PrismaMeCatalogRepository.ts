@@ -116,26 +116,30 @@ interface SavedRecipeRow {
   createdAt: Date;
 }
 
+interface SavedRecipeWriteData {
+  title: string;
+  subtitle: string | null;
+  timeMinutes: number;
+  servings: number;
+  calories: number;
+  proteinGrams: number;
+  carbsGrams: number;
+  fatGrams: number;
+  fiberGrams: number | null;
+  ingredients: Prisma.InputJsonValue;
+  steps: Prisma.InputJsonValue;
+  why: string | null;
+  mealPhotoId: string | null;
+  mealPhotoOwnerId: string | null;
+}
+
 interface SavedRecipeDelegate {
-  create(args: {
-    data: {
-      userId: string;
-      title: string;
-      subtitle: string | null;
-      timeMinutes: number;
-      servings: number;
-      calories: number;
-      proteinGrams: number;
-      carbsGrams: number;
-      fatGrams: number;
-      fiberGrams: number | null;
-      ingredients: Prisma.InputJsonValue;
-      steps: Prisma.InputJsonValue;
-      why: string | null;
-      mealPhotoId: string | null;
-      mealPhotoOwnerId: string | null;
-    };
+  create(args: { data: SavedRecipeWriteData & { userId: string } }): Promise<SavedRecipeRow>;
+  update(args: {
+    where: { id: string };
+    data: Partial<SavedRecipeWriteData>;
   }): Promise<SavedRecipeRow>;
+  findFirst(args: { where: { id: string; userId: string } }): Promise<SavedRecipeRow | null>;
   deleteMany(args: { where: { id: string; userId: string } }): Promise<{ count: number }>;
   findMany(args: {
     where: { userId: string };
@@ -147,6 +151,42 @@ interface MeCatalogDb {
   favoriteRecipe: FavoriteRecipeDelegate;
   savedMeal: SavedMealDelegate;
   savedRecipe: SavedRecipeDelegate;
+}
+
+/** The scalar/JSON columns that carry a Recipe — shared by create and update. */
+function recipeColumns(recipe: Recipe): Omit<SavedRecipeWriteData, 'mealPhotoId' | 'mealPhotoOwnerId'> {
+  return {
+    title: recipe.title,
+    subtitle: recipe.subtitle ?? null,
+    timeMinutes: recipe.timeMinutes,
+    servings: recipe.servings,
+    calories: recipe.calories,
+    proteinGrams: recipe.proteinGrams,
+    carbsGrams: recipe.carbsGrams,
+    fatGrams: recipe.fatGrams,
+    fiberGrams: recipe.fiberGrams ?? null,
+    ingredients: recipe.ingredients as unknown as Prisma.InputJsonValue,
+    steps: recipe.steps as unknown as Prisma.InputJsonValue,
+    why: recipe.why ?? null,
+  };
+}
+
+type PhotoColumns = Pick<SavedRecipeWriteData, 'mealPhotoId' | 'mealPhotoOwnerId'>;
+
+/**
+ * `{ mealPhotoId, mealPhotoOwnerId }` for a value that is always present. A bare
+ * `mealPhotoId` (freshly uploaded) is owned by the caller; an explicit owner
+ * means the photo already lives under another user; `null` means no photo.
+ */
+function photoColumns(
+  userId: string,
+  mealPhotoId: string | null,
+  mealPhotoOwnerId: string | null | undefined,
+): PhotoColumns {
+  if (mealPhotoId === null) {
+    return { mealPhotoId: null, mealPhotoOwnerId: null };
+  }
+  return { mealPhotoId, mealPhotoOwnerId: mealPhotoOwnerId ?? userId };
 }
 
 export class PrismaMeCatalogRepository implements MeCatalogRepositoryPort {
@@ -415,30 +455,43 @@ export class PrismaMeCatalogRepository implements MeCatalogRepositoryPort {
     mealPhotoId?: string | null;
     mealPhotoOwnerId?: string | null;
   }): Promise<SavedRecipeCard> {
-    const { recipe } = input;
-    const mealPhotoId = input.mealPhotoId ?? null;
     const row = await this.db.savedRecipe.create({
       data: {
         userId: input.userId,
-        title: recipe.title,
-        subtitle: recipe.subtitle ?? null,
-        timeMinutes: recipe.timeMinutes,
-        servings: recipe.servings,
-        calories: recipe.calories,
-        proteinGrams: recipe.proteinGrams,
-        carbsGrams: recipe.carbsGrams,
-        fatGrams: recipe.fatGrams,
-        fiberGrams: recipe.fiberGrams ?? null,
-        ingredients: recipe.ingredients as unknown as Prisma.InputJsonValue,
-        steps: recipe.steps as unknown as Prisma.InputJsonValue,
-        why: recipe.why ?? null,
-        mealPhotoId,
-        // A freshly uploaded photo belongs to the caller; an explicit owner is
-        // only meaningful for a photo already stored elsewhere.
-        mealPhotoOwnerId: mealPhotoId ? input.mealPhotoOwnerId ?? input.userId : null,
+        ...recipeColumns(input.recipe),
+        // `mealPhotoId ?? null` is never undefined, so photoColumns always
+        // returns both photo fields — the create `data` stays complete.
+        ...photoColumns(input.userId, input.mealPhotoId ?? null, input.mealPhotoOwnerId),
       },
     });
     return this.toSavedRecipeCard(row);
+  }
+
+  async updateSavedRecipe(input: {
+    userId: string;
+    id: string;
+    recipe?: Recipe;
+    mealPhotoId?: string | null;
+    mealPhotoOwnerId?: string | null;
+  }): Promise<SavedRecipeCard> {
+    const existing = await this.db.savedRecipe.findFirst({
+      where: { id: input.id, userId: input.userId },
+    });
+    if (!existing) {
+      throw new NotFoundError('SAVED_RECIPE_NOT_FOUND', 'Saved recipe was not found');
+    }
+
+    const updated = await this.db.savedRecipe.update({
+      where: { id: input.id },
+      data: {
+        ...(input.recipe ? recipeColumns(input.recipe) : {}),
+        // `undefined` ⇒ leave the photo as-is; a value (incl. `null`) ⇒ replace it.
+        ...(input.mealPhotoId !== undefined
+          ? photoColumns(input.userId, input.mealPhotoId, input.mealPhotoOwnerId)
+          : {}),
+      },
+    });
+    return this.toSavedRecipeCard(updated);
   }
 
   async deleteSavedRecipe(userId: string, id: string): Promise<void> {

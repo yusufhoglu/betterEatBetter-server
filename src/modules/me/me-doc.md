@@ -31,6 +31,7 @@ Bu modul mobil uygulamanin profil, goal, tercih ve kisisel katalog ekranlarini t
 | `DELETE` | `/my-meals/:id` | Kisisel meal siler |
 | `GET` | `/saved-recipes` | Diyetisyenin urettigi kayitli tarifler (tam Recipe payload) |
 | `POST` | `/saved-recipes` | Bir diyetisyen tarifini koleksiyona ekler; opsiyonel foto referansi |
+| `PATCH` | `/saved-recipes/:id` | Kayitli tarifi gunceller (foto ekle/degistir/`null` ile kaldir, ya da `recipe` degistir) |
 | `DELETE` | `/saved-recipes/:id` | Kayitli tarifi siler |
 | `GET` | `/subscription/plans` | Statik subscription plan katalogu |
 
@@ -105,9 +106,9 @@ sequenceDiagram
         CatalogRepo-->>Controller: result
         Controller-->>Client: 200/201/204
     else /saved-recipes*
-        Client->>Controller: list/create/delete request
+        Client->>Controller: list/create/update/delete request
         Controller->>CatalogRepo: operate on saved recipes
-        note over Controller: create + photo ref ⇒ SaveDieticianRecipe enqueues standardize-and-copy
+        note over Controller: create/update + fresh photo ⇒ SaveDieticianRecipe enqueues standardize-and-copy
         CatalogRepo-->>Controller: result
         Controller-->>Client: 200/201/204
     else GET /subscription/plans

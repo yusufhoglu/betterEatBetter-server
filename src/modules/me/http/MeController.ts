@@ -118,6 +118,17 @@ const savedRecipeCreateSchema = z.object({
   mealPhotoOwnerId: z.string().uuid().nullable().optional(),
 });
 
+const savedRecipeUpdateSchema = z
+  .object({
+    recipe: recipeSchema.optional(),
+    // `null` clears the attached photo; a uuid attaches / replaces it.
+    mealPhotoId: z.string().uuid().nullable().optional(),
+    mealPhotoOwnerId: z.string().uuid().nullable().optional(),
+  })
+  .refine((value) => Object.values(value).some((field) => field !== undefined), {
+    message: 'At least one saved recipe field must be provided',
+  });
+
 const myMealUpdateSchema = z
   .object({
     title: z.string().trim().min(1).optional(),
@@ -496,6 +507,26 @@ export class MeController {
       res.status(201).json(
         await this.saveDieticianRecipe.execute({
           userId: req.auth!.userId,
+          recipe: input.recipe,
+          mealPhotoId: input.mealPhotoId,
+          mealPhotoOwnerId: input.mealPhotoOwnerId,
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  handlePatchSavedRecipe = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.params.id) {
+        throw new ValidationError('INVALID_PARAMS', 'id is required');
+      }
+      const input = parseOrThrow(savedRecipeUpdateSchema, req.body, 'INVALID_SAVED_RECIPE_UPDATE');
+      res.status(200).json(
+        await this.saveDieticianRecipe.update({
+          userId: req.auth!.userId,
+          id: req.params.id,
           recipe: input.recipe,
           mealPhotoId: input.mealPhotoId,
           mealPhotoOwnerId: input.mealPhotoOwnerId,
