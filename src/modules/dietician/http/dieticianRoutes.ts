@@ -17,6 +17,7 @@ import { OnboardingPlanTargetsAdapter } from '../../nutrition-logging/adapters/t
 import { MealLoggedEventPublisher } from '../../nutrition-logging/events/publishers/MealLoggedEventPublisher';
 import { GetDayNutrientTotals } from '../../nutrition-logging/use-cases/GetDayNutrientTotals';
 import { GetLoggedMealTypesForDateRange } from '../../nutrition-logging/use-cases/GetLoggedMealTypesForDateRange';
+import { GetMealHistory } from '../../nutrition-logging/use-cases/GetMealHistory';
 import { LogMealEntries } from '../../nutrition-logging/use-cases/LogMealEntries';
 import { ReplaceMealSlotEntries } from '../../nutrition-logging/use-cases/ReplaceMealSlotEntries';
 import { PrismaPlanRepository } from '../../onboarding-plan/adapters/repository/PrismaPlanRepository';
@@ -75,8 +76,16 @@ export function dieticianRoutes(): Router {
   const replaceMealSlotEntries = new ReplaceMealSlotEntries(mealItemRepository, mealEventPublisher);
   const recognizeFromText = new RecognizeFromText(new LlmTextEstimator());
 
+  // The dietician only needs the foods + macros of recent meals, not their
+  // photos — a no-op resolver skips the R2 round-trips `GetMealHistory` does.
+  const getRecentMeals = new GetMealHistory(mealItemRepository, async () => null);
+
   const tools = [
-    new DieticianMealDataTool(getDayNutrientTotals, new GetLoggedMealTypesForDateRange(mealItemRepository)),
+    new DieticianMealDataTool(
+      getDayNutrientTotals,
+      new GetLoggedMealTypesForDateRange(mealItemRepository),
+      getRecentMeals,
+    ),
     new DieticianAnalyticsTool(getBodyStats, getMealAverages),
     new ProposeMealLogTool(recognizeFromText),
     new RateMealTool(recognizeFromText, llmClient, cheapModel),

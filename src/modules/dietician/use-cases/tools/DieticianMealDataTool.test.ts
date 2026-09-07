@@ -2,6 +2,7 @@ import { FakeDailyTargetsPort } from '../../../nutrition-logging/test-utils/fake
 import { InMemoryMealItemRepository } from '../../../nutrition-logging/test-utils/fakes/InMemoryMealItemRepository';
 import { GetDayNutrientTotals } from '../../../nutrition-logging/use-cases/GetDayNutrientTotals';
 import { GetLoggedMealTypesForDateRange } from '../../../nutrition-logging/use-cases/GetLoggedMealTypesForDateRange';
+import { GetMealHistory } from '../../../nutrition-logging/use-cases/GetMealHistory';
 import { DieticianMealDataTool } from './DieticianMealDataTool';
 
 function buildTool() {
@@ -10,6 +11,7 @@ function buildTool() {
   const tool = new DieticianMealDataTool(
     new GetDayNutrientTotals(repository, dailyTargetsPort),
     new GetLoggedMealTypesForDateRange(repository),
+    new GetMealHistory(repository, async () => null),
   );
   return { tool, repository, dailyTargetsPort };
 }
@@ -50,7 +52,40 @@ describe('DieticianMealDataTool', () => {
     expect(result).toEqual({ '2026-09-03': ['breakfast'] });
   });
 
-  it('throws for neither date nor a full range', async () => {
+  it('returns recent meals with their foods + macros for "recentMeals"', async () => {
+    const { tool, repository } = buildTool();
+    await repository.appendEntries({
+      userId: 'user-1',
+      date: new Date('2026-09-02T00:00:00.000Z'),
+      mealType: 'breakfast',
+      entries: [{ id: 'e0', name: 'Oats', portionGrams: 80, calories: 300, proteinG: 10, carbsG: 50, fatG: 5 }],
+    });
+    await repository.appendEntries({
+      userId: 'user-1',
+      date: new Date('2026-09-03T00:00:00.000Z'),
+      mealType: 'lunch',
+      entries: [{ id: 'e1', name: 'Chicken & rice', portionGrams: 300, calories: 620, proteinG: 45, carbsG: 60, fatG: 18 }],
+    });
+
+    const result = (await tool.execute('user-1', { recentMeals: 1 })) as {
+      meals: Array<{ mealType: string; items: string[]; calories: number }>;
+    };
+
+    expect(result.meals).toHaveLength(1);
+    expect(result.meals[0]).toMatchObject({
+      mealType: 'lunch',
+      items: ['Chicken & rice'],
+      calories: 620,
+    });
+    expect(result.meals[0]).not.toHaveProperty('photoUrl');
+  });
+
+  it('throws for a non-positive recentMeals', async () => {
+    const { tool } = buildTool();
+    await expect(tool.execute('user-1', { recentMeals: 0 })).rejects.toThrow();
+  });
+
+  it('throws for neither recentMeals nor date nor a full range', async () => {
     const { tool } = buildTool();
     await expect(tool.execute('user-1', {})).rejects.toThrow();
   });
