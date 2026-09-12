@@ -148,6 +148,21 @@ model MealItem {
   @@map("meal_items")
 }
 
+// water-logging module: one row per (user, day) — a running daily total,
+// not an event log, since the client only ever shows/edits today's total
+// (see mobile ApiHomeRepository.addWater/removeLastWater).
+model WaterLog {
+  id        String   @id @default(uuid())
+  userId    String
+  date      DateTime @db.Date
+  amountMl  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@map("water_logs")
+}
+
 model OutboxEvent {
   id          String    @id @default(uuid())
   eventType   String
