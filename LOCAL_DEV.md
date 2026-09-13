@@ -35,6 +35,7 @@ Then fill in the required secrets:
 - The current backend uses Cloudflare R2 directly. MinIO is not wired into the app by default.
 - `RAG_SERVICE_URL` must point to a running Python RAG service. That service is not included in this repository.
 - If you only need non-photo flows, the backend can start with a placeholder `RAG_SERVICE_URL`, but photo recognition will fail at runtime until the RAG service is available.
+- `RAG_SERVICE_SECRET` (any string ≥32 chars locally) is required at startup — it's sent as `X-Internal-Api-Key` on every request to the RAG service. The RAG service must check it; see its own docs/README for what to add there.
 
 ## 4. Install dependencies and run
 
@@ -63,6 +64,7 @@ JWT_ACCESS_TOKEN_TTL_SECONDS=1800
 REFRESH_TOKEN_TTL_DAYS=30
 
 RAG_SERVICE_URL=http://localhost:8000
+RAG_SERVICE_SECRET=replace-this-with-a-random-secret-at-least-32-characters
 
 LOG_LEVEL=info
 

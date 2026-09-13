@@ -71,6 +71,7 @@ export class RagHttpEstimator implements PhotoEstimatorPort {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'X-Internal-Api-Key': env.RAG_SERVICE_SECRET,
     };
     if (traceId) {
       headers['x-trace-id'] = traceId;

@@ -32,6 +32,10 @@ const envSchema = z.object({
     .pipe(z.array(z.string().min(1)).min(1)),
 
   RAG_SERVICE_URL: z.string().min(1),
+  // Shared secret sent as `X-Internal-Api-Key` on every call to the RAG
+  // service. Defense in depth on top of network isolation — the RAG service
+  // must reject requests that don't present this value.
+  RAG_SERVICE_SECRET: z.string().min(32),
 
   // food-recognition module settings
   LLM_SERVICE_URL: z.string().url().default('http://localhost:11434'),

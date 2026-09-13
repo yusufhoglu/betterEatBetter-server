@@ -37,8 +37,9 @@ other stacks on the box. Everything runs as `root`; the repo lives at
 
 3. **`.env`** — in the repo dir, `cp .env.production.example .env` and fill in:
    `DOMAIN` (`foodtracker.hembul.com`), `POSTGRES_PASSWORD`, `JWT_SECRET`, the
-   `R2_*` keys, `RAG_SERVICE_URL`, the selected `LLM_PROVIDER` + its API key, and
-   the `GOOGLE_*` subscription values. `DATABASE_URL` / `REDIS_URL` /
+   `R2_*` keys, `RAG_SERVICE_URL`, `RAG_SERVICE_SECRET` (must match whatever the
+   RAG service is configured to check), the selected `LLM_PROVIDER` + its API
+   key, and the `GOOGLE_*` subscription values. `DATABASE_URL` / `REDIS_URL` /
    `REDIS_CACHE_URL` are injected by compose — leave them out.
 
 4. **GitHub → Settings → Secrets and variables → Actions**:
@@ -114,6 +115,10 @@ docker compose -f docker-compose.prod.yml exec -T postgres \
   `*.dev.yusufhocaoglu.site` blocks proxy to host ports.
 - **`RAG_SERVICE_URL`** — the Python photo-recognition service is not in this repo.
   Until it is reachable, photo recognition jobs will fail (the rest of the API is fine).
+  It must **not** be exposed on a public port/interface — this app sends
+  `RAG_SERVICE_SECRET` as `X-Internal-Api-Key` on every call, but that's defense in
+  depth on top of network isolation, not a substitute for it. The RAG service
+  (separate repo) must verify that header and reject mismatches with 401.
 - **Redis is not externally exposed.** `redis-queue` persists (AOF) so queued jobs
   survive a restart; `redis-cache` is memory-only with LRU eviction.
 - **Scaling the app to >1 replica is not safe yet** — the polling jobs in

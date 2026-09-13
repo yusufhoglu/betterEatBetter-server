@@ -39,7 +39,11 @@ Dört giriş yöntemi var, DÖRDÜ DE aynı `FoodEntry` çıktısını üretir a
 
 ### `photo/`
 - `RagHttpEstimator.ts`: Python'a HTTP isteği, `x-trace-id` header'ını forward eder
-  (gelen `AsyncLocalStorage` context'inden `getTraceId()` ile okunur).
+  (gelen `AsyncLocalStorage` context'inden `getTraceId()` ile okunur). Ayrıca her
+  istekte `X-Internal-Api-Key: env.RAG_SERVICE_SECRET` header'ı gönderilir — ağ
+  izolasyonu (RAG servisi internete açık olmamalı) üzerine ek savunma katmanı, tek
+  koruma değil. Python tarafı bu header'ı timing-safe karşılaştırmayla doğrulamalı,
+  eşleşmiyorsa 401 dönmeli (bkz. modül `.env.example` notu).
 - `ResilientPhotoEstimator.ts`: `RagHttpEstimator`'ı `shared/resilience/policies.ts`'teki
   cockatiel policy ile sarar — circuit breaker (5 ardışık hata → açık, 30sn half-open) +
   retry (SADECE `retryable: true` hatalarda) + timeout (60 saniye, RAG'ın 15-30sn sürebildiği
