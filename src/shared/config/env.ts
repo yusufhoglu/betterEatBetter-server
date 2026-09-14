@@ -61,9 +61,12 @@ const envSchema = z.object({
   // tool-gathering turns are latency-sensitive and a reasoning model's hidden
   // thinking dominates their wall-clock. `prime` stays a reasoning model for the
   // final answer, but the dietician adapter caps its effort (see
-  // TieredLlmDieticianAdapter) to keep time-to-first-token low.
+  // TieredLlmDieticianAdapter) to keep time-to-first-token low. Even capped at
+  // 'low', full gpt-5's hidden reasoning on open-ended prompts (e.g. "what
+  // should I eat?") was costing 25s+ of TTFT — gpt-5-mini trades some answer
+  // depth for materially faster turns.
   LLM_MODEL_CHEAP: z.string().min(1).default('gpt-4.1-mini'),
-  LLM_MODEL_PRIME: z.string().min(1).default('gpt-5'),
+  LLM_MODEL_PRIME: z.string().min(1).default('gpt-5-mini'),
 
   // dietician module — coaching conversation over the two model tiers.
   DIETICIAN_MAX_GATHER_TURNS: z.coerce.number().int().positive().default(2),
