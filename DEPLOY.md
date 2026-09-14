@@ -113,12 +113,17 @@ docker compose -f docker-compose.prod.yml exec -T postgres \
 - **Caddy reaches the app at `host.docker.internal:3100`** — the caddy container
   already resolves that to the docker0 gateway, matching how the existing
   `*.dev.yusufhocaoglu.site` blocks proxy to host ports.
-- **`RAG_SERVICE_URL`** — the Python photo-recognition service is not in this repo.
-  Until it is reachable, photo recognition jobs will fail (the rest of the API is fine).
-  It must **not** be exposed on a public port/interface — this app sends
-  `RAG_SERVICE_SECRET` as `X-Internal-Api-Key` on every call, but that's defense in
-  depth on top of network isolation, not a substitute for it. The RAG service
-  (separate repo) must verify that header and reject mismatches with 401.
+- **`RAG_SERVICE_URL`** — the Python photo-recognition service is not in this repo
+  and is deployed as its own compose stack on the same box. It publishes no
+  host port by design, so it's only reachable via the shared `dietai24_internal`
+  Docker network (declared as the external `rag` network in
+  `docker-compose.prod.yml`, joined by `RAG_NETWORK_NAME` if set). With that
+  network joined, `RAG_SERVICE_URL=http://rag-service:8000` resolves via Docker's
+  internal DNS. Until the RAG stack is deployed and both sides are on the
+  network, photo recognition jobs will fail (the rest of the API is fine).
+  This app also sends `RAG_SERVICE_SECRET` as `X-Internal-Api-Key` on every
+  call — defense in depth on top of the network isolation, not a substitute
+  for it. The RAG service must verify that header and reject mismatches with 401.
 - **Redis is not externally exposed.** `redis-queue` persists (AOF) so queued jobs
   survive a restart; `redis-cache` is memory-only with LRU eviction.
 - **Scaling the app to >1 replica is not safe yet** — the polling jobs in

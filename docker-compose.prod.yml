@@ -46,6 +46,12 @@ services:
     # (host.docker.internal -> 172.17.0.1) but not from the public interface.
     ports:
       - "172.17.0.1:3100:3000"
+    # Joins the Python RAG service (separate repo/stack) on its internal-only
+    # network so RAG_SERVICE_URL=http://rag-service:8000 resolves -- see the
+    # `rag` network below and DEPLOY.md.
+    networks:
+      - default
+      - rag
     healthcheck:
       test:
         ["CMD", "node", "-e",
@@ -107,6 +113,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+networks:
+  # The RAG service's own compose stack creates/owns this network (its
+  # deploy step runs `docker network create` idempotently, and so does
+  # ours below) -- it has no published port, so this is the only way to
+  # reach it. Point RAG_NETWORK_NAME at a different name if the RAG stack
+  # is configured with one.
+  rag:
+    external: true
+    name: ${RAG_NETWORK_NAME:-dietai24_internal}
 
 volumes:
   postgres_data:

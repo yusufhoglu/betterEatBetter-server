@@ -89,6 +89,10 @@ jobs:
             cd "${{ secrets.DEPLOY_PATH }}"
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
             export IMAGE="${{ needs.build-push.outputs.image }}"
+            # No-op if it already exists -- lets this match a network the RAG
+            # service's own compose stack already created (or creates it
+            # first, if this deploy runs before that one).
+            docker network create "${RAG_NETWORK_NAME:-dietai24_internal}" 2>/dev/null || true
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml run --rm migrate
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
