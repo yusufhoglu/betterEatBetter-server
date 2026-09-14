@@ -25,7 +25,7 @@ describe('RagHttpEstimator', () => {
 
     const estimator = new RagHttpEstimator('http://rag-service.test');
 
-    await expect(estimator.estimate('https://example.com/photo.jpg')).rejects.toEqual(
+    await expect(estimator.estimate('https://example.com/photo.jpg', 'en')).rejects.toEqual(
       expect.objectContaining<Partial<IntegrationError>>({
         code: 'RAG_PROCESSING_ERROR',
         retryable: false,

@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { env } from '../../../shared/config/env';
 import { ValidationError } from '../../../shared/errors/ValidationError';
+import { getLocale } from '../../../shared/i18n/locale';
 import { createModuleLogger } from '../../../shared/observability/logger';
 import { runWithContext } from '../../../shared/observability/tracer';
 import { TRACE_ID_HEADER } from '../../../shared/observability/tracingMiddleware';
@@ -65,7 +66,7 @@ export class FoodRecognitionController {
         }
 
         try {
-          const result = await this.recognizeFromPhoto.execute({ mealPhotoId, userId });
+          const result = await this.recognizeFromPhoto.execute({ mealPhotoId, userId, locale: getLocale(req) });
           logger.info({ mealPhotoId: result.mealPhotoId, userId }, 'photo recognition request accepted');
           res.status(202).json({ mealPhotoId: result.mealPhotoId });
         } catch (err) {
@@ -137,7 +138,11 @@ export class FoodRecognitionController {
         throw new ValidationError('INVALID_BODY', 'text is required (max 500 chars)');
       }
 
-      const result = await this.recognizeFromText.execute({ text: parsed.data.text, userId });
+      const result = await this.recognizeFromText.execute({
+        text: parsed.data.text,
+        userId,
+        locale: getLocale(req),
+      });
       res.status(200).json(result);
     } catch (err) {
       next(err);

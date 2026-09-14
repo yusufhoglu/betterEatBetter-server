@@ -55,12 +55,12 @@ function summarizeMacros(
 export const recognizePhotoWorker = createWorker<RecognizePhotoJobPayload>(
   QUEUE_NAME,
   async (job) => {
-    const { mealPhotoId, userId } = job.data;
-    logger.info({ mealPhotoId }, 'starting photo recognition');
+    const { mealPhotoId, locale } = job.data;
+    logger.info({ mealPhotoId, locale }, 'starting photo recognition');
 
     const photoUrl = await createPendingDownloadUrl(mealPhotoId);
 
-    const result = await estimator.estimate(photoUrl);
+    const result = await estimator.estimate(photoUrl, locale);
     const needsUserAction = ConfidencePolicy.needsUserAction(result.status);
     const macros = summarizeMacros(result.items);
     const status = needsUserAction ? 'insufficient_data' : 'completed';

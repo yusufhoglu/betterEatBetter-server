@@ -7,11 +7,19 @@ import { createLlmClient } from '../../../../shared/llm/llmClientFactory';
 import { requestStructuredOutput } from '../../../../shared/llm/structuredOutput';
 import { createModuleLogger } from '../../../../shared/observability/logger';
 import { buildResiliencePolicy } from '../../../../shared/resilience/policies';
+import type { Locale } from '../../../../shared/i18n/locale';
 import type { TextEstimatorPort, TextEstimateResult } from '../../ports/TextEstimatorPort';
 
 const logger = createModuleLogger('food-recognition');
 
 const FEATURE = 'food-recognition-text';
+
+/** Item names must come back in this language regardless of what language the free-text input itself was written in. */
+const LOCALE_LANGUAGE_NAMES: Record<Locale, string> = {
+  en: 'English',
+  tr: 'Turkish',
+};
+
 const TEXT_ESTIMATOR_SYSTEM_PROMPT =
   'Estimate nutrition from a free-text meal description. Return exactly one structured result. ' +
   'Use status="sufficient" when the description is specific enough for a reasonable estimate. ' +
@@ -19,6 +27,15 @@ const TEXT_ESTIMATOR_SYSTEM_PROMPT =
   'Always include a `macros` object with numeric totals for calories, protein, carbs, and fat. ' +
   'The `macros` totals must equal the sum of all items, even when there is only one item. ' +
   'Do not include extra prose.';
+
+function buildSystemPrompt(locale: Locale | undefined): string {
+  if (!locale) {
+    // No request-level locale (e.g. dietician tool callers) — keep the old
+    // implicit behavior of mirroring the input text's own language.
+    return TEXT_ESTIMATOR_SYSTEM_PROMPT;
+  }
+  return `${TEXT_ESTIMATOR_SYSTEM_PROMPT} Write every item's \`name\` in ${LOCALE_LANGUAGE_NAMES[locale]}, regardless of the language the input text itself is written in.`;
+}
 
 const textEstimateItemSchema = z.object({
   name: z.string(),
@@ -73,13 +90,13 @@ export class LlmTextEstimator implements TextEstimatorPort {
     });
   }
 
-  async estimate(text: string): Promise<TextEstimateResult> {
+  async estimate(text: string, locale?: Locale): Promise<TextEstimateResult> {
     try {
       const rawResult = await this.policy.execute(() =>
         requestStructuredOutput({
           client: this.llmClient,
           request: {
-            system: TEXT_ESTIMATOR_SYSTEM_PROMPT,
+            system: buildSystemPrompt(locale),
             messages: [{ role: 'user', content: text }],
             feature: FEATURE,
             model: env.FOOD_TEXT_MODEL,

@@ -112,7 +112,7 @@ describe('photo-recognition-flow (E2E)', () => {
           res.status(400).json({ code: 'INVALID_BODY' });
           return;
         }
-        const result = await recognizeFromPhoto.execute({ mealPhotoId, userId });
+        const result = await recognizeFromPhoto.execute({ mealPhotoId, userId, locale: 'en' });
         res.status(202).json(result);
       } catch (err) {
         next(err);

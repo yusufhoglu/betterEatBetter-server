@@ -2,6 +2,7 @@ import { buildResiliencePolicy } from '../../../../shared/resilience/policies';
 import { createModuleLogger } from '../../../../shared/observability/logger';
 import { IntegrationError } from '../../../../shared/errors/IntegrationError';
 import { env } from '../../../../shared/config/env';
+import type { Locale } from '../../../../shared/i18n/locale';
 import type { PhotoEstimatorPort, PhotoEstimateResult } from '../../ports/PhotoEstimatorPort';
 import type { IPolicy } from 'cockatiel';
 
@@ -31,9 +32,9 @@ export class ResilientPhotoEstimator implements PhotoEstimatorPort {
     });
   }
 
-  async estimate(photoUrl: string): Promise<PhotoEstimateResult> {
+  async estimate(photoUrl: string, locale: Locale): Promise<PhotoEstimateResult> {
     try {
-      return await this.policy.execute(() => this.inner.estimate(photoUrl));
+      return await this.policy.execute(() => this.inner.estimate(photoUrl, locale));
     } catch (err) {
       if (err instanceof IntegrationError) {
         throw err;

@@ -65,12 +65,12 @@ describe('RecognizeFromPhoto', () => {
     const mealPhotoId = 'photo-abc-123';
     const userId = 'user-xyz';
 
-    await useCase.execute({ mealPhotoId, userId });
+    await useCase.execute({ mealPhotoId, userId, locale: 'en' });
 
     // Both queues should have received add() calls
     expect((recognizePhotoQueue.add as jest.Mock)).toHaveBeenCalledWith(
       'recognize-photo',
-      expect.objectContaining({ mealPhotoId, userId }),
+      expect.objectContaining({ mealPhotoId, userId, locale: 'en' }),
       expect.objectContaining({ jobId: mealPhotoId }),
     );
     expect((standardizeAndCopyQueue.add as jest.Mock)).toHaveBeenCalledWith(
@@ -84,7 +84,7 @@ describe('RecognizeFromPhoto', () => {
     const mealPhotoId = 'photo-abc-456';
     const userId = 'user-xyz';
 
-    await useCase.execute({ mealPhotoId, userId });
+    await useCase.execute({ mealPhotoId, userId, locale: 'en' });
 
     const entry = await repository.findById(mealPhotoId);
     expect(entry).not.toBeNull();
@@ -94,14 +94,14 @@ describe('RecognizeFromPhoto', () => {
 
   it('returns mealPhotoId in the output', async () => {
     const mealPhotoId = 'photo-return-test';
-    const result = await useCase.execute({ mealPhotoId, userId: 'user-1' });
+    const result = await useCase.execute({ mealPhotoId, userId: 'user-1', locale: 'en' });
     expect(result.mealPhotoId).toBe(mealPhotoId);
   });
 
   it('throws PHOTO_NOT_FOUND ValidationError when object does not exist in storage', async () => {
     mockSend.mockRejectedValueOnce(new Error('NoSuchKey'));
 
-    await expect(useCase.execute({ mealPhotoId: 'missing', userId: 'user-1' })).rejects.toMatchObject({
+    await expect(useCase.execute({ mealPhotoId: 'missing', userId: 'user-1', locale: 'en' })).rejects.toMatchObject({
       code: 'PHOTO_NOT_FOUND',
     });
   });
@@ -111,7 +111,7 @@ describe('RecognizeFromPhoto', () => {
       Promise.resolve({ ContentLength: 20 * 1024 * 1024 }), // 20MB
     );
 
-    await expect(useCase.execute({ mealPhotoId: 'large-photo', userId: 'user-1' })).rejects.toMatchObject({
+    await expect(useCase.execute({ mealPhotoId: 'large-photo', userId: 'user-1', locale: 'en' })).rejects.toMatchObject({
       code: 'PHOTO_TOO_LARGE',
     });
   });
@@ -127,14 +127,14 @@ describe('RecognizeFromPhoto', () => {
     });
 
     await expect(
-      useCase.execute({ mealPhotoId: 'bad-format', userId: 'user-1' }),
+      useCase.execute({ mealPhotoId: 'bad-format', userId: 'user-1', locale: 'en' }),
     ).rejects.toMatchObject({ code: 'INVALID_IMAGE_FORMAT' });
   });
 
   it('does NOT create a food_entry when validation fails', async () => {
     mockSend.mockRejectedValueOnce(new Error('NoSuchKey'));
 
-    await expect(useCase.execute({ mealPhotoId: 'fail-photo', userId: 'user-1' })).rejects.toThrow(
+    await expect(useCase.execute({ mealPhotoId: 'fail-photo', userId: 'user-1', locale: 'en' })).rejects.toThrow(
       ValidationError,
     );
     expect(repository.findAll()).toHaveLength(0);

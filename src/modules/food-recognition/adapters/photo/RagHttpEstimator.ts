@@ -4,9 +4,16 @@ import { IntegrationError } from '../../../../shared/errors/IntegrationError';
 import { createModuleLogger } from '../../../../shared/observability/logger';
 import { getTraceId } from '../../../../shared/observability/tracer';
 import { env } from '../../../../shared/config/env';
+import type { Locale } from '../../../../shared/i18n/locale';
 import type { PhotoEstimatorPort, PhotoEstimateResult } from '../../ports/PhotoEstimatorPort';
 
 const logger = createModuleLogger('food-recognition');
+
+/** Our {@link Locale} is just a language tag; the RAG service's contract wants a full BCP-47 tag (see python-rag-service-rule.md). */
+const RAG_LOCALE_TAGS: Record<Locale, string> = {
+  en: 'en-US',
+  tr: 'tr-TR',
+};
 
 /** Zod schema for the Python RAG service response. */
 export const ragResponseSchema = z.union([
@@ -65,7 +72,7 @@ export class RagHttpEstimator implements PhotoEstimatorPort {
     this.baseUrl = baseUrl;
   }
 
-  async estimate(photoUrl: string): Promise<PhotoEstimateResult> {
+  async estimate(photoUrl: string, locale: Locale): Promise<PhotoEstimateResult> {
     const traceId = getTraceId();
     const requestId = traceId ?? randomUUID();
 
@@ -82,7 +89,7 @@ export class RagHttpEstimator implements PhotoEstimatorPort {
       response = await fetch(`${this.baseUrl}/v1/meals/estimate`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ imageUrl: photoUrl, requestId }),
+        body: JSON.stringify({ imageUrl: photoUrl, requestId, locale: RAG_LOCALE_TAGS[locale] }),
       });
     } catch (err) {
       logger.error({ err }, 'RAG service network error');

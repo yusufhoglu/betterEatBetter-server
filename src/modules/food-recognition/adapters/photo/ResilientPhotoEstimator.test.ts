@@ -8,7 +8,7 @@ describe('ResilientPhotoEstimator', () => {
     const inner = FakePhotoEstimator.sufficient();
     const estimator = new ResilientPhotoEstimator(inner);
 
-    const result = await estimator.estimate('https://example.com/photo.jpg');
+    const result = await estimator.estimate('https://example.com/photo.jpg', 'en');
 
     expect(result.status).toBe('sufficient');
     expect(result.items.length).toBeGreaterThan(0);
@@ -29,14 +29,14 @@ describe('ResilientPhotoEstimator', () => {
 
       // Make 5 calls — these should all fail and count towards the breaker
       for (let i = 0; i < 5; i++) {
-        await expect(estimator.estimate('url')).rejects.toThrow();
+        await expect(estimator.estimate('url', 'en')).rejects.toThrow();
       }
 
       const callCountAfterFiveFailures = inner.callCount;
       expect(callCountAfterFiveFailures).toBe(5);
 
       // The 6th call — circuit should be open, inner estimator must NOT be called
-      await expect(estimator.estimate('url')).rejects.toThrow();
+      await expect(estimator.estimate('url', 'en')).rejects.toThrow();
 
       // Inner's callCount must NOT have increased — circuit is open
       expect(inner.callCount).toBe(callCountAfterFiveFailures);

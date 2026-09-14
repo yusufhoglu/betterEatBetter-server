@@ -44,6 +44,16 @@ Dört giriş yöntemi var, DÖRDÜ DE aynı `FoodEntry` çıktısını üretir a
   izolasyonu (RAG servisi internete açık olmamalı) üzerine ek savunma katmanı, tek
   koruma değil. Python tarafı bu header'ı timing-safe karşılaştırmayla doğrulamalı,
   eşleşmiyorsa 401 dönmeli (bkz. modül `.env.example` notu).
+- **`locale`**: `PhotoEstimatorPort.estimate(photoUrl, locale)` — `locale` PHOTO
+  akışında ZORUNLU parametre (tek çağıran `FoodRecognitionController.handlePhoto`,
+  her zaman `getLocale(req)` ile dolduruyor). `RecognizeFromPhoto` bunu
+  `RecognizePhotoJobPayload.locale` olarak job'a taşır (request sınırı asenkron job'a
+  geçerken kayboluyor, `traceId` ile aynı mantık), `recognizePhotoJob.ts` worker'da
+  `estimator.estimate(photoUrl, locale)`'a iletir. `RagHttpEstimator` bunu RAG'ın
+  beklediği BCP-47 etikete çevirip (`RAG_LOCALE_TAGS`, örn. `'tr'` → `'tr-TR'`) request
+  body'sine `locale` alanı olarak ekler — RAG servisi (ayrı repo, DietAI24) bunu
+  `item.name` çevirisi için kullanır, matching HER ZAMAN İngilizce FNDDS üzerinden
+  kalır (bkz. o repodaki `python-rag-service-rule.md`).
 - `ResilientPhotoEstimator.ts`: `RagHttpEstimator`'ı `shared/resilience/policies.ts`'teki
   cockatiel policy ile sarar — circuit breaker (5 ardışık hata → açık, 30sn half-open) +
   retry (SADECE `retryable: true` hatalarda) + timeout (60 saniye, RAG'ın 15-30sn sürebildiği
@@ -60,6 +70,16 @@ Dört giriş yöntemi var, DÖRDÜ DE aynı `FoodEntry` çıktısını üretir a
 - `LlmTextEstimator.ts`: LLM'e serbest metni gönderip yapılandırılmış `FoodEntry` çıkarır.
   LLM'den de `status: 'sufficient'|'insufficient_data'` beklenir — aynı `ConfidencePolicy`
   hem photo hem text için kullanılabilsin diye response şekli tutarlı olmalı.
+- **`locale` (text akışı, photo'dan FARKLI kural)**: `TextEstimatorPort.estimate(text,
+  locale?)` — `locale` burada OPSİYONEL. `FoodRecognitionController.handleText`
+  (gerçek HTTP isteği, `Accept-Language` var) her zaman `getLocale(req)` geçirir ve
+  sistem promptuna açıkça "item isimlerini {dil}'de yaz" talimatı eklenir. Ama
+  `RecognizeFromText` dietician modülünden de çağrılıyor (`ProposeMealLogTool.ts`,
+  `RateMealTool.ts`) — bunların elinde `req`/`Accept-Language` YOK, o yüzden `locale`
+  vermiyorlar; bu durumda `LlmTextEstimator` ESKİ davranışa döner (talimat eklemez,
+  LLM girdi metninin kendi dilini taklit eder). Bu ayrımı KALDIRMAYIN — dietician
+  tarafı zaten kendi mesaj geçmişinden dili çıkarıyor (`dieticianSystemPrompt.ts`),
+  onu locale ile ezmek regresyon olur.
 
 ### `search/`
 - `CatalogSearchAdapter.ts`: **CANLI USDA API çağrısı YAPMAZ.** USDA FoodData Central

@@ -6,6 +6,7 @@ import { createQueue } from '../../../shared/queue/queueConnection';
 import { env } from '../../../shared/config/env';
 import { OBJECT_STORAGE_BUCKET, objectStorageClient } from '../../../shared/storage/objectStorageClient';
 import { pendingObjectKey } from '../../../shared/storage/presignedUrl';
+import type { Locale } from '../../../shared/i18n/locale';
 import type { FoodEntryRepositoryPort } from '../ports/FoodEntryRepositoryPort';
 import type { BaseJobPayload } from '../../../shared/queue/jobTypes';
 
@@ -21,6 +22,7 @@ export interface RecognizePhotoJobPayload extends BaseJobPayload {
   mealPhotoId: string;
   userId: string;
   photoObjectKey: string;
+  locale: Locale;
 }
 
 export interface StandardizeAndCopyJobPayload extends BaseJobPayload {
@@ -77,6 +79,7 @@ function detectImageMime(buffer: Buffer): string | null {
 export interface RecognizeFromPhotoInput {
   mealPhotoId: string;
   userId: string;
+  locale: Locale;
 }
 
 export interface RecognizeFromPhotoOutput {
@@ -94,7 +97,7 @@ export class RecognizeFromPhoto {
   constructor(private readonly repository: FoodEntryRepositoryPort) {}
 
   async execute(input: RecognizeFromPhotoInput): Promise<RecognizeFromPhotoOutput> {
-    const { mealPhotoId, userId } = input;
+    const { mealPhotoId, userId, locale } = input;
     const objectKey = pendingObjectKey(mealPhotoId);
     logger.info({ mealPhotoId, userId, objectKey, bucket: OBJECT_STORAGE_BUCKET }, 'validating pending meal photo');
 
@@ -196,7 +199,7 @@ export class RecognizeFromPhoto {
     await Promise.all([
       recognizePhotoQueue.add(
         'recognize-photo',
-        { mealPhotoId, userId, photoObjectKey: objectKey, traceId },
+        { mealPhotoId, userId, photoObjectKey: objectKey, traceId, locale },
         {
           jobId: mealPhotoId,
           attempts: JOB_RETRY_ATTEMPTS,

@@ -69,6 +69,7 @@ describe('recognizePhotoJob — trace context integration', () => {
         userId: 'test-user-id',
         photoObjectKey: 'pending/test-photo-id.jpg',
         traceId: TEST_TRACE_ID,
+        locale: 'en',
       },
       { jobId: 'test-photo-id' },
     );
