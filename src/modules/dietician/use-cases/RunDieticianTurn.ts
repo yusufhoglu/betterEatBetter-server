@@ -218,21 +218,27 @@ export class RunDieticianTurn {
 
     // The cheap gather model is unreliable at choosing to call the card tool on
     // its own (worse still outside English). When the classified intent maps to
-    // a card, force that tool on the first gather turn so the card always fires.
+    // a card, force that tool on the LAST gather turn so the card always fires —
+    // earlier turns are left unforced so the model can look up data first (e.g.
+    // get_meal_data(recentMeals) when the user refers to a logged meal instead
+    // of describing it) and hand real numbers to the card tool instead of
+    // guessing from the bare request text.
     const forcedCardTool = forcedCardToolForIntent(intent);
     const canForce = forcedCardTool !== null && armedTools.some((tool) => tool.definition.name === forcedCardTool);
-    let cardForced = false;
+    let cardCalled = false;
 
     let workingMessages = baseMessages;
 
     for (let turn = 0; turn < this.maxGatherTurns; turn++) {
-      const forceToolChoice = canForce && !cardForced ? { toolName: forcedCardTool! } : undefined;
+      const isLastTurn = turn === this.maxGatherTurns - 1;
+      const forceToolChoice = canForce && !cardCalled && isLastTurn ? { toolName: forcedCardTool! } : undefined;
       const result = await this.llm.runContextGathering(workingMessages, toolDefinitions, forceToolChoice);
-      if (forceToolChoice) {
-        cardForced = true;
-      }
 
       if (!result.toolCalls || result.toolCalls.length === 0) {
+        if (canForce && !cardCalled) {
+          // Nothing gathered this turn — keep going so a later turn can still force the card.
+          continue;
+        }
         return { messages: workingMessages, gatherTurns: turn + 1 };
       }
 
@@ -242,6 +248,9 @@ export class RunDieticianTurn {
       ];
 
       for (const toolCall of result.toolCalls) {
+        if (toolCall.name === forcedCardTool) {
+          cardCalled = true;
+        }
         const tool = armedTools.find((candidate) => candidate.definition.name === toolCall.name);
         const output = tool
           ? await tool.execute(input.userId, toolCall.input, {
@@ -268,10 +277,12 @@ export class RunDieticianTurn {
       }
     }
 
-    logger.warn(
-      { conversationId: input.conversationId, maxGatherTurns: this.maxGatherTurns },
-      'max gather turns reached, forcing synthesis',
-    );
+    if (canForce && !cardCalled) {
+      logger.warn(
+        { conversationId: input.conversationId, maxGatherTurns: this.maxGatherTurns },
+        'max gather turns reached without the card tool firing',
+      );
+    }
     return { messages: workingMessages, gatherTurns: this.maxGatherTurns };
   }
 

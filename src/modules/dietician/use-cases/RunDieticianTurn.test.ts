@@ -285,29 +285,47 @@ describe('RunDieticianTurn', () => {
     expect(conversation?.messages[1]?.content).toBe('');
   });
 
-  it('forces the card tool on the first gather turn for card intents', async () => {
+  it('leaves early gather turns unforced, then forces the card tool on the last turn if it has not fired yet', async () => {
     const cases: Array<[DieticianIntent, string]> = [
       ['log_help', 'propose_meal_log'],
       ['rate_meal', 'rate_meal'],
       ['recipe', 'provide_recipe'],
     ];
     for (const [intent, toolName] of cases) {
+      const dataTool = new FakeDataTool();
       const proposeTool = new FakeProposeTool(fakeProposal);
       const rateTool = new FakeRateMealTool(fakeRating);
       const recipeTool = new FakeRecipeTool(fakeRecipe);
-      const { llm, runTurn } = build({ tools: [proposeTool, rateTool, recipeTool] });
+      const { llm, runTurn } = build({ tools: [dataTool, proposeTool, rateTool, recipeTool], maxGatherTurns: 2 });
       llm.setIntent(intent);
       llm.setGatherResults([
+        // turn 1: unforced, free to gather data first (e.g. get_meal_data) instead of guessing
+        { content: '', toolCalls: [{ id: 't0', name: 'get_meal_data', input: {} }] },
+        // turn 2 (last): forced, since the card has not fired yet
         { content: '', toolCalls: [{ id: 't1', name: toolName, input: { description: 'x', request: 'x' } }] },
-        { content: '' },
       ]);
 
       await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'msg', today: TODAY }));
 
-      expect(llm.gatherCalls[0]!.forceToolChoice).toEqual({ toolName });
-      // only the first turn is forced
-      expect(llm.gatherCalls[1]?.forceToolChoice).toBeUndefined();
+      expect(llm.gatherCalls[0]!.forceToolChoice).toBeUndefined();
+      expect(llm.gatherCalls[1]!.forceToolChoice).toEqual({ toolName });
     }
+  });
+
+  it('does not force the card tool again if the model already called it on an earlier, unforced turn', async () => {
+    const proposeTool = new FakeProposeTool(fakeProposal);
+    const { llm, runTurn } = build({ tools: [proposeTool], maxGatherTurns: 2 });
+    llm.setIntent('log_help');
+    llm.setGatherResults([
+      { content: '', toolCalls: [{ id: 't1', name: 'propose_meal_log', input: { description: 'x' } }] },
+      { content: '' },
+    ]);
+
+    await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'msg', today: TODAY }));
+
+    expect(llm.gatherCalls[0]!.forceToolChoice).toBeUndefined();
+    expect(llm.gatherCalls[1]?.forceToolChoice).toBeUndefined();
+    expect(proposeTool.calls).toHaveLength(1);
   });
 
   it('does not force any tool for the advice / quick_fact intents', async () => {

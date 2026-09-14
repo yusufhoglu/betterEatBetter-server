@@ -100,6 +100,7 @@ export class LlmTextEstimator implements TextEstimatorPort {
             messages: [{ role: 'user', content: text }],
             feature: FEATURE,
             model: env.FOOD_TEXT_MODEL,
+            reasoningEffort: 'minimal',
           },
           resultSchema: relaxedTextEstimateSchema,
           toolDescription: 'Report the nutrition estimate as structured meal data.',
