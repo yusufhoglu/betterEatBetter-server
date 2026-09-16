@@ -96,6 +96,12 @@ Dört giriş yöntemi var, DÖRDÜ DE aynı `FoodEntry` çıktısını üretir a
   birlikte olduğu gibi saklanır.
 - Arama sıralaması: eşit metinsel skorda `PER_SERVING` (ticari/marka) satırlar
   `BRANDED_RANK_BOOST` çarpanıyla öne alınır — kullanıcı önceliği ticari ürünler.
+- **Geriye dönük uyumluluk (GEÇİCİ)**: `FoodRecognitionController.handleSearch`,
+  `basis`/`brand`/`category`/`servingLabel` eklenmeden önceki mobil client'lar
+  kırılmasın diye response'a eski alan adlarını (`caloriesPer100g`, `proteinPer100g`,
+  `carbsPer100g`, `fatPer100g`) yeni alanların ALİASI olarak ekliyor. Mobil taraf
+  yeni alan adlarına geçtikten sonra bu alias'lar KALDIRILMALI — kalıcı bir
+  sözleşme değil.
 
 ### `repository/`
 - `PrismaFoodEntryRepository.ts`: SADECE `food_entries` tablosu (photo akışı için) —

@@ -162,7 +162,18 @@ export class FoodRecognitionController {
         limit: parsed.data.limit,
       });
 
-      res.status(200).json(result);
+      res.status(200).json({
+        items: result.items.map((item) => ({
+          ...item,
+          // Legacy field-name aliases for clients built before brand/category/basis
+          // existed (caloriesPer100g etc. used to be the only names). Remove once
+          // mobile has migrated to calories/proteinG/carbsG/fatG.
+          caloriesPer100g: item.calories,
+          proteinPer100g: item.proteinG,
+          carbsPer100g: item.carbsG,
+          fatPer100g: item.fatG,
+        })),
+      });
     } catch (err) {
       next(err);
     }
