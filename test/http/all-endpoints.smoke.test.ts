@@ -713,10 +713,10 @@ describe('all endpoint smoke tests', () => {
       await prisma.foodCatalogItem.create({
         data: {
           name: 'Chicken Breast',
-          caloriesPer100g: 165,
-          proteinPer100g: 31,
-          carbsPer100g: 0,
-          fatPer100g: 3.6,
+          calories: 165,
+          proteinG: 31,
+          carbsG: 0,
+          fatG: 3.6,
         },
       });
 

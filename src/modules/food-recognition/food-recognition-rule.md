@@ -82,10 +82,20 @@ Dört giriş yöntemi var, DÖRDÜ DE aynı `FoodEntry` çıktısını üretir a
   onu locale ile ezmek regresyon olur.
 
 ### `search/`
-- `CatalogSearchAdapter.ts`: **CANLI USDA API çağrısı YAPMAZ.** USDA FoodData Central
-  verisi (CSV/SQLite) önceden import edilmiş kendi Postgres tablonuzda (`food_catalog`
-  gibi) full-text search yapılır. Import script'i ayrı bir CLI/script olarak yazılır,
+- `CatalogSearchAdapter.ts`: **CANLI hiçbir API'ye çağrı YAPMAZ.** `food_catalog_items`
+  tablosu üç kaynaktan önceden import edilir: USDA FoodData Central (generic, jenerik
+  gıdalar — `npm run import:usda`), marka/restoran zinciri ürünleri (Türkiye odaklı,
+  `npm run import:branded`, kaynak: `adapters/search/data/branded-foods-turkey.csv`) ve
+  markasız Türk yemekleri (lahmacun, döner, mantı vb. — `npm run import:turkish-dishes`,
+  kaynak: `adapters/search/data/turkish-generic-dishes.csv`, elle derlenmiş/tahmini
+  değerler, bkz. `data/README.md`). Import script'leri ayrı birer CLI script'tir,
   runtime akışının parçası değildir.
+- `basis` alanı (`PER_100G` | `PER_SERVING`) hangi satırın 100g başına, hangisinin
+  porsiyon/ürün başına değer taşıdığını ayırt eder — marka ürünlerinde (ör. "Whopper")
+  gram ağırlığı kaynak veride YOK, o yüzden 100g'a zorla çevrilmez, `servingLabel` ile
+  birlikte olduğu gibi saklanır.
+- Arama sıralaması: eşit metinsel skorda `PER_SERVING` (ticari/marka) satırlar
+  `BRANDED_RANK_BOOST` çarpanıyla öne alınır — kullanıcı önceliği ticari ürünler.
 
 ### `repository/`
 - `PrismaFoodEntryRepository.ts`: SADECE `food_entries` tablosu (photo akışı için) —

@@ -1,0 +1,36 @@
+name,category,calories,protein_g,carbs_g,fat_g
+Lahmacun,Ana Yemek,220,9,32,6.5
+Et Döner,Ana Yemek,280,22,2,20
+Tavuk Döner,Ana Yemek,190,24,2,9
+Adana Kebap,Ana Yemek,290,24,3,22
+Urfa Kebap,Ana Yemek,270,23,2,20
+İskender Kebap,Ana Yemek,235,14,13,15
+Mantı,Ana Yemek,220,10,28,8
+İçli Köfte,Ana Yemek,260,8,30,12
+Kuru Fasulye,Ana Yemek,135,7,18,4
+Mercimek Çorbası,Çorba,55,3,8,1.5
+Ezogelin Çorbası,Çorba,60,3,9,1.5
+Yayla Çorbası,Çorba,65,3,7,3
+Pilav,Ana Yemek,170,4,34,2
+Bulgur Pilavı,Ana Yemek,130,4,26,2
+Menemen,Ana Yemek,120,7,5,8
+Simit,Kahvaltılık,310,10,55,6
+Poğaça,Kahvaltılık,330,8,40,15
+Kısır,Meze,160,4,24,6
+Karnıyarık,Ana Yemek,110,5,7,7
+İmam Bayıldı,Ana Yemek,95,2,8,6
+Zeytinyağlı Yaprak Sarma,Meze,170,3,22,8
+Etli Yaprak Sarma,Ana Yemek,150,6,16,7
+Humus,Meze,166,8,14,10
+Cacık,Meze,41,2,3.15,2.12
+Ayran,İçecek,38,1.9,2.8,2
+Sütlaç,Tatlı,107,3,18,2.5
+Künefe,Tatlı,426,7.36,54.9,20.52
+Baklava,Tatlı,430,6,48,24
+Kumpir,Sokak Lezzeti,160,4,20,7
+Gözleme (Patatesli),Ana Yemek,250,6,30,11
+Gözleme (Peynirli),Ana Yemek,280,9,28,15
+Midye Dolma,Sokak Lezzeti,180,4,30,5
+Kokoreç,Sokak Lezzeti,330,18,2,28
+Balık Ekmek,Sokak Lezzeti,180,12,20,6
+Nohut Yemeği,Ana Yemek,140,7,15,6

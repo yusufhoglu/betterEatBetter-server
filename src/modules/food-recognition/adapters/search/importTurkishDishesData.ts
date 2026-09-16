@@ -1,14 +1,23 @@
 #!/usr/bin/env ts-node
 /**
- * USDA FoodData Central import script.
- * Run with: npm run import:usda -- --file /path/to/food.csv
+ * Generic Turkish dish catalog import script (lahmacun, döner, mantı, etc. — not
+ * tied to any restaurant chain).
+ * Run with: npm run import:turkish-dishes [-- --file /path/to/other.csv]
  *
  * This is a STANDALONE CLI script — NOT part of the runtime application.
- * Expected CSV columns: id, description, calories_per_100g, protein_per_100g,
- *                       carbohydrates_per_100g, fat_per_100g
+ * Defaults to the bundled ./data/turkish-generic-dishes.csv, hand-compiled from
+ * several Turkish nutrition reference sites and cross-checked for calorie/macro
+ * consistency (kcal ≈ 4*protein + 4*carbs + 9*fat) — see data/README.md for sources
+ * and accuracy caveats.
+ *
+ * Values are per 100g (basis=PER_100G), same convention as the USDA import, since
+ * these are home-style dishes eaten in variable portions rather than fixed menu items.
+ *
+ * Expected CSV: comma-delimited, columns name,category,calories,protein_g,carbs_g,fat_g
  *
  * Usage:
- *   ts-node src/modules/food-recognition/adapters/search/importUsdaData.ts --file FoodData_Central.csv
+ *   ts-node src/modules/food-recognition/adapters/search/importTurkishDishesData.ts
+ *   ts-node src/modules/food-recognition/adapters/search/importTurkishDishesData.ts --file other.csv
  */
 
 import fs from 'node:fs';
@@ -17,17 +26,13 @@ import { parse } from 'csv-parse';
 import { PrismaClient } from '@prisma/client';
 
 const BATCH_SIZE = 500;
+const DEFAULT_FILE = path.join(__dirname, 'data', 'turkish-generic-dishes.csv');
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const fileFlag = args.indexOf('--file');
-  const fileArg = fileFlag === -1 ? undefined : args[fileFlag + 1];
-  if (!fileArg) {
-    console.error('Usage: ts-node importUsdaData.ts --file <path-to-csv>');
-    process.exit(1);
-  }
+  const filePath = path.resolve(fileFlag === -1 ? DEFAULT_FILE : (args[fileFlag + 1] ?? DEFAULT_FILE));
 
-  const filePath = path.resolve(fileArg);
   if (!fs.existsSync(filePath)) {
     console.error(`File not found: ${filePath}`);
     process.exit(1);
@@ -36,11 +41,13 @@ async function main(): Promise<void> {
   const prisma = new PrismaClient();
 
   try {
-    console.log(`Importing USDA data from: ${filePath}`);
+    console.log(`Importing Turkish dish data from: ${filePath}`);
 
     const records: Array<{
       id: string;
       name: string;
+      category: string | null;
+      basis: 'PER_100G';
       calories: number;
       proteinG: number;
       carbsG: number;
@@ -52,21 +59,24 @@ async function main(): Promise<void> {
         .pipe(
           parse({
             columns: true,
+            bom: true,
             skip_empty_lines: true,
             trim: true,
           }),
         )
         .on('data', (row: Record<string, string>) => {
-          const calories = parseFloat(row['calories_per_100g'] ?? '0');
-          const protein = parseFloat(row['protein_per_100g'] ?? '0');
-          const carbs = parseFloat(row['carbohydrates_per_100g'] ?? '0');
-          const fat = parseFloat(row['fat_per_100g'] ?? '0');
+          if (!row['name']) return;
 
-          if (!row['description']) return;
+          const calories = parseFloat(row['calories'] ?? '0');
+          const protein = parseFloat(row['protein_g'] ?? '0');
+          const carbs = parseFloat(row['carbs_g'] ?? '0');
+          const fat = parseFloat(row['fat_g'] ?? '0');
 
           records.push({
-            id: row['id'] ?? crypto.randomUUID(),
-            name: row['description'],
+            id: crypto.randomUUID(),
+            name: row['name'],
+            category: row['category'] || null,
+            basis: 'PER_100G',
             calories: isNaN(calories) ? 0 : calories,
             proteinG: isNaN(protein) ? 0 : protein,
             carbsG: isNaN(carbs) ? 0 : carbs,
@@ -90,7 +100,7 @@ async function main(): Promise<void> {
       process.stdout.write(`\rInserted ${inserted}/${records.length}`);
     }
 
-    console.log(`\nDone. Imported ${inserted} food catalog items.`);
+    console.log(`\nDone. Imported ${inserted} Turkish dish catalog items.`);
   } finally {
     await prisma.$disconnect();
   }

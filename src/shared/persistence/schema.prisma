@@ -121,16 +121,26 @@ model FoodEntry {
   @@map("food_entries")
 }
 
-// Pre-imported USDA FoodData Central data.
-// Populated once via: npm run import:usda
+enum NutritionBasis {
+  PER_100G
+  PER_SERVING
+}
+
+// Pre-imported food catalog: generic USDA FoodData Central items (basis=PER_100G,
+// via: npm run import:usda) and branded/restaurant-chain items (basis=PER_SERVING,
+// via: npm run import:branded — brand/category/servingLabel populated).
 // Full-text search uses Postgres GIN index on the name column.
 model FoodCatalogItem {
-  id              String @id @default(uuid())
-  name            String
-  caloriesPer100g Float
-  proteinPer100g  Float
-  carbsPer100g    Float
-  fatPer100g      Float
+  id           String         @id @default(uuid())
+  name         String
+  brand        String?
+  category     String?
+  basis        NutritionBasis @default(PER_100G)
+  servingLabel String?
+  calories     Float
+  proteinG     Float
+  carbsG       Float
+  fatG         Float
 
   @@map("food_catalog_items")
 }
