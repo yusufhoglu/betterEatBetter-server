@@ -1,4 +1,6 @@
 import { NotFoundError } from '../../../shared/errors/NotFoundError';
+import { ValidationError } from '../../../shared/errors/ValidationError';
+import { STEP_TARGET_RANGE, WATER_TARGET_RANGE } from '../domain/ComputeActivityTargets';
 import { ValidateMacroOverride } from '../domain/ValidateMacroOverride';
 import type { Plan, PlanRepositoryPort } from '../ports/PlanRepositoryPort';
 
@@ -9,6 +11,15 @@ export interface SetDietitianPlanTargetsInput {
   proteinG: number;
   carbsG: number;
   fatG: number;
+  /** Omitted → unchanged; null → back to automatic. */
+  waterTargetMl?: number | null;
+  stepTarget?: number | null;
+}
+
+function assertInRange(value: number | null | undefined, range: { min: number; max: number }, field: string): void {
+  if (value != null && (!Number.isInteger(value) || value < range.min || value > range.max)) {
+    throw new ValidationError('INVALID_ACTIVITY_TARGET', `${field} must be an integer between ${range.min} and ${range.max}`);
+  }
 }
 
 /**
@@ -23,6 +34,8 @@ export class SetDietitianPlanTargets {
 
   async execute(input: SetDietitianPlanTargetsInput): Promise<Plan> {
     ValidateMacroOverride(input);
+    assertInRange(input.waterTargetMl, WATER_TARGET_RANGE, 'waterTargetMl');
+    assertInRange(input.stepTarget, STEP_TARGET_RANGE, 'stepTarget');
 
     const existing = await this.planRepository.findByUserId(input.clientId);
     if (!existing) {
@@ -37,6 +50,8 @@ export class SetDietitianPlanTargets {
       fatG: input.fatG,
       source: 'dietitian',
       setByDietitianId: input.dietitianId,
+      waterTargetMl: input.waterTargetMl,
+      stepTarget: input.stepTarget,
     });
   }
 }

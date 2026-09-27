@@ -16,6 +16,12 @@ export class InMemoryWaterLogRepository implements WaterLogRepositoryPort {
     return this.logs.get(this.key(userId, date)) ?? null;
   }
 
+  async findInRange(userId: string, startDate: Date, endDate: Date): Promise<WaterLog[]> {
+    return [...this.logs.values()]
+      .filter((log) => log.userId === userId && log.date >= normalizeDate(startDate) && log.date <= normalizeDate(endDate))
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+  }
+
   async addAmount(userId: string, date: Date, amountMl: number): Promise<WaterLog> {
     const key = this.key(userId, date);
     const normalizedDate = normalizeDate(date);

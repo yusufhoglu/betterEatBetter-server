@@ -48,6 +48,8 @@ model User {
   dataAccessLogsAbout    DataAccessLog[]
   threadParticipants     ThreadParticipant[]
   sentChatMessages       ChatMessage[]
+  stepLogs               StepLog[]
+  alertRuleSettings      AlertRuleSetting[]
 
   @@map("users")
 }
@@ -94,6 +96,11 @@ model Plan {
   // assigned dietitian (practice module) — see dietitian-platform-design.md.
   source           String   @default("self") // 'self' | 'dietitian'
   setByDietitianId String?
+  // Daily water / step targets. NULL = automatic (derived from the profile,
+  // see onboarding-plan/domain/ComputeActivityTargets); a number is an
+  // explicit override (today only a dietitian sets one).
+  waterTargetMl    Int?
+  stepTarget       Int?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -592,6 +599,7 @@ model DietitianClientLink {
   endedAt          DateTime?
   endedBy          String?
   notes            DietitianNote[]
+  insight          ClientInsight?
 
   @@index([dietitianId, status])
   @@index([organizationId, status])
@@ -674,4 +682,50 @@ model ChatMessage {
   @@unique([threadId, clientMessageId])
   @@index([threadId, createdAt(sort: Desc)])
   @@map("chat_messages")
+}
+
+// ─── activity module (steps from Apple Health / Health Connect) ─────────────
+// One row per (user, day): the device's daily total, re-sent (upserted) as the
+// day progresses. Not an event log.
+model StepLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  steps     Int
+  source    String // 'apple_health' | 'health_connect' | 'manual'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@map("step_logs")
+}
+
+// ─── practice: alerts & adherence ───────────────────────────────────────────
+
+// A dietitian's override of one alert rule (practice/domain/alertRules.ts).
+// No row = the rule's defaults.
+model AlertRuleSetting {
+  dietitianId String
+  dietitian   User     @relation(fields: [dietitianId], references: [id], onDelete: Cascade)
+  ruleId      String
+  enabled     Boolean  @default(true)
+  threshold   Float?
+  updatedAt   DateTime @updatedAt
+
+  @@id([dietitianId, ruleId])
+  @@map("alert_rule_settings")
+}
+
+// Latest computed adherence score + triggered alerts per active link. Rebuilt
+// nightly and whenever the dietitian opens the client; the roster reads it.
+model ClientInsight {
+  linkId     String              @id
+  link       DietitianClientLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  score      Int?
+  scoreParts Json
+  alerts     Json
+  computedAt DateTime
+
+  @@map("client_insights")
 }

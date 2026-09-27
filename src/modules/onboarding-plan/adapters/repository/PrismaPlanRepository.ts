@@ -33,6 +33,8 @@ export class PrismaPlanRepository implements PlanRepositoryPort {
         fatG: input.fatG,
         source: input.source,
         setByDietitianId: input.setByDietitianId,
+        waterTargetMl: input.waterTargetMl,
+        stepTarget: input.stepTarget,
       },
     });
     return toPlan(plan);

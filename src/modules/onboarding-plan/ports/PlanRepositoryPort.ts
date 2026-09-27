@@ -9,6 +9,9 @@ export interface Plan {
   fatG: number;
   source?: PlanSource;
   setByDietitianId?: string | null;
+  /** null/undefined = automatic (ComputeActivityTargets). */
+  waterTargetMl?: number | null;
+  stepTarget?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +33,9 @@ export interface UpdatePlanInput {
   /** Omitted → ownership unchanged. */
   source?: PlanSource;
   setByDietitianId?: string | null;
+  /** Omitted → unchanged; null → back to automatic. */
+  waterTargetMl?: number | null;
+  stepTarget?: number | null;
 }
 
 /**
