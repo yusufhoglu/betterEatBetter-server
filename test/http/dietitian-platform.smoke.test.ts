@@ -290,4 +290,76 @@ describe('dietitian platform smoke', () => {
     const thread = await request(app).get(`/threads/${joined.body.threadId}/messages`).set('Authorization', dytB.auth);
     expect(thread.status).toBe(200);
   }, 60_000);
+
+  it('steps, activity targets, analytics and alert rules', async () => {
+    const dietitian = await createUser('Dyt. Analitik');
+    const client = await createUser('Adımcı Danışan');
+    await request(app).post('/onboarding/complete').set('Authorization', client.auth).send({
+      weightKg: 64.8,
+      targetWeightKg: 60,
+      heightCm: 168,
+      age: 34,
+      gender: 'female',
+      workoutsPerWeek: 3,
+      goal: 'lose',
+      weeklyPaceKg: 0.5,
+    });
+
+    const goalBefore = await request(app).get('/goal').set('Authorization', client.auth);
+    expect(goalBefore.body).toMatchObject({ waterTargetMl: 2100, stepTarget: 8000, waterTargetAuto: true, stepTargetAuto: true });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const synced = await request(app)
+      .put('/activity/steps')
+      .set('Authorization', client.auth)
+      .send({ timeZone: 'UTC', source: 'apple_health', days: [{ date: yesterday, steps: 9100 }, { date: today, steps: 2300 }] });
+    expect(synced.body).toEqual({ saved: 2 });
+    expect((await request(app).get(`/activity/steps?timeZone=UTC&from=${yesterday}`).set('Authorization', client.auth)).body.items).toHaveLength(2);
+
+    await request(app).post('/practice/dietitian/activate').set('Authorization', dietitian.auth).send({ code: await issueCode() });
+    const invite = await request(app).post('/practice/invites').set('Authorization', dietitian.auth).send({});
+    await request(app)
+      .post('/practice/join')
+      .set('Authorization', client.auth)
+      .send({ code: invite.body.code, consentScopes: ['meals', 'water', 'steps', 'body_measurements'] });
+
+    const plan = await request(app)
+      .put(`/practice/clients/${client.id}/plan`)
+      .set('Authorization', dietitian.auth)
+      .send({ dailyCalories: 1800, proteinG: 120, carbsG: 180, fatG: 66, stepTarget: 10000 });
+    expect(plan.body).toMatchObject({ stepTarget: 10000, waterTargetMl: null });
+    const goalAfter = await request(app).get('/goal').set('Authorization', client.auth);
+    expect(goalAfter.body).toMatchObject({ stepTarget: 10000, stepTargetAuto: false, waterTargetAuto: true, planSource: 'dietitian' });
+
+    const steps = await request(app).get(`/practice/clients/${client.id}/steps?from=${yesterday}&timeZone=UTC`).set('Authorization', dietitian.auth);
+    expect(steps.body.items).toEqual([{ date: yesterday, steps: 9100 }, { date: today, steps: 2300 }]);
+
+    // Pretend the relationship started 20 days ago so time-based rules can fire.
+    await prisma.dietitianClientLink.updateMany({
+      where: { clientId: client.id, status: 'active' },
+      data: { startedAt: new Date(Date.now() - 20 * 86_400_000) },
+    });
+
+    const analytics = await request(app).get(`/practice/clients/${client.id}/analytics?period=14&timeZone=UTC`).set('Authorization', dietitian.auth);
+    expect(analytics.status).toBe(200);
+    expect(analytics.body.period.days).toBe(14);
+    expect(analytics.body.targets).toMatchObject({ steps: 10000, stepsAuto: false, waterMl: 2100 });
+    expect(analytics.body.days.find((d: { date: string }) => d.date === yesterday).steps).toBe(9100);
+    expect(analytics.body.alerts.map((a: { ruleId: string }) => a.ruleId)).toEqual(expect.arrayContaining(['never_started', 'no_weighin']));
+    expect(analytics.body.score.score).toEqual(expect.any(Number));
+
+    const rules = await request(app).get('/practice/alert-rules').set('Authorization', dietitian.auth);
+    expect(rules.body.items).toHaveLength(11);
+    const updated = await request(app)
+      .put('/practice/alert-rules')
+      .set('Authorization', dietitian.auth)
+      .send({ rules: [{ ruleId: 'no_weighin', enabled: false, threshold: null }] });
+    expect(updated.body.items.find((r: { id: string }) => r.id === 'no_weighin').enabled).toBe(false);
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const roster = await request(app).get('/practice/clients?timeZone=UTC').set('Authorization', dietitian.auth);
+    expect(roster.body.items[0].insight).toMatchObject({ score: expect.any(Number) });
+    expect(roster.body.items[0].insight.alerts.map((a: { ruleId: string }) => a.ruleId)).not.toContain('no_weighin');
+  }, 60_000);
 });

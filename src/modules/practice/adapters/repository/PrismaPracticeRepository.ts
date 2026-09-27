@@ -14,6 +14,7 @@ import {
   type PersonSummary,
 } from '../../domain/practiceTypes';
 import type {
+  ClientInsight,
   CreateLinkInput,
   MembershipWithOrganization,
   PracticeRepositoryPort,
@@ -271,6 +272,68 @@ export class PrismaPracticeRepository implements PracticeRepositoryPort {
 
   async reassignLink(linkId: string, dietitianId: string): Promise<ClientLink> {
     return toLink(await this.db.dietitianClientLink.update({ where: { id: linkId }, data: { dietitianId } }));
+  }
+
+  async listAllActiveLinks(): Promise<ClientLink[]> {
+    const rows = await this.db.dietitianClientLink.findMany({ where: { status: 'active' } });
+    return rows.map(toLink);
+  }
+
+  // ─── alerts & insights ─────────────────────────────────────────────────
+
+  async listAlertRuleSettings(dietitianId: string): Promise<Array<{ ruleId: string; enabled: boolean; threshold: number | null }>> {
+    return this.db.alertRuleSetting.findMany({
+      where: { dietitianId },
+      select: { ruleId: true, enabled: true, threshold: true },
+    });
+  }
+
+  async saveAlertRuleSettings(
+    dietitianId: string,
+    settings: Array<{ ruleId: string; enabled: boolean; threshold: number | null }>,
+  ): Promise<void> {
+    await this.db.$transaction(
+      settings.map((s) =>
+        this.db.alertRuleSetting.upsert({
+          where: { dietitianId_ruleId: { dietitianId, ruleId: s.ruleId } },
+          create: { dietitianId, ruleId: s.ruleId, enabled: s.enabled, threshold: s.threshold },
+          update: { enabled: s.enabled, threshold: s.threshold },
+        }),
+      ),
+    );
+  }
+
+  async saveInsight(insight: ClientInsight): Promise<void> {
+    const data = {
+      score: insight.score,
+      scoreParts: insight.scoreParts as unknown as Prisma.InputJsonValue,
+      alerts: insight.alerts as unknown as Prisma.InputJsonValue,
+      computedAt: insight.computedAt,
+    };
+    await this.db.clientInsight.upsert({
+      where: { linkId: insight.linkId },
+      create: { linkId: insight.linkId, ...data },
+      update: data,
+    });
+  }
+
+  async getInsights(linkIds: string[]): Promise<Map<string, ClientInsight>> {
+    if (linkIds.length === 0) {
+      return new Map();
+    }
+    const rows = await this.db.clientInsight.findMany({ where: { linkId: { in: linkIds } } });
+    return new Map(
+      rows.map((row) => [
+        row.linkId,
+        {
+          linkId: row.linkId,
+          score: row.score,
+          scoreParts: row.scoreParts as unknown as ClientInsight['scoreParts'],
+          alerts: row.alerts as unknown as ClientInsight['alerts'],
+          computedAt: row.computedAt,
+        },
+      ]),
+    );
   }
 
   // ─── notes ─────────────────────────────────────────────────────────────

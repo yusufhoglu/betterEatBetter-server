@@ -4,6 +4,8 @@ import { resolveUserToday } from '../../../shared/domain/resolveUserToday';
 import { ValidationError } from '../../../shared/errors/ValidationError';
 import { CONSENT_SCOPES } from '../domain/practiceTypes';
 import type { ActivateDietitian } from '../use-cases/ActivateDietitian';
+import type { AlertRuleSettings } from '../use-cases/AlertRuleSettings';
+import type { GetClientAnalytics } from '../use-cases/GetClientAnalytics';
 import type { ClientNotes } from '../use-cases/ClientNotes';
 import type { CreateInviteCode } from '../use-cases/CreateInviteCode';
 import type { EndLink } from '../use-cases/EndLink';
@@ -60,6 +62,19 @@ const planSchema = z.object({
   proteinG: z.number().nonnegative(),
   carbsG: z.number().nonnegative(),
   fatG: z.number().nonnegative(),
+  /** Omitted → unchanged; null → back to automatic. */
+  waterTargetMl: z.number().int().nullable().optional(),
+  stepTarget: z.number().int().nullable().optional(),
+});
+const analyticsQuerySchema = z.object({
+  period: z.enum(['14', '30', 'all']).default('14'),
+  timeZone: z.string().min(1).optional(),
+});
+const alertRulesSchema = z.object({
+  rules: z
+    .array(z.object({ ruleId: z.string().min(1).max(40), enabled: z.boolean(), threshold: z.number().nullable() }))
+    .min(1)
+    .max(50),
 });
 const noteSchema = z.object({ body: z.string().trim().min(1).max(5000) });
 const assigneeSchema = z.object({ dietitianId: z.string().uuid() });
@@ -118,6 +133,8 @@ export interface PracticeUseCases {
   clientNotes: ClientNotes;
   listOrganizationMembers: ListOrganizationMembers;
   reassignClient: ReassignClient;
+  getClientAnalytics: GetClientAnalytics;
+  alertRuleSettings: AlertRuleSettings;
 }
 
 export class PracticeController {
@@ -234,6 +251,37 @@ export class PracticeController {
     const { clientId } = parseOrThrow(clientParamsSchema, req.params);
     const { from, to } = resolveRange(parseOrThrow(rangeQuerySchema, req.query));
     res.status(200).json({ items: await this.useCases.readClientData.getWater(req.auth!.userId, clientId, from, to) });
+  });
+
+  handleGetClientSteps = handle(async (req, res) => {
+    const { clientId } = parseOrThrow(clientParamsSchema, req.params);
+    const { from, to } = resolveRange(parseOrThrow(rangeQuerySchema, req.query));
+    res.status(200).json({ items: await this.useCases.readClientData.getSteps(req.auth!.userId, clientId, from, to) });
+  });
+
+  handleGetClientAnalytics = handle(async (req, res) => {
+    const { clientId } = parseOrThrow(clientParamsSchema, req.params);
+    const query = parseOrThrow(analyticsQuerySchema, req.query);
+    const period = query.period === 'all' ? 'all' : (Number(query.period) as 14 | 30);
+    res
+      .status(200)
+      .json(
+        await this.useCases.getClientAnalytics.execute(
+          req.auth!.userId,
+          clientId,
+          period,
+          resolveUserToday({ timeZone: query.timeZone }),
+        ),
+      );
+  });
+
+  handleListAlertRules = handle(async (req, res) => {
+    res.status(200).json({ items: await this.useCases.alertRuleSettings.list(req.auth!.userId) });
+  });
+
+  handleUpdateAlertRules = handle(async (req, res) => {
+    const { rules } = parseOrThrow(alertRulesSchema, req.body);
+    res.status(200).json({ items: await this.useCases.alertRuleSettings.update(req.auth!.userId, rules) });
   });
 
   handleSetClientPlan = handle(async (req, res) => {

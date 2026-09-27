@@ -26,4 +26,8 @@ export class MessagingLinkThreadAdapter implements LinkThreadPort {
   postSystemMessage(linkId: string, body: string): Promise<void> {
     return this.threadAdmin.postSystemMessage(KIND, linkId, body);
   }
+
+  unansweredSince(linkId: string, clientId: string): Promise<Date | null> {
+    return this.threadAdmin.unansweredSince(KIND, linkId, clientId);
+  }
 }

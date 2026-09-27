@@ -56,3 +56,17 @@ baglantisi, onay kapsamlari, erisim logu, danisan verisi okuma, notlar). Referan
   fail-open. Link basladiginda/bittiginde MUTLAKA `managedClientCache.invalidate`.
 - Rol claim'i JWT'ye EKLENMEDI: diyetisyenlik her istekte uyelikten okunur (aktivasyondan sonra
   token yenileme gerekmez).
+
+## Analitik, skor ve uyarilar
+
+- Hesaplar SAF fonksiyonlardir: `domain/analytics.ts` (skor, ozetler, kilo ilerlemesi) ve
+  `domain/alertRules.ts` (11 kural). I/O `use-cases/ClientInsightsService.ts`'te; veri SADECE
+  diger modullerin public use-case'lerinden (`GetMealItemsForRange`, `GetWaterForRange`,
+  `GetStepsForRange`, `GetDailyTargets`, `GetUserProfile`, `ListBodyMeasurements`).
+- `DataSelection` = danisanin O ANKI consent'i; paylasilmayan kaynak HIC okunmaz (testli).
+- Skor agirliklari urun karari (30/30/20/10/10) — degistirmeden once sorun. Bugun skora girmez.
+- Kurallar kuralla uretilir (LLM YOK — urun karari). Yeni kural = `ALERT_RULES`'a bir kayit +
+  test; `id` kalicidir (diyetisyen ayarlari ve cache bu id'ye bagli).
+- `client_insights` roster cache'idir: gece job'i (`jobs/clientInsightsJob.ts`, 02:30 TR) +
+  detay acilisi + kural ayari degisince yenilenir. Detay sayfasi her zaman canli hesaplar.
+- Su/adim hedefi `onboarding-plan`'da: `Plan.waterTargetMl`/`stepTarget` null = otomatik.

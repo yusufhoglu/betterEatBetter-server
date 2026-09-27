@@ -12,4 +12,6 @@ export interface LinkThreadPort {
   /** Reassignment: the new dietitian replaces the old one in the thread. */
   replaceParticipant(linkId: string, oldUserId: string, newUserId: string, systemMessage: string): Promise<void>;
   postSystemMessage(linkId: string, body: string): Promise<void>;
+  /** When the oldest of the client's messages still waiting for a staff reply was sent; null if none. */
+  unansweredSince(linkId: string, clientId: string): Promise<Date | null>;
 }

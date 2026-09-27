@@ -10,6 +10,16 @@ import type {
   OrganizationRole,
   PersonSummary,
 } from '../domain/practiceTypes';
+import type { Alert } from '../domain/alertRules';
+import type { ScorePart } from '../domain/analytics';
+
+export interface ClientInsight {
+  linkId: string;
+  score: number | null;
+  scoreParts: ScorePart[];
+  alerts: Alert[];
+  computedAt: Date;
+}
 
 export interface MembershipWithOrganization extends OrganizationMembership {
   organization: Organization;
@@ -81,6 +91,18 @@ export interface PracticeRepositoryPort {
   createNote(linkId: string, authorId: string, body: string): Promise<DietitianNote>;
   updateNote(noteId: string, body: string): Promise<DietitianNote>;
   deleteNote(noteId: string): Promise<void>;
+
+  /** Every active link, for the nightly insights job. */
+  listAllActiveLinks(): Promise<ClientLink[]>;
+
+  // alerts & insights
+  listAlertRuleSettings(dietitianId: string): Promise<Array<{ ruleId: string; enabled: boolean; threshold: number | null }>>;
+  saveAlertRuleSettings(
+    dietitianId: string,
+    settings: Array<{ ruleId: string; enabled: boolean; threshold: number | null }>,
+  ): Promise<void>;
+  saveInsight(insight: ClientInsight): Promise<void>;
+  getInsights(linkIds: string[]): Promise<Map<string, ClientInsight>>;
 
   // audit
   appendAccessLog(entry: Omit<DataAccessLogEntry, 'id' | 'createdAt'>): Promise<void>;

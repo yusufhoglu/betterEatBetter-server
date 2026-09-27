@@ -55,6 +55,24 @@ export class ThreadAdmin {
     await this.postSystemMessage(kind, refId, systemMessage);
   }
 
+  /**
+   * When `userId` started waiting: the oldest of their messages sent after
+   * the other side last wrote. null = nothing waiting for a reply.
+   */
+  async unansweredSince(kind: ThreadKind, refId: string, userId: string): Promise<Date | null> {
+    const thread = await this.repository.findThreadByRef(kind, refId);
+    if (!thread) {
+      return null;
+    }
+    let since: Date | null = null;
+    for (const message of await this.repository.listMessages(thread.id, { limit: 50 })) {
+      if (message.type === 'system') continue;
+      if (message.senderId !== userId) break;
+      since = message.createdAt;
+    }
+    return since;
+  }
+
   async postSystemMessage(kind: ThreadKind, refId: string, body: string): Promise<void> {
     const thread = await this.repository.findThreadByRef(kind, refId);
     if (!thread) {

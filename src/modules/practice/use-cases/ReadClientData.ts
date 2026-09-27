@@ -40,6 +40,11 @@ export class ReadClientData {
     return this.clientData.listBodyMeasurements(clientId, input);
   }
 
+  async getSteps(actorId: string, clientId: string, from: Date, to: Date): Promise<Array<{ date: string; steps: number }>> {
+    await this.policy.assertCanRead(actorId, clientId, 'steps', 'GET /practice/clients/:clientId/steps');
+    return this.clientData.getSteps(clientId, from, to);
+  }
+
   async getWater(actorId: string, clientId: string, from: Date, to: Date): Promise<Array<{ date: string; amountMl: number }>> {
     await this.policy.assertCanRead(actorId, clientId, 'water', 'GET /practice/clients/:clientId/water');
     return Promise.all(dateRange(from, to).map((date) => this.clientData.getWaterForDay(clientId, date)));

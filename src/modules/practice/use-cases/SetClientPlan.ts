@@ -9,6 +9,9 @@ export interface SetClientPlanInput {
   proteinG: number;
   carbsG: number;
   fatG: number;
+  /** Omitted → unchanged; null → back to automatic. */
+  waterTargetMl?: number | null;
+  stepTarget?: number | null;
 }
 
 /** The assigned dietitian takes over the client's daily targets (the client can no longer edit macros). */
@@ -26,6 +29,8 @@ export class SetClientPlan {
       proteinG: input.proteinG,
       carbsG: input.carbsG,
       fatG: input.fatG,
+      waterTargetMl: input.waterTargetMl,
+      stepTarget: input.stepTarget,
     });
     await this.threads.postSystemMessage(
       link.id,

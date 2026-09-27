@@ -13,6 +13,7 @@ import type {
   PersonSummary,
 } from '../../domain/practiceTypes';
 import type {
+  ClientInsight,
   CreateLinkInput,
   MembershipWithOrganization,
   PracticeRepositoryPort,
@@ -220,6 +221,32 @@ export class InMemoryPracticeRepository implements PracticeRepositoryPort {
     const link = this.mustFindLink(linkId);
     link.dietitianId = dietitianId;
     return { ...link };
+  }
+
+  async listAllActiveLinks(): Promise<ClientLink[]> {
+    return this.links.filter((l) => l.status === 'active').map((l) => ({ ...l }));
+  }
+
+  // ─── alerts & insights ─────────────────────────────────────────────────
+  readonly ruleSettings = new Map<string, Array<{ ruleId: string; enabled: boolean; threshold: number | null }>>();
+  readonly insights = new Map<string, ClientInsight>();
+
+  async listAlertRuleSettings(dietitianId: string) {
+    return this.ruleSettings.get(dietitianId) ?? [];
+  }
+
+  async saveAlertRuleSettings(dietitianId: string, settings: Array<{ ruleId: string; enabled: boolean; threshold: number | null }>) {
+    const current = new Map((this.ruleSettings.get(dietitianId) ?? []).map((s) => [s.ruleId, s]));
+    for (const s of settings) current.set(s.ruleId, s);
+    this.ruleSettings.set(dietitianId, [...current.values()]);
+  }
+
+  async saveInsight(insight: ClientInsight): Promise<void> {
+    this.insights.set(insight.linkId, insight);
+  }
+
+  async getInsights(linkIds: string[]): Promise<Map<string, ClientInsight>> {
+    return new Map(linkIds.filter((id) => this.insights.has(id)).map((id) => [id, this.insights.get(id)!]));
   }
 
   // ─── notes ─────────────────────────────────────────────────────────────

@@ -1,9 +1,10 @@
 import type { ClientLink, PersonSummary } from '../domain/practiceTypes';
 import type { ClientActivity, ClientDataPort } from '../ports/ClientDataPort';
-import type { PracticeRepositoryPort } from '../ports/PracticeRepositoryPort';
+import type { ClientInsight, PracticeRepositoryPort } from '../ports/PracticeRepositoryPort';
 import { unknownPerson } from './GetPracticeMe';
 import { requireManager } from './requireMembership';
 import type { ClientAccessPolicy } from './ClientAccessPolicy';
+import type { Alert } from '../domain/alertRules';
 
 export interface ListClientsInput {
   actorId: string;
@@ -23,6 +24,8 @@ export interface ClientListItem {
   startedAt: Date;
   /** Only for the assigned dietitian and only for shared scopes; null otherwise. */
   activity: Partial<Omit<ClientActivity, 'clientId'>> | null;
+  /** Assigned dietitian only: cached 14-day adherence score and triggered alerts (nightly + on open). */
+  insight: { score: number | null; alerts: Alert[]; computedAt: Date } | null;
 }
 
 /**
@@ -62,12 +65,15 @@ export class ListClients {
     }
 
     const assigned = links.filter((link) => link.dietitianId === input.actorId);
-    const activity = assigned.length
-      ? await this.clientData.getActivity(
-          assigned.map((link) => link.clientId),
-          input.today,
-        )
-      : new Map<string, ClientActivity>();
+    const [activity, insights] = assigned.length
+      ? await Promise.all([
+          this.clientData.getActivity(
+            assigned.map((link) => link.clientId),
+            input.today,
+          ),
+          this.repository.getInsights(assigned.map((link) => link.id)),
+        ])
+      : [new Map<string, ClientActivity>(), new Map()];
 
     for (const link of assigned) {
       this.policy.log(input.actorId, link.clientId, 'summary', 'GET /practice/clients');
@@ -81,6 +87,7 @@ export class ListClients {
       consentScopes: link.consentScopes,
       startedAt: link.startedAt,
       activity: link.dietitianId === input.actorId ? filterActivity(link, activity.get(link.clientId)) : null,
+      insight: link.dietitianId === input.actorId ? toInsightView(insights.get(link.id)) : null,
     }));
   }
 }
@@ -103,4 +110,8 @@ export function filterActivity(
 /** Case-insensitive in Turkish and English alike: "IŞIK", "ışık" and "isik" all match. */
 function foldForSearch(value: string): string {
   return value.toLocaleLowerCase('tr').replace(/ı/g, 'i').replace(/\u0307/g, '');
+}
+
+function toInsightView(insight: ClientInsight | undefined): ClientListItem['insight'] {
+  return insight ? { score: insight.score, alerts: insight.alerts, computedAt: insight.computedAt } : null;
 }

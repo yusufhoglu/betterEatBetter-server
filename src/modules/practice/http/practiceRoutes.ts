@@ -3,20 +3,10 @@ import { authMiddleware } from '../../../shared/auth/authMiddleware';
 import { env } from '../../../shared/config/env';
 import { prisma } from '../../../shared/persistence/db';
 import { checkRateLimit } from '../../../shared/rateLimiting/rateLimiter';
-import { PrismaBodyMeasurementRepository } from '../../body-analytics/adapters/repository/PrismaBodyMeasurementRepository';
-import { ListBodyMeasurements } from '../../body-analytics/use-cases/ListBodyMeasurements';
-import { threadAdmin } from '../../messaging/http/messagingWiring';
-import { PrismaMealItemRepository } from '../../nutrition-logging/adapters/repository/PrismaMealItemRepository';
-import { OnboardingPlanTargetsAdapter } from '../../nutrition-logging/adapters/targets/OnboardingPlanTargetsAdapter';
-import { GetDaySummary } from '../../nutrition-logging/use-cases/GetDaySummary';
-import { PrismaPlanRepository } from '../../onboarding-plan/adapters/repository/PrismaPlanRepository';
-import { GetActivePlan } from '../../onboarding-plan/use-cases/GetActivePlan';
-import { ReleaseDietitianPlan, SetDietitianPlanTargets } from '../../onboarding-plan/use-cases/SetDietitianPlanTargets';
-import { PrismaWaterLogRepository } from '../../water-logging/adapters/repository/PrismaWaterLogRepository';
-import { GetWaterForDay } from '../../water-logging/use-cases/GetWaterForDay';
-import { ClientDataAdapter } from '../adapters/client-data/ClientDataAdapter';
-import { MessagingLinkThreadAdapter } from '../adapters/threads/MessagingLinkThreadAdapter';
 import { ActivateDietitian } from '../use-cases/ActivateDietitian';
+import { AlertRuleSettings } from '../use-cases/AlertRuleSettings';
+import { GetClientAnalytics } from '../use-cases/GetClientAnalytics';
+// from '../use-cases/ActivateDietitian';
 import { ClientAccessPolicy } from '../use-cases/ClientAccessPolicy';
 import { ClientNotes } from '../use-cases/ClientNotes';
 import { CreateInviteCode } from '../use-cases/CreateInviteCode';
@@ -36,7 +26,14 @@ import { SetClientPlan } from '../use-cases/SetClientPlan';
 import { UpdateConsent } from '../use-cases/UpdateConsent';
 import { UpdateDietitianProfile } from '../use-cases/UpdateDietitianProfile';
 import { PracticeController } from './PracticeController';
-import { managedClientCache, practiceRepository, resolveInviteCodeSecret } from './practiceWiring';
+import {
+  buildClientDataAdapter,
+  buildInsightsService,
+  linkThreads,
+  managedClientCache,
+  practiceRepository,
+  resolveInviteCodeSecret,
+} from './practiceWiring';
 
 // Invite codes carry a 32-bit MAC — safe only because guessing is throttled hard.
 const CODE_ATTEMPT_LIMIT = 10;
@@ -48,19 +45,10 @@ export function practiceRoutes(): Router {
 
   const repository = practiceRepository;
   const secret = resolveInviteCodeSecret();
-  const threads = new MessagingLinkThreadAdapter(threadAdmin);
+  const threads = linkThreads;
   const policy = new ClientAccessPolicy(repository);
-
-  const planRepository = new PrismaPlanRepository(prisma);
-  const clientData = new ClientDataAdapter(
-    prisma,
-    new GetDaySummary(new PrismaMealItemRepository(prisma), new OnboardingPlanTargetsAdapter()),
-    new ListBodyMeasurements(new PrismaBodyMeasurementRepository(prisma)),
-    new GetWaterForDay(new PrismaWaterLogRepository(prisma)),
-    new GetActivePlan(planRepository),
-    new SetDietitianPlanTargets(planRepository),
-    new ReleaseDietitianPlan(planRepository),
-  );
+  const clientData = buildClientDataAdapter();
+  const insights = buildInsightsService(clientData);
 
   const controller = new PracticeController(
     {
@@ -82,6 +70,8 @@ export function practiceRoutes(): Router {
       clientNotes: new ClientNotes(repository, policy),
       listOrganizationMembers: new ListOrganizationMembers(repository),
       reassignClient: new ReassignClient(repository, threads, policy),
+      getClientAnalytics: new GetClientAnalytics(policy, insights),
+      alertRuleSettings: new AlertRuleSettings(repository, insights),
     },
     (key) => checkRateLimit(key, CODE_ATTEMPT_LIMIT, CODE_ATTEMPT_WINDOW_SECONDS),
   );
@@ -96,6 +86,8 @@ export function practiceRoutes(): Router {
   router.post('/invites', controller.handleCreateInvite);
   router.post('/invites/rotate', controller.handleRotateInviteKey);
   router.get('/organizations/:organizationId/members', controller.handleListMembers);
+  router.get('/alert-rules', controller.handleListAlertRules);
+  router.put('/alert-rules', controller.handleUpdateAlertRules);
 
   // client side
   router.post('/invites/preview', controller.handlePreviewInvite);
@@ -111,6 +103,8 @@ export function practiceRoutes(): Router {
   router.get('/clients/:clientId/meals', controller.handleGetClientMeals);
   router.get('/clients/:clientId/body-measurements', controller.handleGetClientMeasurements);
   router.get('/clients/:clientId/water', controller.handleGetClientWater);
+  router.get('/clients/:clientId/steps', controller.handleGetClientSteps);
+  router.get('/clients/:clientId/analytics', controller.handleGetClientAnalytics);
   router.put('/clients/:clientId/plan', controller.handleSetClientPlan);
   router.post('/clients/:clientId/end', controller.handleEndClientLink);
   router.patch('/clients/:clientId/assignee', controller.handleReassign);

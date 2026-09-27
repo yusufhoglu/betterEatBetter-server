@@ -33,6 +33,12 @@ export class FakeLinkThreads implements LinkThreadPort {
     }
   }
 
+  readonly waiting = new Map<string, Date>();
+
+  async unansweredSince(linkId: string): Promise<Date | null> {
+    return this.waiting.get(linkId) ?? null;
+  }
+
   async postSystemMessage(linkId: string, body: string): Promise<void> {
     this.threads.get(linkId)?.messages.push(body);
   }

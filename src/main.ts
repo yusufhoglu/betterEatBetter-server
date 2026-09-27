@@ -4,6 +4,7 @@ import './modules/food-recognition/jobs/standardizeAndCopyJob';
 import './modules/subscription/jobs/processPlayRtdnJob';
 import './modules/messaging/jobs/unreadMessagePushJob';
 import { registerNotificationSchedules } from './modules/notifications/jobs/notificationScheduler';
+import { registerPracticeSchedules } from './modules/practice/jobs/clientInsightsJob';
 import express from 'express';
 import { PrismaMealLogReadModelRepository } from './modules/body-analytics/adapters/repository/PrismaMealLogReadModelRepository';
 import { ConsumeOutboxEventsJob } from './modules/body-analytics/jobs/consumeOutboxEventsJob';
@@ -109,6 +110,9 @@ app.listen(port, () => {
   logger.info({ port, env: env.NODE_ENV }, 'server started');
   void registerNotificationSchedules().catch((error) => {
     logger.error({ err: error }, 'failed to register scheduled notifications');
+  });
+  void registerPracticeSchedules().catch((error) => {
+    logger.error({ err: error }, 'failed to register practice schedules');
   });
 });
 
