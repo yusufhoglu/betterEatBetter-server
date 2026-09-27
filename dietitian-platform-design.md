@@ -16,6 +16,8 @@ ve onlarla mesajlaşması.
 | AI koç | Aktif diyetisyen bağlantısı olan danışanlar **AI koç (`dietician` modülü) kullanamaz.** Chatbot, fotoğraftan yemek tanıma (VLM) vb. diğer LLM özellikleri açık kalır. |
 | Web paneli | **React** (Vite SPA + TanStack Query), ayrı repo/klasör. |
 | Klinikler | **Hedefte, ilk günden modellenir** (`Organization`). Bağımsız diyetisyen = tek üyeli organizasyon. |
+| Veri görünürlüğü | Diyetisyen danışan verisini görür; **danışan her kapsamı (öğün, fotoğraf, ölçüm, su) istediği an açıp kapatır.** Klinik owner/admin danışan listesini görür ve atama yapar, ama veriyi sadece atanmış diyetisyen görür. |
+| Davet kodu | **Stateless, imzalı kod.** Diyetisyen (üyelik) ve geçerlilik süresi kodun içinde gömülü, HMAC ile imzalı. DB'de davet tablosu yok. Diyetisyen anahtarını yenileyerek eski kodları iptal edebilir. |
 | Mesaj saklama | Mesajlar **saklanır.** İlişki bitince thread salt-okunur olur, silinmez. |
 | Diyetisyen mobil | Mevcut Flutter uygulamasına **rol bazlı "diyetisyen modu"** (`features/practice`). |
 
