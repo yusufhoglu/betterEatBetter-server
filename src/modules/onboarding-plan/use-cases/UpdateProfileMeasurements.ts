@@ -52,6 +52,12 @@ export class UpdateProfileMeasurements {
       hipCm: updatedProfile.hipCm,
     });
 
+    // Dietitian-owned targets are never recomputed from body measurements.
+    const existingPlan = await this.planRepository.findByUserId(userId);
+    if (existingPlan?.source === 'dietitian') {
+      return updatedProfile;
+    }
+
     await this.planRepository.update({
       userId,
       dailyCalories: recalculatedPlan.dailyCalories,

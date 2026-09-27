@@ -1,9 +1,14 @@
+/** 'dietitian' → targets are owned by the client's assigned dietitian (practice module). */
+export type PlanSource = 'self' | 'dietitian';
+
 export interface Plan {
   userId: string;
   dailyCalories: number;
   proteinG: number;
   carbsG: number;
   fatG: number;
+  source?: PlanSource;
+  setByDietitianId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -22,6 +27,9 @@ export interface UpdatePlanInput {
   proteinG: number;
   carbsG: number;
   fatG: number;
+  /** Omitted → ownership unchanged. */
+  source?: PlanSource;
+  setByDietitianId?: string | null;
 }
 
 /**

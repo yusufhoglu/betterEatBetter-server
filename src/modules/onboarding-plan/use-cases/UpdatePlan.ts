@@ -1,4 +1,5 @@
 import { computePlan, type Goal } from '../../../shared/domain/PlanCalculationService';
+import { ForbiddenError } from '../../../shared/errors/ForbiddenError';
 import { NotFoundError } from '../../../shared/errors/NotFoundError';
 import { BuildPlanResponse, type EnrichedPlan } from '../domain/BuildPlanResponse';
 import { ValidateMacroOverride } from '../domain/ValidateMacroOverride';
@@ -37,6 +38,18 @@ export class UpdatePlan {
     });
 
     const existingPlan = await this.planRepository.findByUserId(userId);
+    const dietitianOwned = existingPlan?.source === 'dietitian';
+    const macroOverride =
+      changes.dailyCalories !== undefined ||
+      changes.proteinG !== undefined ||
+      changes.carbsG !== undefined ||
+      changes.fatG !== undefined;
+    // A dietitian-owned plan's targets belong to the dietitian: the client may
+    // still update their profile (weight, goal...), but never the macros, and a
+    // goal change must not silently recompute them away.
+    if (dietitianOwned && macroOverride) {
+      throw new ForbiddenError('PLAN_MANAGED_BY_DIETITIAN', 'Plan targets are managed by your dietitian');
+    }
 
     const updatedProfile = await this.userProfileRepository.update({
       userId,
@@ -73,7 +86,8 @@ export class UpdatePlan {
       changes.goal !== undefined ||
       changes.weeklyPaceKg !== undefined;
 
-    const base = goalParamsChanged || !existingPlan ? recalculatedPlan : existingPlan;
+    const keepStoredMacros = dietitianOwned || !goalParamsChanged;
+    const base = keepStoredMacros && existingPlan ? existingPlan : recalculatedPlan;
 
     const plan = await this.planRepository.update({
       userId,
