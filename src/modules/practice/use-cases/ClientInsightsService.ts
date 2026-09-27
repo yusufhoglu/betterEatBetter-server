@@ -135,7 +135,9 @@ export class ClientInsightsService {
       activity: shared.water || shared.steps ? summarizeActivity(scoredDays, targets) : null,
       days: periodDaysRecords,
       topFoods: topFoods(records.foods.filter((f) => f.date >= periodFrom)),
-      weight: shared.body ? { ...computeWeightProgress(weights, goal?.targetWeightKg ?? null, todayDay), points: weights } : null,
+      weight: shared.body
+        ? { ...computeWeightProgress(sinceBaseline(weights, startDay), goal?.targetWeightKg ?? null, todayDay), points: sinceBaseline(weights, startDay) }
+        : null,
       measurements: shared.body ? measurementTable(measurements, startDay) : [],
       alerts,
       computedAt: this.now().toISOString(),
@@ -155,6 +157,19 @@ export class ClientInsightsService {
     await this.repository.saveInsight(insight);
     return insight;
   }
+}
+
+/**
+ * Progress is measured from the relationship's start: the last reading at or
+ * before the link began (else the first one after) — the same baseline the
+ * measurement table uses.
+ */
+function sinceBaseline(weights: WeightPoint[], linkStartDay: string): WeightPoint[] {
+  let baseline = 0;
+  weights.forEach((w, i) => {
+    if (w.date <= linkStartDay) baseline = i;
+  });
+  return weights.slice(baseline);
 }
 
 function measurementTable(

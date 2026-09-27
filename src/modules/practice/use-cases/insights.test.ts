@@ -44,8 +44,23 @@ describe('client analytics', () => {
     expect(analytics.days).toHaveLength(14);
     expect(analytics.score.score).toBe(100);
     expect(analytics.alerts).toEqual([]);
-    expect(analytics.weight).toMatchObject({ latestKg: 71, targetKg: 70 });
+    expect(analytics.weight).toMatchObject({ startKg: 72, latestKg: 71, targetKg: 70 });
     expect(analytics.measurements[0]).toMatchObject({ metric: 'weight', start: 72, latest: 71, change: -1 });
+  });
+
+  it('measures weight progress from the reading at the start of the relationship', async () => {
+    const { policy, insights, clientData } = await setup();
+    clientData.weights = [
+      { id: 'w0', metric: 'weight', value: 75, unit: 'kg', date: new Date('2026-06-01') },
+      { id: 'w1', metric: 'weight', value: 73, unit: 'kg', date: new Date('2026-07-20') },
+      { id: 'w2', metric: 'weight', value: 71, unit: 'kg', date: new Date('2026-09-20') },
+    ];
+
+    const analytics = await new GetClientAnalytics(policy, insights).execute('dyt', 'client', 14, today);
+
+    expect(analytics.weight).toMatchObject({ startKg: 73, changeKg: -2 });
+    expect(analytics.weight!.points).toHaveLength(2);
+    expect(analytics.measurements[0]).toMatchObject({ start: 73 });
   });
 
   it('never reads data the client does not share', async () => {
