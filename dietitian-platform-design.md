@@ -261,8 +261,18 @@ GET    /practice/me/access-log
 5. **Web paneli (React).**
 6. Sonra: ödeme, randevu, program şablonları, AI asistan (diyetisyene yardımcı).
 
-## 12. Açık Sorular
+## 12. Uygulama Notları (2026-09-27)
 
-- Web paneli ayrı GitHub reposu mu, yoksa monorepo mu?
-- Klinik admin'i danışan verisini görebilmeli mi, yoksa sadece listeyi/atamayı mı? (Taslak: görebilir, loglanır.)
-- Davet kodu geçerlilik süresi (taslak: 7 gün, tek kullanımlık).
+Kodlama sırasında tasarımdan bilinçli sapmalar:
+- **Roles claim eklenmedi.** Diyetisyenlik her istekte aktif üyelikten okunur; aktivasyon sonrası token yenilemek gerekmez.
+- **Klinik owner/admin danışan verisini görmez** (kullanıcı kararı): liste, atama, not ve bitirme yapabilir; veri sadece atanmış diyetisyende.
+- **`ClientInvite` tablosu yok** — davet kodu stateless (bkz. `practice-rule.md`).
+- **`ClientDailySummary` projeksiyonu ertelendi.** Dashboard aktivite özeti şimdilik iki read-only agregat sorgusuyla (`ClientDataAdapter.getActivity`).
+- Mesajlaşma okundu bilgisi `lastReadAt` (mesaj id'si değil); ekler R2'de `users/<id>/chat/…`.
+- API kontratı: `src/modules/practice/practice-api-contract.md`.
+
+## 13. Açık Sorular
+
+- ~~Web paneli ayrı repo mu?~~ → Ayrı private repo `dietician-web-panel`.
+- ~~Klinik admin veriyi görür mü?~~ → Görmez.
+- ~~Davet kodu süresi?~~ → Varsayılan 7 gün (`INVITE_CODE_DEFAULT_VALIDITY_DAYS`), çok kullanımlık, anahtar yenilenerek iptal.
