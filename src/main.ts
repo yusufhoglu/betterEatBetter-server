@@ -2,6 +2,7 @@
 import './modules/food-recognition/jobs/recognizePhotoJob';
 import './modules/food-recognition/jobs/standardizeAndCopyJob';
 import './modules/subscription/jobs/processPlayRtdnJob';
+import './modules/messaging/jobs/unreadMessagePushJob';
 import { registerNotificationSchedules } from './modules/notifications/jobs/notificationScheduler';
 import express from 'express';
 import { PrismaMealLogReadModelRepository } from './modules/body-analytics/adapters/repository/PrismaMealLogReadModelRepository';

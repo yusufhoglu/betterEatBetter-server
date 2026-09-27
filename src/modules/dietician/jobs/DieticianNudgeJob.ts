@@ -8,7 +8,8 @@
 //   - Eligible users = has an active plan AND has logged fewer meals than
 //     expected for their local time-of-day (compare NotificationPreference
 //     breakfast/lunch/dinner times against nutrition-logging's logged meal
-//     types for today).
+//     types for today). Users with an active human dietitian are skipped
+//     (ManagedClientPort — they have no AI coach at all).
 //   - Respect NotificationPreference.masterEnabled + per-slot flags + timezone.
 //   - Dedup: one nudge per user per meal slot per local day
 //     (Redis key `dietician:nudge:<userId>:<yyyy-mm-dd>:<slot>`).

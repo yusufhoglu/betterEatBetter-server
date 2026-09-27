@@ -43,7 +43,10 @@ import { DieticianMealDataTool } from '../use-cases/tools/DieticianMealDataTool'
 import { ProposeMealLogTool } from '../use-cases/tools/ProposeMealLogTool';
 import { ProvideRecipeTool } from '../use-cases/tools/ProvideRecipeTool';
 import { RateMealTool } from '../use-cases/tools/RateMealTool';
+import { isManagedClient } from '../../practice/http/practiceWiring';
+import { PracticeManagedClientAdapter } from '../adapters/practice/PracticeManagedClientAdapter';
 import { DieticianController } from './DieticianController';
+import { managedClientGuard } from './managedClientGuard';
 
 export function dieticianRoutes(): Router {
   const router = Router();
@@ -125,17 +128,21 @@ export function dieticianRoutes(): Router {
     ),
   );
 
+  // Every /dietician route: clients of a human dietitian are locked out (403).
+  const managedGuard = managedClientGuard(new PracticeManagedClientAdapter(isManagedClient));
+
   router.post(
     '/:conversationId/messages',
     authMiddleware,
+    managedGuard,
     premiumContext,
     dieticianRateLimiter,
     controller.handleSendMessage,
   );
   // `/conversations` must precede `/:conversationId` — Express matches in order.
-  router.get('/conversations', authMiddleware, controller.handleListConversations);
-  router.get('/:conversationId', authMiddleware, controller.handleGetConversation);
-  router.post('/:conversationId/proposals/confirm', authMiddleware, controller.handleConfirmMealProposal);
+  router.get('/conversations', authMiddleware, managedGuard, controller.handleListConversations);
+  router.get('/:conversationId', authMiddleware, managedGuard, controller.handleGetConversation);
+  router.post('/:conversationId/proposals/confirm', authMiddleware, managedGuard, controller.handleConfirmMealProposal);
 
   return router;
 }
