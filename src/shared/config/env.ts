@@ -22,6 +22,12 @@ const envSchema = z.object({
   JWT_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
 
+  // practice module — HMAC key for stateless client invite codes. Falls back
+  // to a key derived from JWT_SECRET; changing it revokes every issued code.
+  INVITE_CODE_SECRET: z.string().min(32).optional(),
+  // practice module — default/maximum validity of a client invite code.
+  INVITE_CODE_DEFAULT_VALIDITY_DAYS: z.coerce.number().int().min(1).max(365).default(7),
+
   // identity module — Google Sign-In. Comma-separated list of accepted OAuth
   // client IDs (one per platform: iOS, Android, Web), checked as the audience
   // when verifying a Google ID token.

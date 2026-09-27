@@ -6,13 +6,13 @@
  */
 
 export interface ClientMealEntry {
+  id: string;
   name: string;
+  portionGrams: number;
   calories: number;
   proteinG: number;
   carbsG: number;
   fatG: number;
-  quantity: number | null;
-  unit: string | null;
   photoUrl: string | null;
 }
 
@@ -26,10 +26,17 @@ export interface ClientMeal {
   photoUrls: string[];
 }
 
+export interface NutrientTotals {
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+}
+
 export interface ClientDay {
   date: string; // YYYY-MM-DD
   meals: ClientMeal[];
-  consumed: { calories: number; proteinG: number; carbsG: number; fatG: number };
+  consumed: NutrientTotals;
   goals: { calories: number | null; proteinG: number | null; carbsG: number | null; fatG: number | null };
 }
 
