@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { IntegrationError } from '../../errors/IntegrationError';
 import { llmTokensTotal } from '../../observability/metrics';
+import { emitLlmUsage } from '../usageSink';
 import { createModuleLogger } from '../../observability/logger';
 import type { LlmClient } from '../LlmClient';
 import type {
@@ -276,6 +277,7 @@ function recordUsage(feature: string | undefined, model: string, usage: LlmUsage
   const featureLabel = feature ?? DEFAULT_FEATURE;
   llmTokensTotal.inc({ provider: 'openai', feature: featureLabel, type: 'input' }, usage.inputTokens);
   llmTokensTotal.inc({ provider: 'openai', feature: featureLabel, type: 'output' }, usage.outputTokens);
+  emitLlmUsage({ provider: 'openai', feature: featureLabel, model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
   logger.info(
     { provider: 'openai', feature: featureLabel, model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
     'llm usage',

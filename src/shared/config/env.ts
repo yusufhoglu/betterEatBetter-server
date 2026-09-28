@@ -38,6 +38,12 @@ const envSchema = z.object({
   // SameSite of the web refresh-token cookie. 'strict' needs panel and API on
   // the same site (e.g. panel.eatbetter.app + api.eatbetter.app).
   WEB_SESSION_COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('strict'),
+  // admin module: comma-separated emails of platform admins (the /admin API
+  // and web panel section). Empty = nobody is an admin.
+  PLATFORM_ADMIN_EMAILS: z
+    .string()
+    .optional()
+    .transform((value) => (value ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean)),
 
   // identity module — Google Sign-In. Comma-separated list of accepted OAuth
   // client IDs (one per platform: iOS, Android, Web), checked as the audience

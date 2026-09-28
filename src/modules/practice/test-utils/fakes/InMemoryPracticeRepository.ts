@@ -223,6 +223,13 @@ export class InMemoryPracticeRepository implements PracticeRepositoryPort {
     return { ...link };
   }
 
+  async moveLink(linkId: string, dietitianId: string, organizationId: string): Promise<ClientLink> {
+    const link = this.mustFindLink(linkId);
+    link.dietitianId = dietitianId;
+    link.organizationId = organizationId;
+    return { ...link };
+  }
+
   async listAllActiveLinks(): Promise<ClientLink[]> {
     return this.links.filter((l) => l.status === 'active').map((l) => ({ ...l }));
   }

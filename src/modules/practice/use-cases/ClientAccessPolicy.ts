@@ -31,8 +31,9 @@ export class ClientAccessPolicy {
       throw notFound();
     }
 
-    const isAssigned = link.dietitianId === actorId;
     const membership = await this.repository.findActiveMembership(link.organizationId, actorId);
+    // A suspended (or removed) dietitian keeps the link on record but loses access.
+    const isAssigned = link.dietitianId === actorId && membership !== null;
     const canManage = membership !== null && canManageOrganization(membership.role);
 
     if (!isAssigned && !canManage) {

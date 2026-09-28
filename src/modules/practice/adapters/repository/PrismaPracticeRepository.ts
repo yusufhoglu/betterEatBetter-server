@@ -274,6 +274,10 @@ export class PrismaPracticeRepository implements PracticeRepositoryPort {
     return toLink(await this.db.dietitianClientLink.update({ where: { id: linkId }, data: { dietitianId } }));
   }
 
+  async moveLink(linkId: string, dietitianId: string, organizationId: string): Promise<ClientLink> {
+    return toLink(await this.db.dietitianClientLink.update({ where: { id: linkId }, data: { dietitianId, organizationId } }));
+  }
+
   async listAllActiveLinks(): Promise<ClientLink[]> {
     const rows = await this.db.dietitianClientLink.findMany({ where: { status: 'active' } });
     return rows.map(toLink);
