@@ -24,6 +24,10 @@ model User {
   username     String?  @unique
   bio          String?
   avatarUrl    String?
+  // Set by a platform admin (admin module). A suspended user cannot start a
+  // session; existing refresh tokens are revoked at suspension time.
+  suspendedAt     DateTime?
+  suspendedReason String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -540,7 +544,7 @@ model OrganizationMember {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   role           String // 'owner' | 'admin' | 'dietitian'
-  status         String       @default("active") // 'active' | 'removed'
+  status         String       @default("active") // 'active' | 'removed' | 'suspended' (by a platform admin)
   // Random per-membership key embedded in stateless client invite codes.
   // Rotating it invalidates every invite code issued before.
   inviteKey      String       @unique
@@ -728,4 +732,38 @@ model ClientInsight {
   computedAt DateTime
 
   @@map("client_insights")
+}
+
+// admin module: one row per LLM call, attributed to the requesting user when
+// the call ran inside a request (userId null for background work). Written in
+// batches by BufferedAiUsageRecorder; no FK so a deleted user's usage stays
+// countable in totals.
+model AiUsageEvent {
+  id           String   @id @default(uuid())
+  userId       String?
+  feature      String
+  provider     String
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("ai_usage_events")
+}
+
+// admin module: every state-changing platform-admin action.
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  adminId    String
+  action     String // e.g. 'user.suspend', 'premium.grant', 'code.create'
+  targetType String // 'user' | 'dietitian' | 'activation_code' | 'client_link'
+  targetId   String
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([targetId])
+  @@map("admin_audit_logs")
 }

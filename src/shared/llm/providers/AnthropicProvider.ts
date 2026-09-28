@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { IntegrationError } from '../../errors/IntegrationError';
 import { llmTokensTotal } from '../../observability/metrics';
+import { emitLlmUsage } from '../usageSink';
 import { createModuleLogger } from '../../observability/logger';
 import type { LlmClient } from '../LlmClient';
 import type {
@@ -99,6 +100,7 @@ function recordUsage(feature: string | undefined, model: string, usage: LlmUsage
   const featureLabel = feature ?? DEFAULT_FEATURE;
   llmTokensTotal.inc({ provider: 'anthropic', feature: featureLabel, type: 'input' }, usage.inputTokens);
   llmTokensTotal.inc({ provider: 'anthropic', feature: featureLabel, type: 'output' }, usage.outputTokens);
+  emitLlmUsage({ provider: 'anthropic', feature: featureLabel, model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
   logger.info(
     { provider: 'anthropic', feature: featureLabel, model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
     'llm usage',

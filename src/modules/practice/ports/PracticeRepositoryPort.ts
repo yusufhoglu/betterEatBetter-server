@@ -84,6 +84,8 @@ export interface PracticeRepositoryPort {
   updateConsent(linkId: string, scopes: ConsentScope[], now: Date): Promise<ClientLink>;
   endLink(linkId: string, endedBy: string, now: Date): Promise<ClientLink>;
   reassignLink(linkId: string, dietitianId: string): Promise<ClientLink>;
+  /** Platform-admin move: the link follows the new dietitian into their organization. */
+  moveLink(linkId: string, dietitianId: string, organizationId: string): Promise<ClientLink>;
 
   // notes (dietitian-private)
   listNotes(linkId: string): Promise<DietitianNote[]>;

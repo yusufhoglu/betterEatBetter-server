@@ -18,6 +18,7 @@ import { socialRoutes } from '../modules/social/http/socialRoutes';
 import { activityRoutes } from '../modules/activity/http/activityRoutes';
 import { practiceRoutes } from '../modules/practice/http/practiceRoutes';
 import { messagingRoutes, realtimeRoutes } from '../modules/messaging/http/messagingRoutes';
+import { adminRoutes } from '../modules/admin/http/adminRoutes';
 
 export function createRouter(): Router {
   const router = Router();
@@ -42,6 +43,7 @@ export function createRouter(): Router {
   router.use('/practice', practiceRoutes());
   router.use('/threads', messagingRoutes());
   router.use('/realtime', realtimeRoutes());
+  router.use('/admin', adminRoutes());
 
   return router;
 }

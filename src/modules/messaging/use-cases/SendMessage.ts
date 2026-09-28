@@ -71,21 +71,30 @@ export class SendMessage {
   }
 
   private async fanOut(threadId: string, senderId: string, messageId: string, view: MessageView): Promise<void> {
+    let participants: Array<{ userId: string }>;
     try {
-      const participants = await this.repository.listParticipants(threadId);
-      await this.realtime.publish(
-        participants.map((p) => p.userId),
-        { type: 'message.created', threadId, message: view },
-      );
-      await Promise.all(
-        participants
-          .filter((p) => p.userId !== senderId)
-          .map((p) => this.pushScheduler.schedule({ messageId, recipientId: p.userId })),
-      );
+      participants = await this.repository.listParticipants(threadId);
     } catch (err) {
-      // The message is stored; clients catch up on next fetch.
       logger.warn({ err, threadId, messageId }, 'message fan-out failed');
+      return;
     }
+    // Independent: a realtime hiccup must not cost the recipient their push.
+    // The message is stored either way; clients catch up on next fetch.
+    await Promise.all([
+      this.realtime
+        .publish(
+          participants.map((p) => p.userId),
+          { type: 'message.created', threadId, message: view },
+        )
+        .catch((err: unknown) => logger.warn({ err, threadId, messageId }, 'realtime publish failed')),
+      ...participants
+        .filter((p) => p.userId !== senderId)
+        .map((p) =>
+          this.pushScheduler
+            .schedule({ messageId, recipientId: p.userId })
+            .catch((err: unknown) => logger.warn({ err, threadId, messageId, recipientId: p.userId }, 'push schedule failed')),
+        ),
+    ]);
   }
 }
 

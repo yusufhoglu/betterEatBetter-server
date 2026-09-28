@@ -66,6 +66,31 @@ describe('SignInWithProvider', () => {
     expect(linked?.passwordHash).toBe('argon2-hash');
   });
 
+  test('stores the Google name and photo on a new account', async () => {
+    const provider = new FakeGoogleProvider();
+    provider.verify.mockResolvedValue({ externalId: 'g-2', email: 'zeynep@example.com', name: 'Zeynep Demir', avatarUrl: 'https://img/z.png' });
+    const { signInWithProvider, userRepository } = build(provider);
+
+    const session = await signInWithProvider.execute({ provider: 'google', idToken: 'token' });
+
+    expect(await userRepository.findById(session.userId)).toMatchObject({ name: 'Zeynep Demir', avatarUrl: 'https://img/z.png' });
+  });
+
+  test('fills a missing name on sign-in but never overwrites one the user chose', async () => {
+    const provider = new FakeGoogleProvider();
+    const { signInWithProvider, userRepository } = build(provider);
+    const nameless = await userRepository.create({ email: 'a@example.com', googleSub: 'g-a' });
+    const named = await userRepository.create({ email: 'b@example.com', googleSub: 'g-b', name: 'Kendi Adım' });
+
+    provider.verify.mockResolvedValueOnce({ externalId: 'g-a', email: 'a@example.com', name: 'Google Adı' });
+    await signInWithProvider.execute({ provider: 'google', idToken: 'token' });
+    provider.verify.mockResolvedValueOnce({ externalId: 'g-b', email: 'b@example.com', name: 'Google Adı' });
+    await signInWithProvider.execute({ provider: 'google', idToken: 'token' });
+
+    expect((await userRepository.findById(nameless.id))?.name).toBe('Google Adı');
+    expect((await userRepository.findById(named.id))?.name).toBe('Kendi Adım');
+  });
+
   test('throws ValidationError (UNSUPPORTED_PROVIDER) for a provider that is not configured', async () => {
     const provider = new FakeGoogleProvider();
     const { signInWithProvider } = build(provider);

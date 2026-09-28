@@ -44,6 +44,6 @@ export class GoogleSignInAdapter implements IdentityProviderPort<SocialIdTokenCr
       throw new UnauthorizedError('GOOGLE_TOKEN_INVALID', 'Google sign-in could not be verified');
     }
 
-    return { externalId: payload.sub, email: payload.email };
+    return { externalId: payload.sub, email: payload.email, name: payload.name?.trim() || null, avatarUrl: payload.picture ?? null };
   }
 }

@@ -19,6 +19,8 @@ import { logger } from './shared/observability/logger';
 import { requestLoggingMiddleware } from './shared/observability/requestLoggingMiddleware';
 import { canonicalizeFoodPhotoTraceMiddleware, tracingMiddleware } from './shared/observability/tracingMiddleware';
 import { prisma } from './shared/persistence/db';
+import { setLlmUsageSink } from './shared/llm/usageSink';
+import { aiUsageRecorder } from './modules/admin/http/adminWiring';
 
 const app = express();
 const analyticsOutboxPollingIntervalMs = 15_000;
@@ -113,6 +115,12 @@ app.use(errorMapperMiddleware);
 const port = Number(process.env.PORT ?? 3000);
 startAnalyticsOutboxPolling();
 startFoodEntryCleanupPolling();
+// Per-user AI token accounting for the admin panel (admin module).
+setLlmUsageSink(aiUsageRecorder.record);
+// Best-effort flush on shutdown; exit behaviour is left as it was.
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(signal, () => void aiUsageRecorder.flush());
+}
 
 app.listen(port, () => {
   logger.info({ port, env: env.NODE_ENV }, 'server started');

@@ -58,6 +58,17 @@ describe('messaging', () => {
     expect(scheduled).toEqual([{ messageId: message.id, recipientId: 'dyt' }]);
   });
 
+  it('still schedules the push when the realtime publish fails', async () => {
+    const { send, threadId, scheduled, realtime } = await withThread();
+    realtime.publish = async () => {
+      throw new Error('redis down');
+    };
+
+    const { message } = await send.execute({ senderId: 'dyt', threadId, clientMessageId: 'c-rt', type: 'text', body: 'Selam' });
+
+    expect(scheduled).toEqual([{ messageId: message.id, recipientId: 'client' }]);
+  });
+
   it('is idempotent on clientMessageId', async () => {
     const { send, threadId, published, repository } = await withThread();
     const input = { senderId: 'client', threadId, clientMessageId: 'c-1', type: 'text' as const, body: 'hi' };

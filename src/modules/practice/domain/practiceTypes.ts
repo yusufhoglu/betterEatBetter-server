@@ -35,7 +35,8 @@ export interface OrganizationMembership {
   organizationId: string;
   userId: string;
   role: OrganizationRole;
-  status: 'active' | 'removed';
+  /** 'suspended' = paused by a platform admin (admin module); reversible. */
+  status: 'active' | 'removed' | 'suspended';
   inviteKey: string;
   joinedAt: Date;
 }

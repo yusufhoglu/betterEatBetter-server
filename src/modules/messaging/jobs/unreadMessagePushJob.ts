@@ -16,8 +16,8 @@ import { SendUnreadMessagePush } from '../use-cases/SendUnreadMessagePush';
 
 const logger = createModuleLogger('messaging');
 const QUEUE_NAME = 'messaging-unread-push';
-/** Long enough that a recipient with the chat open reads it first; short enough to feel live. */
-const PUSH_DELAY_MS = 20_000;
+/** Long enough that a recipient with the chat open reads it first (realtime + read receipt take ~1 s); short enough to feel live. */
+const PUSH_DELAY_MS = 8_000;
 
 interface UnreadPushPayload extends BaseJobPayload {
   messageId: string;

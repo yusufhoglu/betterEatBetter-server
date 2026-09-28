@@ -4,6 +4,8 @@ import { EmailPasswordAdapter } from '../adapters/provider/EmailPasswordAdapter'
 import { GoogleSignInAdapter } from '../adapters/provider/GoogleSignInAdapter';
 import { PrismaRefreshTokenRepository } from '../adapters/repository/PrismaRefreshTokenRepository';
 import { PrismaUserRepository } from '../adapters/repository/PrismaUserRepository';
+import { SuspensionGuardedRefreshTokens } from '../adapters/repository/SuspensionGuardedRefreshTokens';
+import { prisma } from '../../../shared/persistence/db';
 import { JwtSessionTokenAdapter } from '../adapters/token/JwtSessionTokenAdapter';
 import { DeleteAccount } from '../use-cases/DeleteAccount';
 import { Logout } from '../use-cases/Logout';
@@ -21,7 +23,10 @@ export function identityRoutes(): Router {
   const emailPasswordAdapter = new EmailPasswordAdapter(userRepository);
   const googleSignInAdapter = new GoogleSignInAdapter();
   const sessionTokenPort = new JwtSessionTokenAdapter();
-  const refreshTokenRepository = new PrismaRefreshTokenRepository();
+  const refreshTokenRepository = new SuspensionGuardedRefreshTokens(new PrismaRefreshTokenRepository(), async (userId) => {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { suspendedAt: true } });
+    return user?.suspendedAt != null;
+  });
 
   const signUp = new SignUp(userRepository, emailPasswordAdapter, sessionTokenPort, refreshTokenRepository);
   const signIn = new SignIn(emailPasswordAdapter, sessionTokenPort, refreshTokenRepository);

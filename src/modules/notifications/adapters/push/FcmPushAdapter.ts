@@ -7,6 +7,9 @@ import { createModuleLogger } from '../../../../shared/observability/logger';
 import { buildResiliencePolicy } from '../../../../shared/resilience/policies';
 import type { PushMessage, PushSenderPort, PushSendResult } from '../../ports/PushSenderPort';
 
+/** Must match `_channelId` in the mobile app's push_notification_service.dart. */
+const ANDROID_CHANNEL_ID = 'foodtracker_default';
+
 const logger = createModuleLogger('notifications');
 
 const FCM_MESSAGING_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
@@ -96,6 +99,11 @@ export class FcmPushAdapter implements PushSenderPort {
             token: message.token,
             notification: { title: message.title, body: message.body },
             ...(message.data ? { data: message.data } : {}),
+            // Heads-up on Android via the app's own channel (created in
+            // push_notification_service.dart) instead of FCM's low-priority
+            // fallback channel; audible on both platforms.
+            android: { priority: 'high', notification: { channel_id: ANDROID_CHANNEL_ID, sound: 'default' } },
+            apns: { payload: { aps: { sound: 'default' } } },
           },
         }),
       });

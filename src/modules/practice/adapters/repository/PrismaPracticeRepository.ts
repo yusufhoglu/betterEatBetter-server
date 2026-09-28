@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { publicName } from '../../../../shared/domain/personName';
 import { ConflictError } from '../../../../shared/errors/ConflictError';
 import {
   isConsentScope,
@@ -274,6 +275,10 @@ export class PrismaPracticeRepository implements PracticeRepositoryPort {
     return toLink(await this.db.dietitianClientLink.update({ where: { id: linkId }, data: { dietitianId } }));
   }
 
+  async moveLink(linkId: string, dietitianId: string, organizationId: string): Promise<ClientLink> {
+    return toLink(await this.db.dietitianClientLink.update({ where: { id: linkId }, data: { dietitianId, organizationId } }));
+  }
+
   async listAllActiveLinks(): Promise<ClientLink[]> {
     const rows = await this.db.dietitianClientLink.findMany({ where: { status: 'active' } });
     return rows.map(toLink);
@@ -380,10 +385,10 @@ export class PrismaPracticeRepository implements PracticeRepositoryPort {
     }
     const rows = await this.db.user.findMany({
       where: { id: { in: userIds } },
-      select: { id: true, name: true, username: true, avatarUrl: true },
+      select: { id: true, name: true, username: true, avatarUrl: true, email: true },
     });
     return new Map(
-      rows.map((row) => [row.id, { userId: row.id, name: row.name, username: row.username, avatarUrl: row.avatarUrl }]),
+      rows.map((row) => [row.id, { userId: row.id, name: publicName(row), username: row.username, avatarUrl: row.avatarUrl }]),
     );
   }
 }
