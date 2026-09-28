@@ -50,9 +50,24 @@ export class SignInWithProvider {
         user = await this.userRepository.linkGoogleAccount(byEmail.id, identity.externalId);
         logger.info({ userId: user.id, provider: input.provider }, 'linked social identity to existing account');
       } else {
-        user = await this.userRepository.create({ email: identity.email, googleSub: identity.externalId });
+        user = await this.userRepository.create({
+          email: identity.email,
+          googleSub: identity.externalId,
+          name: identity.name ?? null,
+          avatarUrl: identity.avatarUrl ?? null,
+        });
         logger.info({ userId: user.id, provider: input.provider }, 'created account from social sign-in');
       }
+    }
+
+    // Fill a missing name/photo from the provider (never overwrite what the user chose),
+    // so dietitians and chats don't show nameless accounts.
+    if ((!user.name && identity.name) || (!user.avatarUrl && identity.avatarUrl)) {
+      user = await this.userRepository.updateProfile({
+        id: user.id,
+        name: user.name ?? identity.name ?? undefined,
+        avatarUrl: user.avatarUrl ?? identity.avatarUrl ?? undefined,
+      });
     }
 
     const accessToken = this.sessionTokenPort.signAccessToken(user.id);

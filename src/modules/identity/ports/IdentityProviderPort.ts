@@ -6,6 +6,9 @@
 export interface VerifiedIdentity {
   externalId: string;
   email: string;
+  /** Profile hints from social providers (Google `name` / `picture`), when present. */
+  name?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface EmailPasswordCredentials {

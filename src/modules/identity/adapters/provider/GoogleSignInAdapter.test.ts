@@ -19,14 +19,20 @@ describe('GoogleSignInAdapter', () => {
     return new GoogleSignInAdapter(new OAuth2Client(), AUDIENCES);
   }
 
-  test('returns the Google subject and email for a valid, verified token', async () => {
+  test('returns the Google subject, email and profile hints for a valid, verified token', async () => {
     verifyIdTokenSpy.mockResolvedValue({
-      getPayload: () => ({ sub: 'google-sub-123', email: 'rider@example.com', email_verified: true }),
+      getPayload: () => ({
+        sub: 'google-sub-123',
+        email: 'rider@example.com',
+        email_verified: true,
+        name: ' Rider Name ',
+        picture: 'https://lh3/p.jpg',
+      }),
     } as never);
 
     const identity = await buildAdapter().verify({ idToken: 'valid-token' });
 
-    expect(identity).toEqual({ externalId: 'google-sub-123', email: 'rider@example.com' });
+    expect(identity).toEqual({ externalId: 'google-sub-123', email: 'rider@example.com', name: 'Rider Name', avatarUrl: 'https://lh3/p.jpg' });
     expect(verifyIdTokenSpy).toHaveBeenCalledWith({ idToken: 'valid-token', audience: AUDIENCES });
   });
 

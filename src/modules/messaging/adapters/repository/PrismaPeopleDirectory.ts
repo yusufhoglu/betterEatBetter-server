@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { publicName } from '../../../../shared/domain/personName';
 import type { PersonSummary } from '../../domain/messagingTypes';
 import type { PeopleDirectoryPort } from '../../ports/PeopleDirectoryPort';
 
@@ -12,10 +13,10 @@ export class PrismaPeopleDirectory implements PeopleDirectoryPort {
     }
     const rows = await this.db.user.findMany({
       where: { id: { in: userIds } },
-      select: { id: true, name: true, username: true, avatarUrl: true },
+      select: { id: true, name: true, username: true, avatarUrl: true, email: true },
     });
     return new Map(
-      rows.map((row) => [row.id, { userId: row.id, name: row.name, username: row.username, avatarUrl: row.avatarUrl }]),
+      rows.map((row) => [row.id, { userId: row.id, name: publicName(row), username: row.username, avatarUrl: row.avatarUrl }]),
     );
   }
 }

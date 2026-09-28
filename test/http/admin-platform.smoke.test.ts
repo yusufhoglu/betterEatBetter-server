@@ -42,6 +42,8 @@ jest.mock('../../src/shared/llm/llmClientFactory', () => ({
 }));
 
 const ADMIN_EMAIL = `admin-${randomUUID()}@smoke.test`;
+// The smoke database is shared across runs: make searched names unique.
+const RUN = randomUUID().slice(0, 6);
 
 describe('platform admin smoke', () => {
   let prisma: PrismaClient;
@@ -112,7 +114,7 @@ describe('platform admin smoke', () => {
     expect(created.status).toBe(201);
     expect(created.body.code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/);
 
-    const dytA = await createUser('Dyt. Smoke A');
+    const dytA = await createUser(`Dyt. Smoke A ${RUN}`);
     expect((await request(app).post('/practice/dietitian/activate').set('Authorization', dytA.auth).send({ code: created.body.code })).status).toBe(201);
 
     const codes = await request(app).get('/admin/activation-codes').set('Authorization', admin.auth);
@@ -120,7 +122,7 @@ describe('platform admin smoke', () => {
       status: 'used_up',
       usedCount: 1,
       note: 'Smoke Dyt A',
-      redeemedBy: [{ userId: dytA.id, name: 'Dyt. Smoke A' }],
+      redeemedBy: [{ userId: dytA.id, name: `Dyt. Smoke A ${RUN}` }],
     });
     const spare = await request(app).post('/admin/activation-codes').set('Authorization', admin.auth).send({ validityDays: null });
     expect(spare.body.expiresAt).toBeNull();
@@ -130,7 +132,7 @@ describe('platform admin smoke', () => {
     expect(revoked.body.code).toBe('ACTIVATION_CODE_INVALID');
 
     // 2. a client joins dietitian A, uses AI and photo recognition
-    const client = await createUser('Smoke Danışan');
+    const client = await createUser(`Smoke Danışan ${RUN}`);
     const invite = await request(app).post('/practice/invites').set('Authorization', dytA.auth).send({});
     expect(
       (await request(app).post('/practice/join').set('Authorization', client.auth).send({ code: invite.body.code, consentScopes: ['meals'] }))
@@ -145,13 +147,13 @@ describe('platform admin smoke', () => {
       ],
     });
 
-    const list = await request(app).get('/admin/users').query({ q: 'smoke danış', filter: 'with_dietitian' }).set('Authorization', admin.auth);
+    const list = await request(app).get('/admin/users').query({ q: `smoke danışan ${RUN}`, filter: 'with_dietitian' }).set('Authorization', admin.auth);
     expect(list.status).toBe(200);
     expect(list.body.items).toHaveLength(1);
     expect(list.body.items[0]).toMatchObject({
       userId: client.id,
       isPremium: false,
-      dietitian: { userId: dytA.id, name: 'Dyt. Smoke A' },
+      dietitian: { userId: dytA.id, name: `Dyt. Smoke A ${RUN}` },
       aiTokens30: 150,
       photoScans30: 2,
     });
@@ -181,7 +183,7 @@ describe('platform admin smoke', () => {
     expect((await request(app).post(`/admin/dietitians/${dytA.id}/suspend`).set('Authorization', admin.auth)).status).toBe(204);
     expect((await request(app).get('/practice/me').set('Authorization', dytA.auth)).body.dietitian).toBeNull();
     expect((await request(app).get(`/practice/clients/${client.id}`).set('Authorization', dytA.auth)).status).toBe(404);
-    const dytList = await request(app).get('/admin/dietitians').query({ q: 'Smoke A' }).set('Authorization', admin.auth);
+    const dytList = await request(app).get('/admin/dietitians').query({ q: `Smoke A ${RUN}` }).set('Authorization', admin.auth);
     expect(dytList.body.items[0]).toMatchObject({ userId: dytA.id, status: 'suspended', activeClients: 1, activationCodeNote: 'Smoke Dyt A' });
     await request(app).post(`/admin/dietitians/${dytA.id}/unsuspend`).set('Authorization', admin.auth);
     expect((await request(app).get(`/practice/clients/${client.id}`).set('Authorization', dytA.auth)).status).toBe(200);
@@ -195,7 +197,7 @@ describe('platform admin smoke', () => {
     expect((await request(app).get(`/practice/clients/${client.id}`).set('Authorization', dytB.auth)).status).toBe(200);
     expect((await request(app).get(`/practice/clients/${client.id}`).set('Authorization', dytA.auth)).status).toBe(404);
     const dytBDetail = await request(app).get(`/admin/dietitians/${dytB.id}`).set('Authorization', admin.auth);
-    expect(dytBDetail.body.dietitian.clients).toEqual([expect.objectContaining({ clientId: client.id, name: 'Smoke Danışan' })]);
+    expect(dytBDetail.body.dietitian.clients).toEqual([expect.objectContaining({ clientId: client.id, name: `Smoke Danışan ${RUN}` })]);
     const threads = await request(app).get('/threads').set('Authorization', client.auth);
     expect(threads.body.items[0].counterparts[0].userId).toBe(dytB.id);
 
