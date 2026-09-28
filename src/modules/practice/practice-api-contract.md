@@ -3,6 +3,12 @@
 Tum istekler `Authorization: Bearer <accessToken>`. Hatalar mevcut format: `{ code, message }`.
 Tarihler ISO-8601; gun alanlari `YYYY-MM-DD`. `timeZone` IANA (orn. `Europe/Istanbul`).
 
+## Web oturumu (panel)
+
+`POST /auth/web/sign-in { email, password }` · `POST /auth/web/google { idToken }` (Google Identity Services ID token;
+web client ID `GOOGLE_OAUTH_CLIENT_IDS` listesinde olmali) · `POST /auth/web/refresh` · `POST /auth/web/logout`.
+Hepsi `X-Requested-With: eatbetter-web` ister; refresh token httpOnly cerezde, govdede sadece `{ userId, accessToken }`.
+
 ## Rol / mod tespiti
 
 `GET /practice/me` →

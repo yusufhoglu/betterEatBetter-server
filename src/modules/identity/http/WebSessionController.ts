@@ -6,6 +6,7 @@ import { ValidationError } from '../../../shared/errors/ValidationError';
 import type { Logout } from '../use-cases/Logout';
 import type { RefreshSession } from '../use-cases/RefreshSession';
 import type { SignIn } from '../use-cases/SignIn';
+import type { SignInWithProvider } from '../use-cases/SignInWithProvider';
 
 /**
  * Browser sessions (dietitian web panel). Same use-cases as the app's
@@ -27,6 +28,8 @@ const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
+
+const googleSchema = z.object({ idToken: z.string().min(1) });
 
 function readCookie(req: Request, name: string): string | undefined {
   const header = req.headers.cookie;
@@ -77,7 +80,28 @@ export class WebSessionController {
     private readonly signIn: SignIn,
     private readonly refreshSession: RefreshSession,
     private readonly logout: Logout,
+    private readonly signInWithProvider: SignInWithProvider,
   ) {}
+
+  /**
+   * Google Identity Services on the panel hands us a Google ID token; it is
+   * verified exactly like the app's (audience ∈ GOOGLE_OAUTH_CLIENT_IDS — add
+   * the web client ID there), and links to an existing account by verified email.
+   */
+  handleGoogleSignIn = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      assertCsrfHeader(req);
+      const parsed = googleSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('INVALID_REQUEST_BODY', parsed.error.issues[0]?.message ?? 'Invalid request');
+      }
+      const session = await this.signInWithProvider.execute({ provider: 'google', idToken: parsed.data.idToken });
+      setRefreshCookie(res, session.refreshToken, session.refreshTokenExpiresAt);
+      res.status(200).json({ userId: session.userId, accessToken: session.accessToken });
+    } catch (err) {
+      next(err);
+    }
+  };
 
   handleSignIn = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

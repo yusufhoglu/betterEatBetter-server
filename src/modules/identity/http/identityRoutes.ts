@@ -52,8 +52,9 @@ export function identityRoutes(): Router {
   router.delete('/account', authMiddleware, controller.handleDeleteAccount);
 
   // Browser sessions: refresh token in an httpOnly cookie (WebSessionController).
-  const web = new WebSessionController(signIn, refreshSession, logout);
+  const web = new WebSessionController(signIn, refreshSession, logout, signInWithProvider);
   router.post('/web/sign-in', web.handleSignIn);
+  router.post('/web/google', web.handleGoogleSignIn);
   router.post('/web/refresh', web.handleRefresh);
   router.post('/web/logout', web.handleLogout);
 

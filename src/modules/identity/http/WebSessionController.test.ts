@@ -36,7 +36,17 @@ describe('WebSessionController', () => {
   const signIn = { execute: jest.fn().mockResolvedValue(session) };
   const refresh = { execute: jest.fn().mockResolvedValue({ ...session, refreshToken: 'refresh-2' }) };
   const logout = { execute: jest.fn().mockResolvedValue(undefined) };
-  const controller = new WebSessionController(signIn as never, refresh as never, logout as never);
+  const google = { execute: jest.fn().mockResolvedValue({ ...session, refreshToken: 'refresh-g' }) };
+  const controller = new WebSessionController(signIn as never, refresh as never, logout as never, google as never);
+
+  it('signs in with a Google ID token into the same cookie session', async () => {
+    const res = mockRes();
+    await controller.handleGoogleSignIn(req({ 'X-Requested-With': WEB_CSRF_VALUE }, { idToken: 'google-id-token' }), res as unknown as Response, jest.fn());
+
+    expect(google.execute).toHaveBeenCalledWith({ provider: 'google', idToken: 'google-id-token' });
+    expect(res.body).toEqual({ userId: 'u1', accessToken: 'access' });
+    expect(res.cookies[0]).toContain('eb_rt=refresh-g;');
+  });
 
   it('keeps the refresh token out of the body and in an httpOnly cookie', async () => {
     const res = mockRes();
