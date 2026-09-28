@@ -42,6 +42,19 @@ describe('FcmPushAdapter', () => {
     await expect(buildAdapter().send(MESSAGE)).resolves.toEqual({ status: 'sent' });
   });
 
+  test('targets the app’s Android channel with high priority and sound', async () => {
+    mockFetch(200, { name: 'projects/test-project/messages/1' });
+    await buildAdapter().send({ ...MESSAGE, data: { type: 'chat_message' } });
+    const sent = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body as string);
+    expect(sent.message).toMatchObject({
+      token: 'device-1',
+      notification: { title: 'Hi', body: 'There' },
+      data: { type: 'chat_message' },
+      android: { priority: 'high', notification: { channel_id: 'foodtracker_default', sound: 'default' } },
+      apns: { payload: { aps: { sound: 'default' } } },
+    });
+  });
+
   test('maps an UNREGISTERED error to invalid_token', async () => {
     mockFetch(404, { error: { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] } });
     await expect(buildAdapter().send(MESSAGE)).resolves.toEqual({ status: 'invalid_token' });
