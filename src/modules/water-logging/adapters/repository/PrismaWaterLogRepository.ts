@@ -32,6 +32,14 @@ export class PrismaWaterLogRepository implements WaterLogRepositoryPort {
     return row ? mapWaterLog(row) : null;
   }
 
+  async findInRange(userId: string, startDate: Date, endDate: Date): Promise<WaterLog[]> {
+    const rows = await this.db.waterLog.findMany({
+      where: { userId, date: { gte: normalizeDate(startDate), lte: normalizeDate(endDate) } },
+      orderBy: { date: 'asc' },
+    });
+    return rows.map(mapWaterLog);
+  }
+
   async addAmount(userId: string, date: Date, amountMl: number): Promise<WaterLog> {
     const normalizedDate = normalizeDate(date);
     const existing = await this.db.waterLog.findUnique({

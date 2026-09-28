@@ -19,6 +19,7 @@
     "test:http:local": "node scripts/run-http-smoke-tests.cjs",
     "db:create:smoke": "node scripts/create-smoke-db.cjs",
     "grant:premium": "node dist/src/scripts/grantPremium.js",
+    "practice:activation-code": "node dist/src/scripts/createActivationCode.js",
     "test:all": "jest",
     "import:usda": "ts-node src/modules/food-recognition/adapters/search/importUsdaData.ts",
     "import:branded": "ts-node src/modules/food-recognition/adapters/search/importBrandedData.ts",

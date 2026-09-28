@@ -9,6 +9,7 @@ import type { GetUserAccountProfile } from '../../identity/use-cases/GetUserAcco
 import type { UpdateUserAccountProfile } from '../../identity/use-cases/UpdateUserAccountProfile';
 import type { GetUserProfile } from '../../onboarding-plan/use-cases/GetUserProfile';
 import type { GetActivePlan } from '../../onboarding-plan/use-cases/GetActivePlan';
+import { ComputeActivityTargets } from '../../onboarding-plan/domain/ComputeActivityTargets';
 import type { UpdatePlan } from '../../onboarding-plan/use-cases/UpdatePlan';
 import type { UpdateProfileMeasurements } from '../../onboarding-plan/use-cases/UpdateProfileMeasurements';
 import type { GetSubscriptionEntitlement } from '../../subscription/use-cases/GetSubscriptionEntitlement';
@@ -257,12 +258,20 @@ export class MeController {
             (projection.estimatedTargetDate.getTime() - new Date().getTime()) / (7 * 24 * 60 * 60 * 1000),
           );
 
+    const activity = ComputeActivityTargets(profile, plan);
+
     return {
       goalLabel: toGoalLabel(profile.goal),
       targetWeightKg: profile.targetWeightKg,
       weeklyPaceKg: profile.weeklyPaceKg,
       dailyCalories: Math.round(plan.dailyCalories),
       weeksToGoal: weeksToGoal === null ? null : Math.max(weeksToGoal, 0),
+      // Water/step targets: automatic unless the client's dietitian set one.
+      waterTargetMl: activity.waterMl,
+      stepTarget: activity.steps,
+      waterTargetAuto: activity.waterAuto,
+      stepTargetAuto: activity.stepsAuto,
+      planSource: plan.source ?? 'self',
     };
   }
 

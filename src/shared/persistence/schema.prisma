@@ -41,6 +41,15 @@ model User {
   socialComments         SocialComment[]
   socialPostLikes        SocialPostLike[]
   socialCommentLikes     SocialCommentLike[]
+  organizationMembers    OrganizationMember[]
+  dietitianProfile       DietitianProfile?
+  dietitianLinks         DietitianClientLink[]   @relation("LinkDietitian")
+  clientLinks            DietitianClientLink[]   @relation("LinkClient")
+  dataAccessLogsAbout    DataAccessLog[]
+  threadParticipants     ThreadParticipant[]
+  sentChatMessages       ChatMessage[]
+  stepLogs               StepLog[]
+  alertRuleSettings      AlertRuleSetting[]
 
   @@map("users")
 }
@@ -77,14 +86,23 @@ model UserProfile {
 // onboarding-plan module: the single active plan per user (userId is unique — no
 // plan history is kept this round, see onboarding-plan-rule.md).
 model Plan {
-  userId        String   @id
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dailyCalories Float
-  proteinG      Float
-  carbsG        Float
-  fatG          Float
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  userId           String   @id
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyCalories    Float
+  proteinG         Float
+  carbsG           Float
+  fatG             Float
+  // Who set the current targets. 'dietitian' plans are owned by the client's
+  // assigned dietitian (practice module) — see dietitian-platform-design.md.
+  source           String   @default("self") // 'self' | 'dietitian'
+  setByDietitianId String?
+  // Daily water / step targets. NULL = automatic (derived from the profile,
+  // see onboarding-plan/domain/ComputeActivityTargets); a number is an
+  // explicit override (today only a dietitian sets one).
+  waterTargetMl    Int?
+  stepTarget       Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@map("plans")
 }
@@ -367,14 +385,14 @@ model Subscription {
 // chatbot module: conversationId is client/trace-supplied (stays fixed for the
 // whole chat, doubles as trace_id) — never server-generated per message.
 model Conversation {
-  id        String    @id @default(uuid())
-  userId    String
-  createdAt DateTime  @default(now())
+  id            String    @id @default(uuid())
+  userId        String
+  createdAt     DateTime  @default(now())
   // Denormalized max(messages.createdAt) — kept current on every appendMessage
   // so "list my conversations, newest first" is a single indexed query.
   // Null for a conversation that was materialized but never messaged.
   lastMessageAt DateTime?
-  messages  Message[]
+  messages      Message[]
 
   @@index([userId])
   @@index([userId, lastMessageAt(sort: Desc)])
@@ -398,15 +416,15 @@ model Message {
 // summary (ConversationDigest) that stands in for messages trimmed out of the
 // context window; `digestTurn` records the turnCount it was last rebuilt at.
 model DieticianConversation {
-  id         String             @id @default(uuid())
-  userId     String
-  createdAt  DateTime           @default(now())
-  turnCount  Int                @default(0)
-  digest     Json?
-  digestTurn Int                @default(0)
+  id            String             @id @default(uuid())
+  userId        String
+  createdAt     DateTime           @default(now())
+  turnCount     Int                @default(0)
+  digest        Json?
+  digestTurn    Int                @default(0)
   // See Conversation.lastMessageAt — same denormalization, same purpose.
   lastMessageAt DateTime?
-  messages   DieticianMessage[]
+  messages      DieticianMessage[]
 
   @@index([userId])
   @@index([userId, lastMessageAt(sort: Desc)])
@@ -496,4 +514,218 @@ model SocialCommentLike {
 
   @@id([commentId, userId])
   @@map("social_comment_likes")
+}
+
+// ─── practice module (dietitian platform) ───────────────────────────────────
+// See dietitian-platform-design.md. A solo dietitian is a one-member
+// organization, so every client link hangs off an organization.
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  kind      String // 'clinic' | 'solo'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members         OrganizationMember[]
+  activationCodes DietitianActivationCode[]
+  clientLinks     DietitianClientLink[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  organizationId String
+  userId         String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String // 'owner' | 'admin' | 'dietitian'
+  status         String       @default("active") // 'active' | 'removed'
+  // Random per-membership key embedded in stateless client invite codes.
+  // Rotating it invalidates every invite code issued before.
+  inviteKey      String       @unique
+  joinedAt       DateTime     @default(now())
+
+  @@id([organizationId, userId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+model DietitianProfile {
+  userId           String   @id
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String?
+  licenseNo        String?
+  bio              String?
+  specialties      String[] @default([])
+  activationCodeId String?
+  verifiedAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("dietitian_profiles")
+}
+
+// Admin-generated (src/scripts/createActivationCode.ts). Only the hash is stored.
+model DietitianActivationCode {
+  id             String        @id @default(uuid())
+  codeHash       String        @unique
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orgRole        String        @default("dietitian") // role granted inside organizationId
+  note           String?
+  maxUses        Int           @default(1)
+  usedCount      Int           @default(0)
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@map("dietitian_activation_codes")
+}
+
+model DietitianClientLink {
+  id               String          @id @default(uuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  dietitianId      String
+  dietitian        User            @relation("LinkDietitian", fields: [dietitianId], references: [id], onDelete: Cascade)
+  clientId         String
+  client           User            @relation("LinkClient", fields: [clientId], references: [id], onDelete: Cascade)
+  status           String // 'active' | 'ended'
+  // Data the client currently shares; the client toggles these at will.
+  consentScopes    String[]
+  consentUpdatedAt DateTime        @default(now())
+  startedAt        DateTime        @default(now())
+  endedAt          DateTime?
+  endedBy          String?
+  notes            DietitianNote[]
+  insight          ClientInsight?
+
+  @@index([dietitianId, status])
+  @@index([organizationId, status])
+  @@index([clientId, status])
+  @@map("dietitian_client_links")
+}
+
+model DataAccessLog {
+  id        String   @id @default(uuid())
+  actorId   String
+  subjectId String
+  subject   User     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  scope     String
+  resource  String
+  createdAt DateTime @default(now())
+
+  @@index([subjectId, createdAt(sort: Desc)])
+  @@map("data_access_logs")
+}
+
+// Private to the dietitian side — never exposed to the client.
+model DietitianNote {
+  id        String              @id @default(uuid())
+  linkId    String
+  link      DietitianClientLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  authorId  String
+  body      String
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([linkId, createdAt(sort: Desc)])
+  @@map("dietitian_notes")
+}
+
+// ─── messaging module (human ↔ human chat) ─────────────────────────────────
+
+model Thread {
+  id            String    @id @default(uuid())
+  kind          String // 'dietitian_client'
+  refId         String? // DietitianClientLink.id for kind='dietitian_client'
+  readOnly      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  lastMessageAt DateTime?
+
+  participants ThreadParticipant[]
+  messages     ChatMessage[]
+
+  @@index([refId])
+  @@map("threads")
+}
+
+model ThreadParticipant {
+  threadId   String
+  userId     String
+  thread     Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt DateTime?
+  joinedAt   DateTime  @default(now())
+
+  @@id([threadId, userId])
+  @@index([userId])
+  @@map("thread_participants")
+}
+
+model ChatMessage {
+  id              String    @id @default(uuid())
+  threadId        String
+  thread          Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  // Null once the sender deletes their account — the other side keeps history.
+  senderId        String?
+  sender          User?     @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  clientMessageId String
+  type            String // 'text' | 'image' | 'meal_ref' | 'system'
+  body            String?
+  attachments     Json?
+  createdAt       DateTime  @default(now())
+  editedAt        DateTime?
+  deletedAt       DateTime?
+
+  @@unique([threadId, clientMessageId])
+  @@index([threadId, createdAt(sort: Desc)])
+  @@map("chat_messages")
+}
+
+// ─── activity module (steps from Apple Health / Health Connect) ─────────────
+// One row per (user, day): the device's daily total, re-sent (upserted) as the
+// day progresses. Not an event log.
+model StepLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  steps     Int
+  source    String // 'apple_health' | 'health_connect' | 'manual'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@map("step_logs")
+}
+
+// ─── practice: alerts & adherence ───────────────────────────────────────────
+
+// A dietitian's override of one alert rule (practice/domain/alertRules.ts).
+// No row = the rule's defaults.
+model AlertRuleSetting {
+  dietitianId String
+  dietitian   User     @relation(fields: [dietitianId], references: [id], onDelete: Cascade)
+  ruleId      String
+  enabled     Boolean  @default(true)
+  threshold   Float?
+  updatedAt   DateTime @updatedAt
+
+  @@id([dietitianId, ruleId])
+  @@map("alert_rule_settings")
+}
+
+// Latest computed adherence score + triggered alerts per active link. Rebuilt
+// nightly and whenever the dietitian opens the client; the roster reads it.
+model ClientInsight {
+  linkId     String              @id
+  link       DietitianClientLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  score      Int?
+  scoreParts Json
+  alerts     Json
+  computedAt DateTime
+
+  @@map("client_insights")
 }

@@ -134,6 +134,15 @@ export class PrismaMealItemRepository implements MealItemRepositoryPort {
     return rows.map(mapMealItem);
   }
 
+  async findByUserIdInRange(userId: string, startDate: Date, endDate: Date): Promise<MealItem[]> {
+    const rows = await this.db.mealItem.findMany({
+      where: { userId, date: { gte: normalizeDate(startDate), lte: normalizeDate(endDate) } },
+      orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    return rows.map(mapMealItem);
+  }
+
   async findRecentByUserId(userId: string, limit: number): Promise<MealItem[]> {
     const rows = await this.db.mealItem.findMany({
       where: { userId },

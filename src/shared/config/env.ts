@@ -22,6 +22,23 @@ const envSchema = z.object({
   JWT_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
 
+  // practice module — HMAC key for stateless client invite codes. Falls back
+  // to a key derived from JWT_SECRET; changing it revokes every issued code.
+  INVITE_CODE_SECRET: z.string().min(32).optional(),
+  // practice module — default/maximum validity of a client invite code.
+  INVITE_CODE_DEFAULT_VALIDITY_DAYS: z.coerce.number().int().min(1).max(365).default(7),
+
+  // Dietitian web panel. Comma-separated exact origins (https://panel.example.com)
+  // allowed to call the API with credentials; every other origin keeps the
+  // app's wildcard CORS without cookies.
+  WEB_PANEL_ORIGINS: z
+    .string()
+    .optional()
+    .transform((value) => (value ?? '').split(',').map((o) => o.trim()).filter(Boolean)),
+  // SameSite of the web refresh-token cookie. 'strict' needs panel and API on
+  // the same site (e.g. panel.eatbetter.app + api.eatbetter.app).
+  WEB_SESSION_COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('strict'),
+
   // identity module — Google Sign-In. Comma-separated list of accepted OAuth
   // client IDs (one per platform: iOS, Android, Web), checked as the audience
   // when verifying a Google ID token.

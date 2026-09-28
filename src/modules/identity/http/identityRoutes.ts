@@ -12,6 +12,7 @@ import { SignIn } from '../use-cases/SignIn';
 import { SignInWithProvider } from '../use-cases/SignInWithProvider';
 import { SignUp } from '../use-cases/SignUp';
 import { IdentityController } from './IdentityController';
+import { WebSessionController } from './WebSessionController';
 
 export function identityRoutes(): Router {
   const router = Router();
@@ -49,6 +50,13 @@ export function identityRoutes(): Router {
   router.post('/refresh', controller.handleRefresh);
   router.post('/logout', controller.handleLogout);
   router.delete('/account', authMiddleware, controller.handleDeleteAccount);
+
+  // Browser sessions: refresh token in an httpOnly cookie (WebSessionController).
+  const web = new WebSessionController(signIn, refreshSession, logout, signInWithProvider);
+  router.post('/web/sign-in', web.handleSignIn);
+  router.post('/web/google', web.handleGoogleSignIn);
+  router.post('/web/refresh', web.handleRefresh);
+  router.post('/web/logout', web.handleLogout);
 
   return router;
 }

@@ -2,7 +2,9 @@
 import './modules/food-recognition/jobs/recognizePhotoJob';
 import './modules/food-recognition/jobs/standardizeAndCopyJob';
 import './modules/subscription/jobs/processPlayRtdnJob';
+import './modules/messaging/jobs/unreadMessagePushJob';
 import { registerNotificationSchedules } from './modules/notifications/jobs/notificationScheduler';
+import { registerPracticeSchedules } from './modules/practice/jobs/clientInsightsJob';
 import express from 'express';
 import { PrismaMealLogReadModelRepository } from './modules/body-analytics/adapters/repository/PrismaMealLogReadModelRepository';
 import { ConsumeOutboxEventsJob } from './modules/body-analytics/jobs/consumeOutboxEventsJob';
@@ -79,9 +81,17 @@ function startFoodEntryCleanupPolling(): void {
 }
 
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.header('origin');
+  if (origin && env.WEB_PANEL_ORIGINS.includes(origin)) {
+    // The dietitian web panel: exact origin + credentials (refresh cookie).
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Vary', 'Origin');
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
   res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,PATCH,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-trace-id, Accept-Language');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-trace-id, Accept-Language, X-Requested-With');
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
   } else {
@@ -108,6 +118,9 @@ app.listen(port, () => {
   logger.info({ port, env: env.NODE_ENV }, 'server started');
   void registerNotificationSchedules().catch((error) => {
     logger.error({ err: error }, 'failed to register scheduled notifications');
+  });
+  void registerPracticeSchedules().catch((error) => {
+    logger.error({ err: error }, 'failed to register practice schedules');
   });
 });
 

@@ -10,7 +10,7 @@ export class InMemoryPlanRepository implements PlanRepositoryPort {
 
   async create(input: CreatePlanInput): Promise<Plan> {
     const now = new Date();
-    const plan: Plan = { ...input, createdAt: now, updatedAt: now };
+    const plan: Plan = { ...input, source: 'self', setByDietitianId: null, createdAt: now, updatedAt: now };
     this.plansByUserId.set(input.userId, plan);
     return plan;
   }
@@ -23,7 +23,7 @@ export class InMemoryPlanRepository implements PlanRepositoryPort {
 
     const updatedPlan: Plan = {
       ...existingPlan,
-      ...input,
+      ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)),
       updatedAt: new Date(),
     };
 
