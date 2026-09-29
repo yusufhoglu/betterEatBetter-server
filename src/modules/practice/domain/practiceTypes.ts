@@ -1,8 +1,9 @@
 /**
  * Data a client shares with their dietitian. The client toggles each scope on
  * or off at any time; the dietitian only ever sees scopes that are on *now*.
+ * `ai_chat` = the client's chats with the dietitian's AI assistant.
  */
-export const CONSENT_SCOPES = ['meals', 'meal_photos', 'body_measurements', 'water', 'steps'] as const;
+export const CONSENT_SCOPES = ['meals', 'meal_photos', 'body_measurements', 'water', 'steps', 'ai_chat'] as const;
 export type ConsentScope = (typeof CONSENT_SCOPES)[number];
 
 export function isConsentScope(value: string): value is ConsentScope {

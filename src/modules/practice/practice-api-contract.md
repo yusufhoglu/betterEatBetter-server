@@ -15,11 +15,14 @@ Hepsi `X-Requested-With: eatbetter-web` ister; refresh token httpOnly cerezde, g
 ```json
 {
   "dietitian": null | { "profile": {...}, "memberships": [{ "organizationId", "role": "owner|admin|dietitian", "organization": { "id", "name", "kind": "solo|clinic" } }] },
-  "link": null | { "id", "status", "consentScopes": ["meals","meal_photos","body_measurements","water"], "dietitian": { "userId","name","username","avatarUrl" }, "threadId", "startedAt" }
+  "link": null | { "id", "status", "consentScopes": ["meals","meal_photos","body_measurements","water","steps","ai_chat"], "dietitian": { "userId","name","username","avatarUrl" }, "threadId", "startedAt",
+                   "aiAssistant": { "enabled", "availableNow", "name": string|null, "nextAvailableAt": ISO|null } }
 }
 ```
 - `dietitian != null` → uygulamada "Diyetisyen modu" acilir.
-- `link != null` → danisan: AI koc girisi GIZLENIR (`/dietician/*` 403 `AI_COACH_UNAVAILABLE_MANAGED_CLIENT`), "Diyetisyenim" + mesaj girisi gosterilir.
+- `link != null` → danisan: "Diyetisyenim" + mesaj girisi gosterilir. AI koc girisi **sadece `link.aiAssistant.enabled`** ise
+  gosterilir, basliginda `aiAssistant.name` yazar. Aksi halde `/dietician/*` 403 `AI_COACH_UNAVAILABLE_MANAGED_CLIENT`.
+  `enabled && !availableNow` → gecmis okunur ama gonderim 403 `DIETITIAN_AI_OFF_HOURS`; `nextAvailableAt` gosterilir.
 
 ## Diyetisyen hesabi
 
@@ -94,6 +97,27 @@ Sadece atanmis diyetisyen. Paylasilmayan kapsam hic okunmaz; ilgili alanlar `nul
 | `PUT /practice/alert-rules` | `{ rules: [{ ruleId, enabled, threshold: number\|null }] }` — `null` = varsayilan |
 
 Kurallar: `no_logs`, `never_started`, `no_weighin`, `kcal_off`, `weekend`, `protein_low`, `plateau`, `too_fast`, `water_low`, `steps_low`, `unanswered` (esikler: `src/modules/practice/domain/alertRules.ts`).
+
+## AI asistan (diyetisyenin AI'i)
+
+Diyetisyen AI kocun danisanlarina KENDI uslubuyla cevap vermesini ayarlar (fine-tune YOK — her mesajda prompt baglami).
+Danisan tarafi mevcut `/dietician/*` uclarini kullanir; kim olarak konusulacagini backend belirler.
+
+| Istek | Govde / Not |
+| --- | --- |
+| `GET /practice/ai/settings` | `{ enabled, defaultClientAccess, assistantName, addressForm: "sen"\|"siz"\|null, tone, approach, rules: [], avoid: [], handoffMessage, schedule, displayName, availableNow, nextAvailableAt, exampleCount, updatedAt }` — hic kaydedilmediyse varsayilanlar (`enabled: false`) |
+| `PUT /practice/ai/settings` | Yukaridaki duzenlenebilir alanlarin TAMAMI. `schedule: null` = her zaman acik, ya da `{ timeZone, windows: [{ days: [1..7] (1=Pzt), start: "HH:MM", end: "HH:MM" }] }` (`start >= end` = gece yarisini asar, esit = tam gun). 400 `INVALID_TIME_ZONE` / `INVALID_SCHEDULE_DAYS` / `INVALID_SCHEDULE_TIME` |
+| `POST /practice/ai/preview` | `{ messages: [{ role: "user"\|"assistant", content }] }` (son mesaj `user`) → `{ reply }`. Kayitli ayarlarla, danisan verisi olmadan. 30/saat |
+| `GET /practice/ai/examples` | `{ items: [{ id, question, answer, source: "manual"\|"correction", sourceMessageId, createdAt, updatedAt }] }` yeniden eskiye |
+| `POST /practice/ai/examples` | `{ question, answer, sourceMessageId? }` → 201. `sourceMessageId` = bir AI cevabini duzeltme (bu diyetisyenin asistan mesaji olmali, yoksa 404 `AI_MESSAGE_NOT_FOUND`). En fazla 200 (409 `AI_EXAMPLE_LIMIT`) |
+| `PATCH/DELETE /practice/ai/examples/:exampleId` | Sadece sahibi (digerine 404 `AI_EXAMPLE_NOT_FOUND`) |
+| `GET /practice/clients/:clientId/ai` | `{ access: "on"\|"off"\|null, instructions, enabled, availableNow }` — atanmis diyetisyen |
+| `PUT /practice/clients/:clientId/ai` | `{ access, instructions }` — `access: null` = diyetisyenin varsayilani. `instructions` danisan GORMEZ, AI'a ozel talimat |
+| `GET /practice/clients/:clientId/ai/conversations` | kapsam `ai_chat`. `{ items: [{ conversationId, title, lastMessageAt, messageCount }] }` |
+| `GET /practice/clients/:clientId/ai/conversations/:conversationId` | kapsam `ai_chat`. `{ items: [{ id, role, content, card: { kind, title }\|null, createdAt, correctionExampleId }] }` |
+
+- Etkin durum: `enabled` (ana anahtar) VE (`access` ?? `defaultClientAccess`) VE diyetisyen askida degil; ustune `schedule`.
+- Diyetisyen yalnizca KENDI asistaninin bu iliski boyunca (`link.startedAt` sonrasi) cevapladigi mesajlari gorur.
 
 ## Danisanin kendisi (mobil)
 

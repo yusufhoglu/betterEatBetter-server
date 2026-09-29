@@ -3,7 +3,16 @@ import { authMiddleware } from '../../../shared/auth/authMiddleware';
 import { env } from '../../../shared/config/env';
 import { prisma } from '../../../shared/persistence/db';
 import { checkRateLimit } from '../../../shared/rateLimiting/rateLimiter';
+import { createLlmClient } from '../../../shared/llm/llmClientFactory';
+import { PrismaDieticianConversationRepository } from '../../dietician/adapters/repository/PrismaDieticianConversationRepository';
+import { TieredLlmDieticianAdapter } from '../../dietician/adapters/llm/TieredLlmDieticianAdapter';
+import { AssistantTranscripts } from '../../dietician/use-cases/AssistantTranscripts';
+import { PreviewAssistantReply } from '../../dietician/use-cases/PreviewAssistantReply';
+import { DieticianPreviewAdapter } from '../adapters/assistant/DieticianPreviewAdapter';
+import { DieticianTranscriptAdapter } from '../adapters/assistant/DieticianTranscriptAdapter';
 import { ActivateDietitian } from '../use-cases/ActivateDietitian';
+import { AiAssistantSettings } from '../use-cases/AiAssistantSettings';
+import { ClientAiAssistant } from '../use-cases/ClientAiAssistant';
 import { AlertRuleSettings } from '../use-cases/AlertRuleSettings';
 import { GetClientAnalytics } from '../use-cases/GetClientAnalytics';
 // from '../use-cases/ActivateDietitian';
@@ -25,19 +34,26 @@ import { RotateInviteKey } from '../use-cases/RotateInviteKey';
 import { SetClientPlan } from '../use-cases/SetClientPlan';
 import { UpdateConsent } from '../use-cases/UpdateConsent';
 import { UpdateDietitianProfile } from '../use-cases/UpdateDietitianProfile';
+import { AiAssistantController } from './AiAssistantController';
 import { PracticeController } from './PracticeController';
 import {
+  aiAssistantRepository,
   buildClientDataAdapter,
   buildInsightsService,
   linkThreads,
   managedClientCache,
   practiceRepository,
+  resolveAiAssistant,
   resolveInviteCodeSecret,
 } from './practiceWiring';
 
 // Invite codes carry a 32-bit MAC — safe only because guessing is throttled hard.
 const CODE_ATTEMPT_LIMIT = 10;
 const CODE_ATTEMPT_WINDOW_SECONDS = 15 * 60;
+
+// The assistant preview runs the prime model; generous for trying things out, capped against abuse.
+const AI_PREVIEW_LIMIT = 30;
+const AI_PREVIEW_WINDOW_SECONDS = 60 * 60;
 
 /** Mounted at /practice. */
 export function practiceRoutes(): Router {
@@ -52,14 +68,14 @@ export function practiceRoutes(): Router {
 
   const controller = new PracticeController(
     {
-      getPracticeMe: new GetPracticeMe(repository, threads),
+      getPracticeMe: new GetPracticeMe(repository, threads, resolveAiAssistant),
       activateDietitian: new ActivateDietitian(repository),
       updateDietitianProfile: new UpdateDietitianProfile(repository),
       createInviteCode: new CreateInviteCode(repository, secret, env.INVITE_CODE_DEFAULT_VALIDITY_DAYS),
       rotateInviteKey: new RotateInviteKey(repository),
       previewInvite: new PreviewInvite(repository, secret),
       joinDietitian: new JoinDietitian(repository, threads, managedClientCache, secret),
-      getMyLink: new GetMyLink(repository, threads),
+      getMyLink: new GetMyLink(repository, threads, resolveAiAssistant),
       updateConsent: new UpdateConsent(repository),
       endLink: new EndLink(repository, policy, clientData, threads, managedClientCache),
       getMyAccessLog: new GetMyAccessLog(repository),
@@ -76,6 +92,22 @@ export function practiceRoutes(): Router {
     (key) => checkRateLimit(key, CODE_ATTEMPT_LIMIT, CODE_ATTEMPT_WINDOW_SECONDS),
   );
 
+  // The dietitian's AI assistant — reads the AI coach's chats and previews
+  // through the dietician module's public use-cases.
+  const transcripts = new DieticianTranscriptAdapter(
+    new AssistantTranscripts(new PrismaDieticianConversationRepository(prisma)),
+  );
+  const aiController = new AiAssistantController(
+    new AiAssistantSettings(
+      repository,
+      aiAssistantRepository,
+      transcripts,
+      new DieticianPreviewAdapter(new PreviewAssistantReply(new TieredLlmDieticianAdapter(createLlmClient()))),
+    ),
+    new ClientAiAssistant(aiAssistantRepository, transcripts, policy),
+    (key) => checkRateLimit(key, AI_PREVIEW_LIMIT, AI_PREVIEW_WINDOW_SECONDS),
+  );
+
   router.use(authMiddleware);
 
   router.get('/me', controller.handleGetMe);
@@ -88,6 +120,15 @@ export function practiceRoutes(): Router {
   router.get('/organizations/:organizationId/members', controller.handleListMembers);
   router.get('/alert-rules', controller.handleListAlertRules);
   router.put('/alert-rules', controller.handleUpdateAlertRules);
+
+  // dietitian AI assistant
+  router.get('/ai/settings', aiController.handleGetSettings);
+  router.put('/ai/settings', aiController.handleUpdateSettings);
+  router.post('/ai/preview', aiController.handlePreview);
+  router.get('/ai/examples', aiController.handleListExamples);
+  router.post('/ai/examples', aiController.handleCreateExample);
+  router.patch('/ai/examples/:exampleId', aiController.handleUpdateExample);
+  router.delete('/ai/examples/:exampleId', aiController.handleDeleteExample);
 
   // client side
   router.post('/invites/preview', controller.handlePreviewInvite);
@@ -112,6 +153,10 @@ export function practiceRoutes(): Router {
   router.post('/clients/:clientId/notes', controller.handleCreateNote);
   router.patch('/clients/:clientId/notes/:noteId', controller.handleUpdateNote);
   router.delete('/clients/:clientId/notes/:noteId', controller.handleDeleteNote);
+  router.get('/clients/:clientId/ai', aiController.handleGetClientAi);
+  router.put('/clients/:clientId/ai', aiController.handleUpdateClientAi);
+  router.get('/clients/:clientId/ai/conversations', aiController.handleListClientAiConversations);
+  router.get('/clients/:clientId/ai/conversations/:conversationId', aiController.handleGetClientAiConversation);
 
   return router;
 }

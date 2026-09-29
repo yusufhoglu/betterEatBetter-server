@@ -9,6 +9,8 @@ import {
   type DieticianLane,
   type DieticianTurnTimings,
 } from '../observability/dieticianTurnMetrics';
+import { buildAssistantPersonaBlock } from '../domain/assistantPersonaBlock';
+import { coachUnavailableError } from '../domain/coachAccessErrors';
 import { buildDieticianContextBlock } from '../domain/dieticianContext';
 import type { DieticianConversation } from '../domain/DieticianConversation';
 import { forcedCardToolForIntent, needsAssistedLane, type DieticianIntent } from '../domain/DieticianIntent';
@@ -24,6 +26,7 @@ import {
   DIETICIAN_ADVICE_GUARD,
   DIETICIAN_SMALLTALK_GUARD,
 } from '../dieticianSystemPrompt';
+import type { CoachAccessPort } from '../ports/CoachAccessPort';
 import type { DailySnapshotPort } from '../ports/DailySnapshotPort';
 import type { DieticianConversationRepositoryPort } from '../ports/DieticianConversationRepositoryPort';
 import type { LlmDieticianPort } from '../ports/LlmDieticianPort';
@@ -80,6 +83,10 @@ function toLlmMessage(message: DieticianMessage): LlmMessage {
  *   classify (cheap) → [smalltalk: cheap stream]
  *                    ↘ [assisted: gather (cheap tool loop) → synthesize (prime stream)]
  *   → post-turn: refresh the rolling digest every N turns (cheap, guarded)
+ *
+ * For a dietitian's client the turn runs as that dietitian's AI assistant: the
+ * persona block joins the context, and every message of the turn is stamped
+ * with the dietitian's id so they can review it.
  */
 export class RunDieticianTurn {
   constructor(
@@ -91,6 +98,7 @@ export class RunDieticianTurn {
     private readonly maxGatherTurns: number,
     private readonly digestEveryNTurns: number,
     private readonly maxContextMessages: number,
+    private readonly coachAccess: CoachAccessPort,
   ) {}
 
   async *execute(input: RunDieticianTurnInput): AsyncIterable<DieticianStreamChunk> {
@@ -110,12 +118,23 @@ export class RunDieticianTurn {
     };
 
     try {
+      // Re-checked here, not only in the route guard: the assistant may have been
+      // switched off (or its hours ended) since, and a dietitian's client must
+      // never fall through to the generic coach. A lookup failure fails the turn.
+      const access = await this.coachAccess.personaForTurn(input.userId, input.content);
+      if (access.kind === 'unavailable') {
+        throw coachUnavailableError(access.reason);
+      }
+      const persona = access.kind === 'assistant' ? access.persona : null;
+      const stamp = persona?.dietitianId ?? null;
+
       const conversation = await this.conversationRepository.findOrCreate(input.userId, input.conversationId);
       const userMessage = await this.conversationRepository.appendMessage(
         input.conversationId,
         'user',
         input.content,
         'live',
+        stamp,
       );
 
       const history = trimHistory(
@@ -142,9 +161,11 @@ export class RunDieticianTurn {
       lane = needsAssistedLane(intent) ? 'assisted' : 'smalltalk';
 
       const contextBlock = buildDieticianContextBlock({ plan, snapshot, digest: conversation.digest });
-      const baseMessages: LlmMessage[] = contextBlock
-        ? [{ role: 'system', content: contextBlock }, ...history]
-        : history;
+      const baseMessages: LlmMessage[] = [
+        ...(persona ? [{ role: 'system' as const, content: buildAssistantPersonaBlock(persona) }] : []),
+        ...(contextBlock ? [{ role: 'system' as const, content: contextBlock }] : []),
+        ...history,
+      ];
 
       const sink: TextSink = { text: '' };
 
@@ -156,7 +177,7 @@ export class RunDieticianTurn {
         streamFn = (messages) => this.llm.streamSmalltalk(messages);
       } else {
         const gatherStartedAt = performance.now();
-        const gatherIterator = this.gatherContext(input, baseMessages, intent);
+        const gatherIterator = this.gatherContext(input, baseMessages, intent, stamp);
         let gatherStep = await gatherIterator.next();
         while (!gatherStep.done) {
           noteFirstChunk();
@@ -173,7 +194,7 @@ export class RunDieticianTurn {
       }
 
       const streamStartedAt = performance.now();
-      for await (const chunk of this.streamAndPersist(input.conversationId, synthesisMessages, streamFn, sink)) {
+      for await (const chunk of this.streamAndPersist(input.conversationId, synthesisMessages, streamFn, sink, stamp)) {
         noteFirstChunk();
         yield chunk;
       }
@@ -210,6 +231,7 @@ export class RunDieticianTurn {
     input: RunDieticianTurnInput,
     baseMessages: LlmMessage[],
     intent: DieticianIntent,
+    stamp: string | null,
   ): AsyncGenerator<DieticianStreamChunk, GatherOutcome, undefined> {
     // propose_meal_log is armed only on log_help; rating/recipe cards (and plain tools) stay armed everywhere.
     const allowProposal = intent === 'log_help';
@@ -266,7 +288,7 @@ export class RunDieticianTurn {
               : tool.yieldsCard === 'rating'
                 ? encodeRatingMessage(output as MealRating)
                 : encodeRecipeMessage(output as Recipe);
-          await this.conversationRepository.appendMessage(input.conversationId, 'assistant', encoded, 'live');
+          await this.conversationRepository.appendMessage(input.conversationId, 'assistant', encoded, 'live', stamp);
           yield { type: tool.yieldsCard, [tool.yieldsCard]: output } as DieticianStreamChunk;
         }
 
@@ -291,6 +313,7 @@ export class RunDieticianTurn {
     messages: LlmMessage[],
     streamFn: (messages: LlmMessage[]) => AsyncIterable<string>,
     sink: TextSink,
+    stamp: string | null,
   ): AsyncIterable<DieticianStreamChunk> {
     try {
       for await (const chunk of streamFn(messages)) {
@@ -302,7 +325,7 @@ export class RunDieticianTurn {
       throw new IntegrationError('STREAM_INTERRUPTED', 'The response stream was interrupted before completion', false);
     }
 
-    await this.conversationRepository.appendMessage(conversationId, 'assistant', sink.text, 'live');
+    await this.conversationRepository.appendMessage(conversationId, 'assistant', sink.text, 'live', stamp);
   }
 
   /** A digest failure is logged and swallowed — it must never fail the user's turn. */

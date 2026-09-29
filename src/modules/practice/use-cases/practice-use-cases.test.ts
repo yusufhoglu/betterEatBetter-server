@@ -6,6 +6,7 @@ import { encodeInviteCode } from '../domain/inviteCode';
 import type { ConsentScope } from '../domain/practiceTypes';
 import { FakeClientData } from '../test-utils/fakes/FakeClientData';
 import { FakeLinkThreads } from '../test-utils/fakes/FakeLinkThreads';
+import { InMemoryAiAssistantRepository } from '../test-utils/fakes/InMemoryAiAssistantRepository';
 import { InMemoryManagedClientCache } from '../test-utils/fakes/InMemoryManagedClientCache';
 import { InMemoryPracticeRepository } from '../test-utils/fakes/InMemoryPracticeRepository';
 import { ActivateDietitian } from './ActivateDietitian';
@@ -20,6 +21,7 @@ import { IsManagedClient } from './IsManagedClient';
 import { JoinDietitian } from './JoinDietitian';
 import { ListClients } from './ListClients';
 import { PreviewInvite } from './PreviewInvite';
+import { ResolveAiAssistant } from './ResolveAiAssistant';
 import { ReadClientData } from './ReadClientData';
 import { ReassignClient } from './ReassignClient';
 import { RotateInviteKey } from './RotateInviteKey';
@@ -331,7 +333,8 @@ describe('plan, notes, reassignment and ending', () => {
     expect(clientData.released).toEqual(['client']);
     expect(threads.threads.get(link.id)?.readOnly).toBe(true);
     expect(await isManaged.execute('client')).toBe(false);
-    expect((await new GetPracticeMe(repository, threads).execute('client')).link).toBeNull();
+    const ai = new ResolveAiAssistant(repository, new InMemoryAiAssistantRepository(), isManaged, clock);
+    expect((await new GetPracticeMe(repository, threads, ai).execute('client')).link).toBeNull();
   });
 
   it('a stranger cannot end somebody else’s link', async () => {

@@ -198,6 +198,9 @@ model ChatMessage {
 
 ## 6. AI Koç Guard'ı
 
+> **Güncellendi (2026-09-29):** Diyetisyen artık AI koçu kendi danışanlarına **kendi AI asistanı** olarak açabilir — bkz. §13.
+> Aşağıdaki kilit varsayılan davranış olarak geçerli (asistan kapalıyken).
+
 - `dietician` modülüne `ManagedClientPort.isManagedClient(userId)` eklenir; adapter `practice`'in public use-case'ini çağırır (Redis cache, kısa TTL).
 - Aktif link varsa tüm `/dietician/*` endpoint'leri `403` + code `AI_COACH_UNAVAILABLE_MANAGED_CLIENT`.
 - `DieticianNudgeJob` bu kullanıcıları atlar.
@@ -276,3 +279,26 @@ Kodlama sırasında tasarımdan bilinçli sapmalar:
 - ~~Web paneli ayrı repo mu?~~ → Ayrı private repo `dietician-web-panel`.
 - ~~Klinik admin veriyi görür mü?~~ → Görmez.
 - ~~Davet kodu süresi?~~ → Varsayılan 7 gün (`INVITE_CODE_DEFAULT_VALIDITY_DAYS`), çok kullanımlık, anahtar yenilenerek iptal.
+
+## 13. Diyetisyenin AI Asistanı (2026-09-29)
+
+**Karar:** Diyetisyen AI koçun danışanlarına *kendi üslubuyla* cevap vermesini ayarlar ve istediği zaman açar/kapatır.
+Model **fine-tune edilmez** — maliyet, veri miktarı, anında güncelleme ve KVKK silme kolaylığı için her turda prompt bağlamı:
+
+1. **Persona & kurallar** (`DietitianAiSettings`): asistan adı, sen/siz, üslup, beslenme yaklaşımı, "her zaman" / "asla" listeleri, yönlendirme mesajı.
+2. **Danışana özel talimat** (`ClientAiSetting.instructions`) — danışan görmez.
+3. **Örnek cevaplar** (`DietitianAiExample`) — soruya en benzeyen 5 örnek her turda eklenir.
+4. **Mevcut bağlam** — plan, bugünkü özet, digest (değişmedi).
+
+**Erişim:** ana anahtar + danışan varsayılanı + danışan bazında override + haftalık saat aralıkları (`schedule`).
+Danışan mevcut AI koç ekranını kullanır; başlıkta asistanın adı yazar. Kapalıyken eski davranış (403).
+
+**Eğitim döngüsü:** danışan `ai_chat` kapsamını paylaşırsa diyetisyen panelde AI sohbetlerini okur, beğenmediği cevabı
+düzeltir → düzeltme örnek cevap olur (`source: 'correction'`) → sonraki cevaplar ona benzer. Okumalar erişim loguna yazılır.
+Diyetisyen yalnızca kendi asistanının bu ilişki boyunca verdiği cevapları görür (mesajlar `dietitianId` ile damgalı).
+
+**Güvenlik:** genel güvenlik kuralları (yeme bozukluğu, gebelik, kronik hastalık, <1200 kcal) persona'nın üstündedir;
+asistan kendini diyetisyen olarak tanıtmaz, plan hedeflerini değiştirmeyi önermez.
+
+**Açık konular:** ücretsiz kullanıcı günlük AI kotası (`FREE_DAILY_DIETICIAN_LIMIT`) diyetisyen danışanlarına da uygulanıyor —
+ödeme modeliyle birlikte karar verilecek. Örnek sayısı büyürse kelime eşleşmesi yerine pgvector.

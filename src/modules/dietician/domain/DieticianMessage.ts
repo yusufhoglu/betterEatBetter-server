@@ -17,6 +17,8 @@ export interface DieticianMessage {
   role: DieticianMessageRole;
   content: string;
   origin: DieticianMessageOrigin;
+  /** Set when a dietitian's AI assistant handled the turn (their clients' chats). */
+  dietitianId?: string | null;
   proposal?: MealLogProposal;
   rating?: MealRating;
   recipe?: Recipe;

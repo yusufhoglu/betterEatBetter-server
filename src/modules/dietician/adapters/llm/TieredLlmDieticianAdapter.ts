@@ -100,6 +100,17 @@ export class TieredLlmDieticianAdapter implements LlmDieticianPort {
     });
   }
 
+  async previewReply(messages: LlmMessage[]): Promise<string> {
+    const response = await this.llmClient.complete({
+      system: DIETICIAN_PERSONA,
+      messages,
+      model: this.primeModel,
+      reasoningEffort: ADVICE_REASONING_EFFORT,
+      feature: 'dietician:assistant_preview',
+    });
+    return response.message.content;
+  }
+
   async summarizeConversation(input: SummarizeConversationInput): Promise<ConversationDigest> {
     const transcript = input.recentMessages
       .map((message) => `${message.role}: ${message.content}`)

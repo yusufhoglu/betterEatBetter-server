@@ -155,6 +155,54 @@ describe('dietitian platform smoke', () => {
     expect(coach.status).toBe(403);
     expect(coach.body.code).toBe('AI_COACH_UNAVAILABLE_MANAGED_CLIENT');
 
+    // …until the dietitian opens their AI assistant
+    const aiDefaults = await request(app).get('/practice/ai/settings').set('Authorization', dietitian.auth);
+    expect(aiDefaults.body).toMatchObject({ enabled: false, exampleCount: 0 });
+    const aiSaved = await request(app)
+      .put('/practice/ai/settings')
+      .set('Authorization', dietitian.auth)
+      .send({
+        enabled: true,
+        defaultClientAccess: true,
+        assistantName: null,
+        addressForm: 'siz',
+        tone: 'Sıcak ve kısa.',
+        approach: null,
+        rules: ['Her cevapta bir öneri ver.'],
+        avoid: [],
+        handoffMessage: null,
+        schedule: null,
+      });
+    expect(aiSaved.status).toBe(200);
+    expect(aiSaved.body).toMatchObject({ enabled: true, availableNow: true, displayName: 'Dyt. Ayşe Yılmaz · AI asistan' });
+    const example = await request(app)
+      .post('/practice/ai/examples')
+      .set('Authorization', dietitian.auth)
+      .send({ question: 'Akşam meyve yiyebilir miyim?', answer: 'Evet, bir porsiyon olur.' });
+    expect(example.status).toBe(201);
+    expect(example.body.source).toBe('manual');
+
+    const coachOpen = await request(app).get('/dietician/conversations').set('Authorization', client.auth);
+    expect(coachOpen.status).toBe(200);
+    const myLink = await request(app).get('/practice/me/link').set('Authorization', client.auth);
+    expect(myLink.body.aiAssistant).toMatchObject({ enabled: true, availableNow: true });
+
+    const clientAi = await request(app)
+      .put(`/practice/clients/${client.id}/ai`)
+      .set('Authorization', dietitian.auth)
+      .send({ access: 'off', instructions: 'Laktoz intoleransı var.' });
+    expect(clientAi.body).toMatchObject({ access: 'off', enabled: false });
+    const coachOff = await request(app).get('/dietician/conversations').set('Authorization', client.auth);
+    expect(coachOff.body.code).toBe('AI_COACH_UNAVAILABLE_MANAGED_CLIENT');
+    await request(app)
+      .put(`/practice/clients/${client.id}/ai`)
+      .set('Authorization', dietitian.auth)
+      .send({ access: null, instructions: 'Laktoz intoleransı var.' });
+
+    // reviewing the client's AI chats needs their ai_chat consent
+    const aiChats = await request(app).get(`/practice/clients/${client.id}/ai/conversations`).set('Authorization', dietitian.auth);
+    expect(aiChats.body.code).toBe('CONSENT_SCOPE_DISABLED');
+
     // 3. roster & data access
     const roster = await request(app).get('/practice/clients?timeZone=UTC').set('Authorization', dietitian.auth);
     expect(roster.status).toBe(200);

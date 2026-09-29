@@ -54,6 +54,8 @@ model User {
   sentChatMessages       ChatMessage[]
   stepLogs               StepLog[]
   alertRuleSettings      AlertRuleSetting[]
+  aiAssistantSettings    DietitianAiSettings?
+  aiExamples             DietitianAiExample[]
 
   @@map("users")
 }
@@ -442,9 +444,13 @@ model DieticianMessage {
   role           String // 'system'|'user'|'assistant'|'tool'
   content        String
   origin         String                @default("live") // 'live' | 'proactive'
+  // Set when the turn ran as a human dietitian's AI assistant (practice module).
+  // The dietitian reviews only the messages stamped with their own id.
+  dietitianId    String?
   createdAt      DateTime              @default(now())
 
   @@index([conversationId, createdAt])
+  @@index([dietitianId, createdAt])
   @@map("dietician_messages")
 }
 
@@ -604,6 +610,7 @@ model DietitianClientLink {
   endedBy          String?
   notes            DietitianNote[]
   insight          ClientInsight?
+  aiSetting        ClientAiSetting?
 
   @@index([dietitianId, status])
   @@index([organizationId, status])
@@ -766,4 +773,57 @@ model AdminAuditLog {
   @@index([createdAt])
   @@index([targetId])
   @@map("admin_audit_logs")
+}
+
+// practice module: a dietitian's AI assistant — the AI coach speaking to their
+// clients in the dietitian's voice. Persona + rules are prompt context, not a fine-tune.
+model DietitianAiSettings {
+  dietitianId          String   @id
+  dietitian            User     @relation(fields: [dietitianId], references: [id], onDelete: Cascade)
+  // Master switch. Off → none of the dietitian's clients get the AI.
+  enabled              Boolean  @default(false)
+  // Clients without their own override get this.
+  defaultClientAccess  Boolean  @default(true)
+  assistantName        String?
+  addressForm          String? // 'sen' | 'siz'
+  tone                 String?
+  approach             String?
+  rules                String[] @default([])
+  avoid                String[] @default([])
+  handoffMessage       String?
+  // null → always on; else { timeZone, windows: [{ days: number[], start: "HH:MM", end: "HH:MM" }] }
+  schedule             Json?
+  updatedAt            DateTime @updatedAt
+
+  @@map("dietitian_ai_settings")
+}
+
+// A question/answer pair showing the AI how the dietitian answers. 'correction'
+// = the dietitian rewrote a real AI reply while reviewing a client's chat.
+model DietitianAiExample {
+  id              String   @id @default(uuid())
+  dietitianId     String
+  dietitian       User     @relation(fields: [dietitianId], references: [id], onDelete: Cascade)
+  question        String
+  answer          String
+  source          String   @default("manual") // 'manual' | 'correction'
+  sourceMessageId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([dietitianId, createdAt])
+  @@index([sourceMessageId])
+  @@map("dietitian_ai_examples")
+}
+
+// Per-client AI override + private instructions. Kept off DietitianClientLink so
+// it can never leak into the link payload the client reads.
+model ClientAiSetting {
+  linkId       String              @id
+  link         DietitianClientLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  access       String? // 'on' | 'off' | null (dietitian default)
+  instructions String?
+  updatedAt    DateTime            @updatedAt
+
+  @@map("client_ai_settings")
 }
