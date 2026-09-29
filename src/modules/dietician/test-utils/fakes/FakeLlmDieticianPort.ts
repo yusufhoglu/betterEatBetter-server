@@ -1,3 +1,4 @@
+import type { DietitianPersona } from '../../ports/CoachAccessPort';
 import type { LlmMessage, LlmToolDefinition } from '../../../../shared/llm/types';
 import type { ConversationDigest } from '../../domain/ConversationDigest';
 import type { DieticianIntent } from '../../domain/DieticianIntent';
@@ -68,31 +69,44 @@ export class FakeLlmDieticianPort implements LlmDieticianPort {
     return this.intent;
   }
 
+  /** The persona each stage was called with (null = generic coach). */
+  readonly personas: { gather: Array<DietitianPersona | null>; advice: Array<DietitianPersona | null>; smalltalk: Array<DietitianPersona | null> } = {
+    gather: [],
+    advice: [],
+    smalltalk: [],
+  };
+
   async runContextGathering(
     messages: LlmMessage[],
     tools: LlmToolDefinition[],
     forceToolChoice?: { toolName: string },
+    persona?: DietitianPersona | null,
   ): Promise<DieticianTurnResult> {
     this.gatherCalls.push({ messages, tools, forceToolChoice });
+    this.personas.gather.push(persona ?? null);
     const index = Math.min(this.gatherCalls.length - 1, this.gatherResults.length - 1);
     return this.gatherResults[index]!;
   }
 
-  async *streamAdvice(messages: LlmMessage[]): AsyncIterable<string> {
+  async *streamAdvice(messages: LlmMessage[], persona?: DietitianPersona | null): AsyncIterable<string> {
     this.adviceCalls.push(messages);
+    this.personas.advice.push(persona ?? null);
     yield* this.emit(this.adviceChunks);
   }
 
-  async *streamSmalltalk(messages: LlmMessage[]): AsyncIterable<string> {
+  async *streamSmalltalk(messages: LlmMessage[], persona?: DietitianPersona | null): AsyncIterable<string> {
     this.smalltalkCalls.push(messages);
+    this.personas.smalltalk.push(persona ?? null);
     yield* this.emit(this.smalltalkChunks);
   }
 
   readonly previewCalls: LlmMessage[][] = [];
+  readonly previewPersonas: DietitianPersona[] = [];
   previewText = 'preview reply';
 
-  async previewReply(messages: LlmMessage[]): Promise<string> {
+  async previewReply(messages: LlmMessage[], persona: DietitianPersona): Promise<string> {
     this.previewCalls.push(messages);
+    this.previewPersonas.push(persona);
     return this.previewText;
   }
 

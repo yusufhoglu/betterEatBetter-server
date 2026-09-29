@@ -50,8 +50,17 @@
   da gecer. `disabled` her ikisinde 403 `AI_COACH_UNAVAILABLE_MANAGED_CLIENT`; `off_hours` → `DIETITIAN_AI_OFF_HOURS`.
 - `RunDieticianTurn` persona'yi TURUN BASINDA tekrar cozer (guard'dan sonra kapanmis olabilir); `unavailable` → hicbir sey
   yazmadan ayni 403. Lookup hatasi turu DUSURUR (genel koca dusmek diyetisyenin kontrolunu deler).
-- Persona blogu (`domain/assistantPersonaBlock.ts`) context blogundan ONCE `system` mesaji olarak gather / advice /
-  smalltalk'in hepsine girer. `DIETICIAN_PERSONA`'daki guvenlik kurallari persona'nin USTUNDE kalir (blok bunu soyler).
+- Persona varken GENEL KOC PROMPT'U (`DIETICIAN_PERSONA` / `DIETICIAN_GATHER_SYSTEM_PROMPT` / `DIETICIAN_ADVICE_GUARD`)
+  KULLANILMAZ — "yemek/porsiyon oner", "tarif teklif et" satirlari diyetisyenin yasaklariyla celisiyor ve kucuk modeller
+  sistem prompt'unun tarafini tutuyor. Adapter persona'ya gore `assistantSystemPrompt` / `assistantGatherSystemPrompt`
+  (`domain/assistantPersonaBlock.ts`) kurar; oncelik sirasi: kimlik → guvenlik → DIYETISYEN KURALLARI (mutlak) → uslup /
+  yaklasim / danisan talimati → notr cevap kurallari → yonlendirme → ornekler. Guvenlik satirlari (`COACH_SAFETY_RULES`)
+  ikisinde ORTAK — tek kaynak.
+- Cevaptan hemen once SON mesaj `assistantRulesReminder` (kurallar + yonlendirme tekrar). Advice guard'i persona'da
+  `assistantAdviceGuard` ("kalori butcesine bagla" itmesi yok).
+- Persona varken kart araci ASLA zorlanmaz (`forceToolChoice` yok) — zorlamak kurali kodda deler. Model, kurallar
+  prompt'un basindayken karar verir.
+- Onizleme (`PreviewAssistantReply`) ayni system prompt + ayni son hatirlatmayi kullanir; farki sadece veri/tool yok.
 - Turdaki HER mesaj (user, kartlar, cevap) `dietitianId` ile damgalanir — diyetisyen incelemesi sadece bunlari gorur.
 - `AssistantTranscripts` / `PreviewAssistantReply`: `practice` icin public use-case'ler. Onizleme `previewReply`
   (prime, tool yok, feature `dietician:assistant_preview`).

@@ -4,6 +4,9 @@ import type {
   LlmCompleteResponse,
   LlmStreamCompleteRequest,
 } from '../../../../shared/llm/types';
+import { assistantGatherSystemPrompt, assistantSystemPrompt } from '../../domain/assistantPersonaBlock';
+import { DIETICIAN_GATHER_SYSTEM_PROMPT, DIETICIAN_PERSONA } from '../../dieticianSystemPrompt';
+import type { DietitianPersona } from '../../ports/CoachAccessPort';
 import { TieredLlmDieticianAdapter } from './TieredLlmDieticianAdapter';
 
 class FakeLlmClient implements LlmClient {
@@ -129,5 +132,53 @@ describe('TieredLlmDieticianAdapter', () => {
 
     expect(digest).toEqual({ goalsRecap: 'g', adviceGivenRecap: 'a', openThreads: 'o', learnedPreferences: 'p' });
     expect(client.completeRequests[0]).toMatchObject({ model: 'cheap-model', feature: 'dietician:digest' });
+  });
+
+  describe("a dietitian's assistant", () => {
+    const persona: DietitianPersona = {
+      dietitianId: 'dyt-1',
+      dietitianName: 'Ayşe',
+      assistantName: 'Ayşe · AI asistan',
+      addressForm: null,
+      tone: null,
+      approach: null,
+      rules: [],
+      avoid: ['Asla yemek tarifi verme.'],
+      handoffMessage: null,
+      clientInstructions: null,
+      examples: [],
+    };
+
+    async function drain(stream: AsyncIterable<string>): Promise<void> {
+      for await (const _ of stream) {
+        // consume
+      }
+    }
+
+    it('replaces the generic coach system prompt on every stage — never both', async () => {
+      const { client, adapter } = build();
+
+      await adapter.runContextGathering([{ role: 'user', content: 'x' }], [], undefined, persona);
+      await drain(adapter.streamAdvice([{ role: 'user', content: 'x' }], persona));
+      await drain(adapter.streamSmalltalk([{ role: 'user', content: 'x' }], persona));
+      await adapter.previewReply([{ role: 'user', content: 'x' }], persona);
+
+      expect(client.completeRequests[0]!.system).toBe(assistantGatherSystemPrompt(persona));
+      expect(client.streamRequests.map((r) => r.system)).toEqual([assistantSystemPrompt(persona), assistantSystemPrompt(persona)]);
+      expect(client.completeRequests[1]).toMatchObject({ system: assistantSystemPrompt(persona), model: 'prime-model', feature: 'dietician:assistant_preview' });
+      for (const request of [...client.completeRequests, ...client.streamRequests]) {
+        expect(request.system).not.toContain(DIETICIAN_PERSONA);
+      }
+    });
+
+    it('without a persona the generic coach prompts are used unchanged', async () => {
+      const { client, adapter } = build();
+
+      await adapter.runContextGathering([{ role: 'user', content: 'x' }], []);
+      await drain(adapter.streamAdvice([{ role: 'user', content: 'x' }], null));
+
+      expect(client.completeRequests[0]!.system).toBe(DIETICIAN_GATHER_SYSTEM_PROMPT);
+      expect(client.streamRequests[0]!.system).toBe(DIETICIAN_PERSONA);
+    });
   });
 });

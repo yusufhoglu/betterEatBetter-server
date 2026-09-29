@@ -452,7 +452,7 @@ describe('RunDieticianTurn', () => {
   });
 
   describe("as a dietitian's AI assistant", () => {
-    it('injects the persona block ahead of the context and stamps every message with the dietitian', async () => {
+    it('hands every stage the persona, keeps only the context in messages, and stamps every message', async () => {
       const proposeTool = new FakeProposeTool(fakeProposal);
       const { llm, runTurn, repository, coachAccess } = build({
         tools: [proposeTool],
@@ -468,13 +468,13 @@ describe('RunDieticianTurn', () => {
       await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'Yoğurt yedim', today: TODAY }));
 
       expect(coachAccess.turnMessages).toEqual(['Yoğurt yedim']);
-      for (const messages of [llm.gatherCalls[0]!.messages, llm.adviceCalls[0]!]) {
-        const systems = messages.filter((m: LlmMessage) => m.role === 'system').map((m) => m.content);
-        expect(systems[0]).toContain('AI assistant of dietitian Ayşe Yılmaz');
-        expect(systems[0]).toContain('Laktoz intoleransı var.');
-        expect(systems[0]).toContain('Q: Akşam meyve yiyebilir miyim?');
-        expect(systems[1]).toContain('User plan:');
-      }
+      // The persona reaches the adapter, which builds the rules-first system prompt from it.
+      expect(llm.personas.gather.every((p) => p === PERSONA)).toBe(true);
+      expect(llm.personas.advice).toEqual([PERSONA]);
+      // No second persona copy competing in the messages: the first system message is the context.
+      const gatherSystems = llm.gatherCalls[0]!.messages.filter((m: LlmMessage) => m.role === 'system');
+      expect(gatherSystems[0]!.content).toContain('User plan:');
+      expect(gatherSystems.some((m) => m.content.includes('AI assistant of dietitian'))).toBe(false);
 
       const conversation = await repository.findById('user-1', 'c1');
       expect(conversation?.messages.map((m) => [m.role, m.dietitianId])).toEqual([
@@ -484,15 +484,46 @@ describe('RunDieticianTurn', () => {
       ]);
     });
 
-    it('smalltalk also answers in the persona', async () => {
+    it("ends the advice with the assistant guard and then the dietitian's rules — nothing after them", async () => {
+      const { llm, runTurn } = build({ coachTurn: { kind: 'assistant', persona: PERSONA } });
+      llm.setIntent('advice');
+      llm.setGatherResults([{ content: '' }]);
+
+      await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'Canım tatlı çekiyor', today: TODAY }));
+
+      const advice = llm.adviceCalls[0]!;
+      const [guard, reminder] = advice.slice(-2);
+      expect(guard!.content).toContain("within Ayşe Yılmaz's rules");
+      expect(guard!.content).not.toContain('Tie the answer to their remaining calorie/macro budget');
+      expect(reminder!.content).toContain('Final check before you answer');
+      expect(reminder!.content).toContain('Never: Takviye önerme.');
+    });
+
+    it('never forces the recipe card for the assistant, even on a recipe request', async () => {
+      const recipeTool = new FakeRecipeTool(fakeRecipe);
+      const { llm, runTurn } = build({
+        tools: [new FakeDataTool(), recipeTool],
+        maxGatherTurns: 2,
+        coachTurn: { kind: 'assistant', persona: PERSONA },
+      });
+      llm.setIntent('recipe');
+      llm.setGatherResults([{ content: '' }]);
+
+      await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'Bana tatlı tarifi ver', today: TODAY }));
+
+      expect(llm.gatherCalls.every((call) => call.forceToolChoice === undefined)).toBe(true);
+      expect(recipeTool.calls).toHaveLength(0);
+    });
+
+    it('smalltalk also answers as the assistant, with the rules last', async () => {
       const { llm, runTurn } = build({ coachTurn: { kind: 'assistant', persona: PERSONA } });
       llm.setIntent('smalltalk');
       llm.setSmalltalkChunks(['Merhaba!']);
 
       await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'selam', today: TODAY }));
 
-      expect(llm.smalltalkCalls[0]![0]).toMatchObject({ role: 'system' });
-      expect(llm.smalltalkCalls[0]![0]!.content).toContain('siz');
+      expect(llm.personas.smalltalk).toEqual([PERSONA]);
+      expect(llm.smalltalkCalls[0]!.at(-1)!.content).toContain('Final check before you answer');
     });
 
     it('refuses the turn — and stores nothing — when the assistant is off or outside its hours', async () => {
@@ -509,15 +540,15 @@ describe('RunDieticianTurn', () => {
       }
     });
 
-    it('a regular user gets the plain coach: no persona block, no stamp', async () => {
+    it('a regular user gets the plain coach: no persona, no rules reminder, card forcing intact, no stamp', async () => {
       const { llm, runTurn, repository } = build();
       llm.setIntent('smalltalk');
       llm.setSmalltalkChunks(['Hi!']);
 
       await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'hi', today: TODAY }));
 
-      const systems = llm.smalltalkCalls[0]!.filter((m: LlmMessage) => m.role === 'system').map((m) => m.content);
-      expect(systems.some((content) => content.includes('AI assistant of dietitian'))).toBe(false);
+      expect(llm.personas.smalltalk).toEqual([null]);
+      expect(llm.smalltalkCalls[0]!.some((m) => m.content.includes('Final check before you answer'))).toBe(false);
       const conversation = await repository.findById('user-1', 'c1');
       expect(conversation?.messages.every((m) => m.dietitianId === null)).toBe(true);
     });

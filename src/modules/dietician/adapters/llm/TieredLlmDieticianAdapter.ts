@@ -2,6 +2,7 @@ import type { LlmClient } from '../../../../shared/llm/LlmClient';
 import { resolveModel } from '../../../../shared/llm/modelTiers';
 import { requestStructuredOutput } from '../../../../shared/llm/structuredOutput';
 import type { LlmMessage, LlmToolDefinition } from '../../../../shared/llm/types';
+import { assistantGatherSystemPrompt, assistantSystemPrompt } from '../../domain/assistantPersonaBlock';
 import { conversationDigestSchema, type ConversationDigest } from '../../domain/ConversationDigest';
 import { dieticianIntentSchema, type DieticianIntent } from '../../domain/DieticianIntent';
 import {
@@ -10,11 +11,17 @@ import {
   DIETICIAN_GATHER_SYSTEM_PROMPT,
   DIETICIAN_PERSONA,
 } from '../../dieticianSystemPrompt';
+import type { DietitianPersona } from '../../ports/CoachAccessPort';
 import type {
   DieticianTurnResult,
   LlmDieticianPort,
   SummarizeConversationInput,
 } from '../../ports/LlmDieticianPort';
+
+/** The generic coach, or a dietitian's own assistant — one system prompt, never both. */
+function coachSystem(persona: DietitianPersona | null | undefined): string {
+  return persona ? assistantSystemPrompt(persona) : DIETICIAN_PERSONA;
+}
 
 /**
  * Mechanical stages (classify / gather / digest / smalltalk) ask for the
@@ -63,9 +70,10 @@ export class TieredLlmDieticianAdapter implements LlmDieticianPort {
     messages: LlmMessage[],
     tools: LlmToolDefinition[],
     forceToolChoice?: { toolName: string },
+    persona?: DietitianPersona | null,
   ): Promise<DieticianTurnResult> {
     const response = await this.llmClient.complete({
-      system: DIETICIAN_GATHER_SYSTEM_PROMPT,
+      system: persona ? assistantGatherSystemPrompt(persona) : DIETICIAN_GATHER_SYSTEM_PROMPT,
       messages,
       tools,
       ...(forceToolChoice ? { forceToolChoice } : {}),
@@ -80,9 +88,9 @@ export class TieredLlmDieticianAdapter implements LlmDieticianPort {
     };
   }
 
-  streamAdvice(messages: LlmMessage[]): AsyncIterable<string> {
+  streamAdvice(messages: LlmMessage[], persona?: DietitianPersona | null): AsyncIterable<string> {
     return this.llmClient.streamComplete({
-      system: DIETICIAN_PERSONA,
+      system: coachSystem(persona),
       messages,
       model: this.primeModel,
       reasoningEffort: ADVICE_REASONING_EFFORT,
@@ -90,9 +98,9 @@ export class TieredLlmDieticianAdapter implements LlmDieticianPort {
     });
   }
 
-  streamSmalltalk(messages: LlmMessage[]): AsyncIterable<string> {
+  streamSmalltalk(messages: LlmMessage[], persona?: DietitianPersona | null): AsyncIterable<string> {
     return this.llmClient.streamComplete({
-      system: DIETICIAN_PERSONA,
+      system: coachSystem(persona),
       messages,
       model: this.cheapModel,
       reasoningEffort: MECHANICAL_REASONING_EFFORT,
@@ -100,9 +108,9 @@ export class TieredLlmDieticianAdapter implements LlmDieticianPort {
     });
   }
 
-  async previewReply(messages: LlmMessage[]): Promise<string> {
+  async previewReply(messages: LlmMessage[], persona: DietitianPersona): Promise<string> {
     const response = await this.llmClient.complete({
-      system: DIETICIAN_PERSONA,
+      system: assistantSystemPrompt(persona),
       messages,
       model: this.primeModel,
       reasoningEffort: ADVICE_REASONING_EFFORT,
