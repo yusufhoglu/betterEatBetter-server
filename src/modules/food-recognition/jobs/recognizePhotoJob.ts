@@ -60,7 +60,7 @@ export const recognizePhotoWorker = createWorker<RecognizePhotoJobPayload>(
 
     const photoUrl = await createPendingDownloadUrl(mealPhotoId);
 
-    const result = await estimator.estimate(photoUrl, locale);
+    const result = await estimator.estimate(photoUrl, locale, mealPhotoId);
     const needsUserAction = ConfidencePolicy.needsUserAction(result.status);
     const macros = summarizeMacros(result.items);
     const status = needsUserAction ? 'insufficient_data' : 'completed';

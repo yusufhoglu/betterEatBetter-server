@@ -72,14 +72,18 @@ export class RagHttpEstimator implements PhotoEstimatorPort {
     this.baseUrl = baseUrl;
   }
 
-  async estimate(photoUrl: string, locale: Locale): Promise<PhotoEstimateResult> {
+  async estimate(photoUrl: string, locale: Locale, idempotencyKey?: string): Promise<PhotoEstimateResult> {
     const traceId = getTraceId();
-    const requestId = traceId ?? randomUUID();
+    const requestId = idempotencyKey ?? traceId ?? randomUUID();
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-Internal-Api-Key': env.RAG_SERVICE_SECRET,
     };
+    if (idempotencyKey) {
+      // Retries (ours and the job queue's) reuse the paid result instead of re-running the pipeline.
+      headers['Idempotency-Key'] = idempotencyKey;
+    }
     if (traceId) {
       headers['x-trace-id'] = traceId;
     }

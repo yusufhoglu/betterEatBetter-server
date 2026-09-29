@@ -32,9 +32,9 @@ export class ResilientPhotoEstimator implements PhotoEstimatorPort {
     });
   }
 
-  async estimate(photoUrl: string, locale: Locale): Promise<PhotoEstimateResult> {
+  async estimate(photoUrl: string, locale: Locale, idempotencyKey?: string): Promise<PhotoEstimateResult> {
     try {
-      return await this.policy.execute(() => this.inner.estimate(photoUrl, locale));
+      return await this.policy.execute(() => this.inner.estimate(photoUrl, locale, idempotencyKey));
     } catch (err) {
       if (err instanceof IntegrationError) {
         throw err;
