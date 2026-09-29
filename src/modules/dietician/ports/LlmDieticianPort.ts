@@ -40,6 +40,12 @@ export interface LlmDieticianPort {
   /** Cheap tier. Streams a short reply for the smalltalk lane. */
   streamSmalltalk(messages: LlmMessage[]): AsyncIterable<string>;
 
+  /**
+   * Prime tier, non-streaming, no tools. A dietitian trying their AI assistant
+   * in the panel; `messages` already carry the persona block.
+   */
+  previewReply(messages: LlmMessage[]): Promise<string>;
+
   /** Cheap tier, structured output. Rebuilds the rolling digest. */
   summarizeConversation(input: SummarizeConversationInput): Promise<ConversationDigest>;
 }

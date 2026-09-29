@@ -88,6 +88,14 @@ export class FakeLlmDieticianPort implements LlmDieticianPort {
     yield* this.emit(this.smalltalkChunks);
   }
 
+  readonly previewCalls: LlmMessage[][] = [];
+  previewText = 'preview reply';
+
+  async previewReply(messages: LlmMessage[]): Promise<string> {
+    this.previewCalls.push(messages);
+    return this.previewText;
+  }
+
   async summarizeConversation(input: SummarizeConversationInput): Promise<ConversationDigest> {
     this.summarizeCalls.push(input);
     if (this.summarizeError) {

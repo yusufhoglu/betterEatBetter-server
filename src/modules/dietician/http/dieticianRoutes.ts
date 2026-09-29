@@ -43,10 +43,10 @@ import { DieticianMealDataTool } from '../use-cases/tools/DieticianMealDataTool'
 import { ProposeMealLogTool } from '../use-cases/tools/ProposeMealLogTool';
 import { ProvideRecipeTool } from '../use-cases/tools/ProvideRecipeTool';
 import { RateMealTool } from '../use-cases/tools/RateMealTool';
-import { isManagedClient } from '../../practice/http/practiceWiring';
-import { PracticeManagedClientAdapter } from '../adapters/practice/PracticeManagedClientAdapter';
+import { resolveAiAssistant } from '../../practice/http/practiceWiring';
+import { PracticeCoachAccessAdapter } from '../adapters/practice/PracticeCoachAccessAdapter';
+import { coachAccessGuard } from './coachAccessGuard';
 import { DieticianController } from './DieticianController';
-import { managedClientGuard } from './managedClientGuard';
 
 export function dieticianRoutes(): Router {
   const router = Router();
@@ -95,6 +95,8 @@ export function dieticianRoutes(): Router {
     new ProvideRecipeTool(llmClient, cheapModel),
   ];
 
+  const coachAccess = new PracticeCoachAccessAdapter(resolveAiAssistant);
+
   const runDieticianTurn = new RunDieticianTurn(
     llmDieticianPort,
     conversationRepository,
@@ -104,6 +106,7 @@ export function dieticianRoutes(): Router {
     env.DIETICIAN_MAX_GATHER_TURNS,
     env.DIETICIAN_DIGEST_EVERY_N_TURNS,
     env.DIETICIAN_MAX_CONTEXT_MESSAGES,
+    coachAccess,
   );
   const getDieticianConversation = new GetDieticianConversation(
     conversationRepository,
@@ -128,21 +131,23 @@ export function dieticianRoutes(): Router {
     ),
   );
 
-  // Every /dietician route: clients of a human dietitian are locked out (403).
-  const managedGuard = managedClientGuard(new PracticeManagedClientAdapter(isManagedClient));
+  // Every /dietician route: a dietitian's client gets the coach only as their
+  // dietitian's AI assistant, when the dietitian opened it to them (else 403).
+  const sendGuard = coachAccessGuard(coachAccess, 'send');
+  const readGuard = coachAccessGuard(coachAccess, 'read');
 
   router.post(
     '/:conversationId/messages',
     authMiddleware,
-    managedGuard,
+    sendGuard,
     premiumContext,
     dieticianRateLimiter,
     controller.handleSendMessage,
   );
   // `/conversations` must precede `/:conversationId` — Express matches in order.
-  router.get('/conversations', authMiddleware, managedGuard, controller.handleListConversations);
-  router.get('/:conversationId', authMiddleware, managedGuard, controller.handleGetConversation);
-  router.post('/:conversationId/proposals/confirm', authMiddleware, managedGuard, controller.handleConfirmMealProposal);
+  router.get('/conversations', authMiddleware, readGuard, controller.handleListConversations);
+  router.get('/:conversationId', authMiddleware, readGuard, controller.handleGetConversation);
+  router.post('/:conversationId/proposals/confirm', authMiddleware, readGuard, controller.handleConfirmMealProposal);
 
   return router;
 }

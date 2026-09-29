@@ -148,4 +148,27 @@ describe('PrismaDieticianConversationRepository (integration)', () => {
     await repository.findOrCreate('user-5', 'd-5');
     await expect(repository.findOrCreate('intruder', 'd-5')).rejects.toThrow('Conversation was not found');
   });
+
+  it("scopes a dietitian's review to messages stamped for them, since the given date", async () => {
+    await repository.findOrCreate('client-1', 'rev-1');
+    await repository.appendMessage('rev-1', 'user', 'before the dietitian', 'live');
+    const since = new Date();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const question = await repository.appendMessage('rev-1', 'user', 'kahvaltıda ne yiyeyim?', 'live', 'dyt-1');
+    const reply = await repository.appendMessage('rev-1', 'assistant', 'Yumurta ve peynir.', 'live', 'dyt-1');
+    await repository.appendMessage('rev-1', 'user', 'another dietitian', 'live', 'dyt-2');
+
+    expect(await repository.listAssistantConversations('client-1', 'dyt-1', since, 10)).toEqual([
+      { id: 'rev-1', title: 'kahvaltıda ne yiyeyim?', lastMessageAt: reply.createdAt, messageCount: 2 },
+    ]);
+    expect(await repository.listAssistantConversations('intruder', 'dyt-1', since, 10)).toEqual([]);
+
+    const messages = await repository.findAssistantMessages('client-1', 'rev-1', 'dyt-1', since);
+    expect(messages?.map((m) => [m.id, m.dietitianId])).toEqual([
+      [question.id, 'dyt-1'],
+      [reply.id, 'dyt-1'],
+    ]);
+    expect(await repository.findAssistantMessages('intruder', 'rev-1', 'dyt-1', since)).toBeNull();
+    expect(await repository.findMessage(reply.id)).toMatchObject({ role: 'assistant', dietitianId: 'dyt-1' });
+  });
 });

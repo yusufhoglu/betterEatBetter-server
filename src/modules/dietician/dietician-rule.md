@@ -42,6 +42,21 @@
   KAYDEDILMEZ, `STREAM_INTERRUPTED` (IntegrationError) firlatilir, controller SSE `error`
   event'i yollar, turnCount ARTMAZ.
 
+## Diyetisyenin AI asistani — `ports/CoachAccessPort.ts`
+
+- Karar `practice`'te (`ResolveAiAssistant`); burada `adapters/practice/PracticeCoachAccessAdapter.ts`.
+  `self` = normal koc · `assistant` = diyetisyenin persona'si · `unavailable` (`disabled` | `off_hours`) = 403.
+- `http/coachAccessGuard.ts`: `send` modu (mesaj) acik saat ister; `read` modu (gecmis, proposal onayi) `off_hours`'ta
+  da gecer. `disabled` her ikisinde 403 `AI_COACH_UNAVAILABLE_MANAGED_CLIENT`; `off_hours` → `DIETITIAN_AI_OFF_HOURS`.
+- `RunDieticianTurn` persona'yi TURUN BASINDA tekrar cozer (guard'dan sonra kapanmis olabilir); `unavailable` → hicbir sey
+  yazmadan ayni 403. Lookup hatasi turu DUSURUR (genel koca dusmek diyetisyenin kontrolunu deler).
+- Persona blogu (`domain/assistantPersonaBlock.ts`) context blogundan ONCE `system` mesaji olarak gather / advice /
+  smalltalk'in hepsine girer. `DIETICIAN_PERSONA`'daki guvenlik kurallari persona'nin USTUNDE kalir (blok bunu soyler).
+- Turdaki HER mesaj (user, kartlar, cevap) `dietitianId` ile damgalanir — diyetisyen incelemesi sadece bunlari gorur.
+- `AssistantTranscripts` / `PreviewAssistantReply`: `practice` icin public use-case'ler. Onizleme `previewReply`
+  (prime, tool yok, feature `dietician:assistant_preview`).
+- Proaktif mesaj (nudge) diyetisyen danisanlarina GONDERILMEZ.
+
 ## Eager context — neden tool degil
 
 Plan hedefleri + bugunku ozet + digest her turda `system` mesaji olarak enjekte edilir.

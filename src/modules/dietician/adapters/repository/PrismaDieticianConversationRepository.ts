@@ -16,7 +16,10 @@ import type {
 } from '../../domain/DieticianMessage';
 import { decodeRatingMessage, decodeRecipeMessage } from '../../domain/cardMessageCodec';
 import { decodeProposalMessage } from '../../domain/proposalMessageCodec';
-import type { DieticianConversationRepositoryPort } from '../../ports/DieticianConversationRepositoryPort';
+import type {
+  AssistantConversationSummary,
+  DieticianConversationRepositoryPort,
+} from '../../ports/DieticianConversationRepositoryPort';
 
 type ConversationWithMessages = PrismaDieticianConversation & { messages: PrismaDieticianMessage[] };
 
@@ -39,6 +42,7 @@ function toDomainMessage(row: PrismaDieticianMessage): DieticianMessage {
     role: row.role as DieticianMessageRole,
     content: isCard ? '' : row.content,
     origin: row.origin as DieticianMessageOrigin,
+    dietitianId: row.dietitianId,
     ...(proposal ? { proposal } : {}),
     ...(rating ? { rating } : {}),
     ...(recipe ? { recipe } : {}),
@@ -100,9 +104,10 @@ export class PrismaDieticianConversationRepository implements DieticianConversat
     role: DieticianMessageRole,
     content: string,
     origin: DieticianMessageOrigin = 'live',
+    dietitianId: string | null = null,
   ): Promise<DieticianMessage> {
     const row = await this.db.dieticianMessage.create({
-      data: { conversationId, role, content, origin },
+      data: { conversationId, role, content, origin, dietitianId },
     });
     await this.db.dieticianConversation.update({
       where: { id: conversationId },
@@ -156,6 +161,66 @@ export class PrismaDieticianConversationRepository implements DieticianConversat
       title: deriveDieticianTitle(firstUserByConversation.get(row.id)),
       preview: deriveDieticianPreview(lastByConversation.get(row.id)),
     }));
+  }
+
+  async listAssistantConversations(
+    userId: string,
+    dietitianId: string,
+    since: Date,
+    limit: number,
+  ): Promise<AssistantConversationSummary[]> {
+    const stamped = { dietitianId, createdAt: { gte: since }, role: { in: ['user', 'assistant'] } };
+    const groups = await this.db.dieticianMessage.groupBy({
+      by: ['conversationId'],
+      where: { ...stamped, conversation: { userId } },
+      _count: { _all: true },
+      _max: { createdAt: true },
+      orderBy: { _max: { createdAt: 'desc' } },
+      take: limit,
+    });
+    if (groups.length === 0) {
+      return [];
+    }
+
+    const firstUserMessages = await this.db.dieticianMessage.findMany({
+      where: { ...stamped, role: 'user', conversationId: { in: groups.map((g) => g.conversationId) } },
+      orderBy: [{ conversationId: 'asc' }, { createdAt: 'asc' }],
+      distinct: ['conversationId'],
+      select: { conversationId: true, content: true },
+    });
+    const titles = new Map(firstUserMessages.map((m) => [m.conversationId, m.content]));
+
+    return groups.map((group) => ({
+      id: group.conversationId,
+      title: deriveDieticianTitle(titles.get(group.conversationId)),
+      lastMessageAt: group._max.createdAt as Date,
+      messageCount: group._count._all,
+    }));
+  }
+
+  async findAssistantMessages(
+    userId: string,
+    conversationId: string,
+    dietitianId: string,
+    since: Date,
+  ): Promise<DieticianMessage[] | null> {
+    const conversation = await this.db.dieticianConversation.findUnique({
+      where: { id: conversationId },
+      select: { userId: true },
+    });
+    if (!conversation || conversation.userId !== userId) {
+      return null;
+    }
+    const rows = await this.db.dieticianMessage.findMany({
+      where: { conversationId, dietitianId, createdAt: { gte: since } },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map(toDomainMessage);
+  }
+
+  async findMessage(messageId: string): Promise<DieticianMessage | null> {
+    const row = await this.db.dieticianMessage.findUnique({ where: { id: messageId } });
+    return row ? toDomainMessage(row) : null;
   }
 
   async saveDigest(conversationId: string, digest: ConversationDigest, atTurn: number): Promise<void> {

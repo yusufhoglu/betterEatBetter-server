@@ -11,7 +11,10 @@ import type {
 } from '../../domain/DieticianMessage';
 import { decodeRatingMessage, decodeRecipeMessage } from '../../domain/cardMessageCodec';
 import { decodeProposalMessage } from '../../domain/proposalMessageCodec';
-import type { DieticianConversationRepositoryPort } from '../../ports/DieticianConversationRepositoryPort';
+import type {
+  AssistantConversationSummary,
+  DieticianConversationRepositoryPort,
+} from '../../ports/DieticianConversationRepositoryPort';
 
 export class InMemoryDieticianConversationRepository implements DieticianConversationRepositoryPort {
   private readonly conversations = new Map<string, DieticianConversation>();
@@ -58,6 +61,7 @@ export class InMemoryDieticianConversationRepository implements DieticianConvers
     role: DieticianMessageRole,
     content: string,
     origin: DieticianMessageOrigin = 'live',
+    dietitianId: string | null = null,
   ): Promise<DieticianMessage> {
     const conversation = this.conversations.get(conversationId);
     if (!conversation) {
@@ -74,6 +78,7 @@ export class InMemoryDieticianConversationRepository implements DieticianConvers
       role,
       content: isCard ? '' : content,
       origin,
+      dietitianId,
       ...(proposal ? { proposal } : {}),
       ...(rating ? { rating } : {}),
       ...(recipe ? { recipe } : {}),
@@ -103,6 +108,51 @@ export class InMemoryDieticianConversationRepository implements DieticianConvers
       .slice(0, limit);
   }
 
+  async listAssistantConversations(
+    userId: string,
+    dietitianId: string,
+    since: Date,
+    limit: number,
+  ): Promise<AssistantConversationSummary[]> {
+    return [...this.conversations.values()]
+      .filter((conversation) => conversation.userId === userId)
+      .map((conversation) => ({ conversation, stamped: stampedMessages(conversation.messages, dietitianId, since) }))
+      .filter(({ stamped }) => stamped.length > 0)
+      .map(({ conversation, stamped }) => ({
+        id: conversation.id,
+        title: deriveDieticianTitle(stamped.find((message) => message.role === 'user')?.content),
+        lastMessageAt: stamped[stamped.length - 1]!.createdAt,
+        messageCount: stamped.length,
+      }))
+      .sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime())
+      .slice(0, limit);
+  }
+
+  async findAssistantMessages(
+    userId: string,
+    conversationId: string,
+    dietitianId: string,
+    since: Date,
+  ): Promise<DieticianMessage[] | null> {
+    const conversation = this.conversations.get(conversationId);
+    if (!conversation || conversation.userId !== userId) {
+      return null;
+    }
+    return conversation.messages
+      .filter((message) => message.dietitianId === dietitianId && message.createdAt >= since)
+      .map((message) => ({ ...message }));
+  }
+
+  async findMessage(messageId: string): Promise<DieticianMessage | null> {
+    for (const conversation of this.conversations.values()) {
+      const message = conversation.messages.find((candidate) => candidate.id === messageId);
+      if (message) {
+        return { ...message };
+      }
+    }
+    return null;
+  }
+
   async saveDigest(conversationId: string, digest: ConversationDigest, atTurn: number): Promise<void> {
     const conversation = this.conversations.get(conversationId);
     if (!conversation) {
@@ -120,6 +170,15 @@ export class InMemoryDieticianConversationRepository implements DieticianConvers
     conversation.turnCount += 1;
     return conversation.turnCount;
   }
+}
+
+function stampedMessages(messages: DieticianMessage[], dietitianId: string, since: Date): DieticianMessage[] {
+  return messages.filter(
+    (message) =>
+      message.dietitianId === dietitianId &&
+      message.createdAt >= since &&
+      (message.role === 'user' || message.role === 'assistant'),
+  );
 }
 
 function clone(conversation: DieticianConversation): DieticianConversation {

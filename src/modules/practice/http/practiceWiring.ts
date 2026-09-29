@@ -22,11 +22,13 @@ import { PrismaWaterLogRepository } from '../../water-logging/adapters/repositor
 import { GetWaterForDay } from '../../water-logging/use-cases/GetWaterForDay';
 import { GetWaterForRange } from '../../water-logging/use-cases/GetWaterForRange';
 import { RedisManagedClientCache } from '../adapters/cache/RedisManagedClientCache';
+import { PrismaAiAssistantRepository } from '../adapters/repository/PrismaAiAssistantRepository';
 import { ClientDataAdapter } from '../adapters/client-data/ClientDataAdapter';
 import { PrismaPracticeRepository } from '../adapters/repository/PrismaPracticeRepository';
 import { MessagingLinkThreadAdapter } from '../adapters/threads/MessagingLinkThreadAdapter';
 import { ClientInsightsService } from '../use-cases/ClientInsightsService';
 import { IsManagedClient } from '../use-cases/IsManagedClient';
+import { ResolveAiAssistant } from '../use-cases/ResolveAiAssistant';
 
 /** Explicit INVITE_CODE_SECRET wins; otherwise a key derived from JWT_SECRET (never the JWT key itself). */
 export function resolveInviteCodeSecret(): string {
@@ -44,8 +46,11 @@ export const practiceRepository = new PrismaPracticeRepository(prisma);
 export const managedClientCache = new RedisManagedClientCache(cacheRedisClient);
 export const linkThreads = new MessagingLinkThreadAdapter(threadAdmin);
 
-/** Public entry point used by the AI coach guard (dietician module). */
 export const isManagedClient = new IsManagedClient(practiceRepository, managedClientCache);
+
+export const aiAssistantRepository = new PrismaAiAssistantRepository(prisma);
+/** Public entry point used by the AI coach (dietician module): may this user talk to AI, and as whom? */
+export const resolveAiAssistant = new ResolveAiAssistant(practiceRepository, aiAssistantRepository, isManagedClient);
 
 export function buildClientDataAdapter(): ClientDataAdapter {
   const planRepository = new PrismaPlanRepository(prisma);

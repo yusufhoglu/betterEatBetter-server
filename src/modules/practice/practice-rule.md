@@ -51,11 +51,29 @@ baglantisi, onay kapsamlari, erisim logu, danisan verisi okuma, notlar). Referan
   Tek istisna `getActivity`: roster icin cok-danisanli agregat, iki read-only SQL. Buyurse
   tasarimdaki `ClientDailySummary` projeksiyonuna gecilir.
 - `messaging`'e SADECE `ThreadAdmin` (via `MessagingLinkThreadAdapter`) — thread tablolarina dokunulmaz.
-- AI koc guard'i: `dietician` modulu `IsManagedClient`'i (`http/practiceWiring.ts`'teki singleton)
-  `ManagedClientPort` uzerinden cagirir. Cache: Redis `practice:managed:<userId>`, TTL 60sn,
-  fail-open. Link basladiginda/bittiginde MUTLAKA `managedClientCache.invalidate`.
+- AI koc erisimi: `dietician` modulu `ResolveAiAssistant`'i (`http/practiceWiring.ts`'teki singleton)
+  `CoachAccessPort` uzerinden cagirir; o da once `IsManagedClient`'a bakar. Cache: Redis `practice:managed:<userId>`,
+  TTL 60sn, fail-open. Link basladiginda/bittiginde MUTLAKA `managedClientCache.invalidate`.
+- `practiceRoutes.ts` `dietician`'in `AssistantTranscripts` / `PreviewAssistantReply` public use-case'lerini kurar
+  (`adapters/assistant/`). `practiceWiring.ts` `dietician`'dan HICBIR SEY import etmez (dongu olmasin).
 - Rol claim'i JWT'ye EKLENMEDI: diyetisyenlik her istekte uyelikten okunur (aktivasyondan sonra
   token yenileme gerekmez).
+
+## AI asistan (`domain/aiAssistant.ts`, `use-cases/ResolveAiAssistant.ts`)
+
+- Diyetisyenin AI'i = `dietician` modulundeki AI koc, diyetisyenin persona'siyla. Fine-tune YOK: ayarlar, kurallar,
+  danisana ozel talimat ve ornek cevaplar her turda prompt'a girer; degisiklik bir sonraki mesajda etkili.
+- TEK karar noktasi `ResolveAiAssistant` (`http/practiceWiring.ts` singleton): `status` / `forTurn` / `viewForClient`.
+  Etkin = `settings.enabled` VE (`ClientAiSetting.access` ?? `defaultClientAccess`) VE diyetisyenin uyeligi aktif; ustune
+  `schedule` (`isWithinSchedule`). Diyetisyeni olmayan kullanici sadece `IsManagedClient` cache'ine bakar.
+- Diyetisyenin danisani ASLA genel koca dusmez: kapaliysa 403 (`dietician` modulu hem guard'da hem turda kontrol eder).
+- `ClientAiSetting` link'ten AYRI tablo — `instructions` danisanin okudugu link payload'ina sizmasin diye.
+- Ornek secimi (`selectExamples`): TR karakter katlama + 5 harf onek kok + kume kosinusu; az eslesirse en yeni orneklerle
+  tamamlanir (uslup icin). Embedding YOK — ornek sayisi (<=200) buna izin veriyor; buyurse pgvector'e gecilir.
+- Sohbet incelemesi `ai_chat` kapsamina bagli ve `assertCanRead` ile loglanir. Okuma `AiTranscriptPort` →
+  `dietician` `AssistantTranscripts` (public use-case); sadece `dietitianId` damgali ve `link.startedAt` sonrasi mesajlar.
+- Duzeltme = `sourceMessageId`'li ornek (`source: 'correction'`); mesajin bu diyetisyenin asistan cevabi oldugu dogrulanir.
+- Onizleme (`POST /ai/preview`) prime model calistirir — `30 / saat / diyetisyen` rate limit.
 
 ## Analitik, skor ve uyarilar
 

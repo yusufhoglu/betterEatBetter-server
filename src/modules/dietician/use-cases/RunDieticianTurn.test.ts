@@ -11,6 +11,7 @@ import {
 } from '../test-utils/fakes/FakeContextPorts';
 import { FakeLlmDieticianPort } from '../test-utils/fakes/FakeLlmDieticianPort';
 import { InMemoryDieticianConversationRepository } from '../test-utils/fakes/InMemoryDieticianConversationRepository';
+import type { CoachAccess, CoachAccessPort, CoachTurnPersona, DietitianPersona } from '../ports/CoachAccessPort';
 import { RunDieticianTurn } from './RunDieticianTurn';
 import type { DieticianTool } from './tools/DieticianTool';
 
@@ -96,15 +97,44 @@ const fakeRecipe: Recipe = {
   steps: ['Grill the chicken.', 'Serve over rice with vegetables.'],
 };
 
+/** A fixed answer for who the coach speaks as; records the messages it was asked about. */
+class FakeCoachAccess implements CoachAccessPort {
+  readonly turnMessages: string[] = [];
+  constructor(public turn: CoachTurnPersona = { kind: 'self' }) {}
+  async checkAccess(): Promise<CoachAccess> {
+    return this.turn.kind === 'assistant' ? { kind: 'assistant' } : this.turn;
+  }
+  async personaForTurn(_userId: string, message: string): Promise<CoachTurnPersona> {
+    this.turnMessages.push(message);
+    return this.turn;
+  }
+}
+
+const PERSONA: DietitianPersona = {
+  dietitianId: 'dyt-1',
+  dietitianName: 'Ayşe Yılmaz',
+  assistantName: 'Ayşe Yılmaz · AI asistan',
+  addressForm: 'siz',
+  tone: 'Sıcak ama net.',
+  approach: 'Yasak yok, porsiyon kontrolü var.',
+  rules: ['Her cevapta bir öneri ver.'],
+  avoid: ['Takviye önerme.'],
+  handoffMessage: 'Bunu bir sonraki görüşmemizde konuşalım.',
+  clientInstructions: 'Laktoz intoleransı var.',
+  examples: [{ question: 'Akşam meyve yiyebilir miyim?', answer: 'Evet, bir porsiyon olur.' }],
+};
+
 function build(overrides: {
   tools?: DieticianTool[];
   digestEveryNTurns?: number;
   maxGatherTurns?: number;
+  coachTurn?: CoachTurnPersona;
 } = {}) {
   const llm = new FakeLlmDieticianPort();
   const repository = new InMemoryDieticianConversationRepository();
   const planContext = new FakePlanContextPort();
   const snapshot = new FakeDailySnapshotPort();
+  const coachAccess = new FakeCoachAccess(overrides.coachTurn);
   const runTurn = new RunDieticianTurn(
     llm,
     repository,
@@ -114,8 +144,9 @@ function build(overrides: {
     overrides.maxGatherTurns ?? 3,
     overrides.digestEveryNTurns ?? 6,
     20,
+    coachAccess,
   );
-  return { llm, repository, planContext, snapshot, runTurn };
+  return { llm, repository, planContext, snapshot, runTurn, coachAccess };
 }
 
 async function collect(stream: AsyncIterable<DieticianStreamChunk>): Promise<DieticianStreamChunk[]> {
@@ -418,5 +449,77 @@ describe('RunDieticianTurn', () => {
     const conversation = await repository.findById('user-1', 'c1');
     expect(conversation?.messages.map((m) => m.role)).toEqual(['user']);
     expect(conversation?.turnCount).toBe(0);
+  });
+
+  describe("as a dietitian's AI assistant", () => {
+    it('injects the persona block ahead of the context and stamps every message with the dietitian', async () => {
+      const proposeTool = new FakeProposeTool(fakeProposal);
+      const { llm, runTurn, repository, coachAccess } = build({
+        tools: [proposeTool],
+        coachTurn: { kind: 'assistant', persona: PERSONA },
+      });
+      llm.setIntent('log_help');
+      llm.setGatherResults([
+        { content: '', toolCalls: [{ id: 't1', name: 'propose_meal_log', input: { description: 'yoğurt' } }] },
+        { content: '' },
+      ]);
+      llm.setAdviceChunks(['Kaydı onaylayabilirsiniz.']);
+
+      await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'Yoğurt yedim', today: TODAY }));
+
+      expect(coachAccess.turnMessages).toEqual(['Yoğurt yedim']);
+      for (const messages of [llm.gatherCalls[0]!.messages, llm.adviceCalls[0]!]) {
+        const systems = messages.filter((m: LlmMessage) => m.role === 'system').map((m) => m.content);
+        expect(systems[0]).toContain('AI assistant of dietitian Ayşe Yılmaz');
+        expect(systems[0]).toContain('Laktoz intoleransı var.');
+        expect(systems[0]).toContain('Q: Akşam meyve yiyebilir miyim?');
+        expect(systems[1]).toContain('User plan:');
+      }
+
+      const conversation = await repository.findById('user-1', 'c1');
+      expect(conversation?.messages.map((m) => [m.role, m.dietitianId])).toEqual([
+        ['user', 'dyt-1'],
+        ['assistant', 'dyt-1'],
+        ['assistant', 'dyt-1'],
+      ]);
+    });
+
+    it('smalltalk also answers in the persona', async () => {
+      const { llm, runTurn } = build({ coachTurn: { kind: 'assistant', persona: PERSONA } });
+      llm.setIntent('smalltalk');
+      llm.setSmalltalkChunks(['Merhaba!']);
+
+      await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'selam', today: TODAY }));
+
+      expect(llm.smalltalkCalls[0]![0]).toMatchObject({ role: 'system' });
+      expect(llm.smalltalkCalls[0]![0]!.content).toContain('siz');
+    });
+
+    it('refuses the turn — and stores nothing — when the assistant is off or outside its hours', async () => {
+      for (const [reason, code] of [
+        ['disabled', 'AI_COACH_UNAVAILABLE_MANAGED_CLIENT'],
+        ['off_hours', 'DIETITIAN_AI_OFF_HOURS'],
+      ] as const) {
+        const { llm, runTurn, repository } = build({ coachTurn: { kind: 'unavailable', reason } });
+        await expect(
+          collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'hi', today: TODAY })),
+        ).rejects.toMatchObject({ code, httpStatus: 403 });
+        expect(llm.classifyCalls).toHaveLength(0);
+        expect(await repository.findById('user-1', 'c1')).toBeNull();
+      }
+    });
+
+    it('a regular user gets the plain coach: no persona block, no stamp', async () => {
+      const { llm, runTurn, repository } = build();
+      llm.setIntent('smalltalk');
+      llm.setSmalltalkChunks(['Hi!']);
+
+      await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'hi', today: TODAY }));
+
+      const systems = llm.smalltalkCalls[0]!.filter((m: LlmMessage) => m.role === 'system').map((m) => m.content);
+      expect(systems.some((content) => content.includes('AI assistant of dietitian'))).toBe(false);
+      const conversation = await repository.findById('user-1', 'c1');
+      expect(conversation?.messages.every((m) => m.dietitianId === null)).toBe(true);
+    });
   });
 });
