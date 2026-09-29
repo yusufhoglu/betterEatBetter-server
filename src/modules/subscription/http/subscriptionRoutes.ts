@@ -8,7 +8,7 @@ import { GoogleReceiptAdapter } from '../adapters/billing/GoogleReceiptAdapter';
 import { ResilientGoogleReceiptAdapter } from '../adapters/billing/ResilientGoogleReceiptAdapter';
 import { PrismaSubscriptionRepository } from '../adapters/repository/PrismaSubscriptionRepository';
 import { RedisEntitlementCache } from '../entitlement/RedisEntitlementCache';
-import { GetSubscriptionEntitlement } from '../use-cases/GetSubscriptionEntitlement';
+import { buildGetSubscriptionEntitlement } from '../entitlement/entitlementWiring';
 import { ProcessGooglePlayRtdn } from '../use-cases/ProcessGooglePlayRtdn';
 import { PurchaseSubscription } from '../use-cases/PurchaseSubscription';
 import { ValidateReceipt } from '../use-cases/ValidateReceipt';
@@ -21,7 +21,7 @@ export function subscriptionRoutes(): Router {
     new AppleReceiptAdapter(),
     new ResilientGoogleReceiptAdapter(new GoogleReceiptAdapter()),
   );
-  const getSubscriptionEntitlement = new GetSubscriptionEntitlement(subscriptionRepository);
+  const getSubscriptionEntitlement = buildGetSubscriptionEntitlement();
   const entitlementCache = new RedisEntitlementCache(cacheRedisClient);
   const processGooglePlayRtdn = new ProcessGooglePlayRtdn(new GooglePubSubVerifier());
   const controller = new SubscriptionController(

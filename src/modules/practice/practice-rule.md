@@ -54,6 +54,9 @@ baglantisi, onay kapsamlari, erisim logu, danisan verisi okuma, notlar). Referan
 - AI koc erisimi: `dietician` modulu `ResolveAiAssistant`'i (`http/practiceWiring.ts`'teki singleton)
   `CoachAccessPort` uzerinden cagirir; o da once `IsManagedClient`'a bakar. Cache: Redis `practice:managed:<userId>`,
   TTL 60sn, fail-open. Link basladiginda/bittiginde MUTLAKA `managedClientCache.invalidate`.
+- Danisan OTOMATIK PREMIUM: `subscription` modulu `IsManagedClient`'i `SponsoredPremiumPort` uzerinden sorar
+  (`subscription/entitlement/entitlementWiring.ts`). `managedClientCache.invalidate` premium cache anahtarini
+  (`entitlement:premium:<id>`) da siler — premium link ile AYNI anda acilip kapanir.
 - `practiceRoutes.ts` `dietician`'in `AssistantTranscripts` / `PreviewAssistantReply` public use-case'lerini kurar
   (`adapters/assistant/`). `practiceWiring.ts` `dietician`'dan HICBIR SEY import etmez (dongu olmasin).
 - Rol claim'i JWT'ye EKLENMEDI: diyetisyenlik her istekte uyelikten okunur (aktivasyondan sonra

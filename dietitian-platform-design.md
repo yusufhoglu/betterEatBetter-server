@@ -11,7 +11,7 @@ ve onlarla mesajlaşması.
 
 | Konu | Karar |
 | --- | --- |
-| Ödeme / iş modeli | **Ertelendi.** Şimdilik `subscription` modülüne dokunulmaz. |
+| Ödeme / iş modeli | **Danışan otomatik premium (2026-09-29):** aktif diyetisyen bağlantısı olan danışan, bağlantı sürdükçe premium sayılır (`subscription` → `SponsoredPremiumPort` → `practice.IsManagedClient`). Diyetisyen tarafının ücretlendirmesi ertelendi. |
 | Diyetisyen doğrulaması | Kullanıcı **ayarlardan bir aktivasyon kodu** girer. Kodlar admin tarafından üretilir (script / admin endpoint). |
 | AI koç | Aktif diyetisyen bağlantısı olan danışanlar **AI koç (`dietician` modülü) kullanamaz.** Chatbot, fotoğraftan yemek tanıma (VLM) vb. diğer LLM özellikleri açık kalır. |
 | Web paneli | **React** (Vite SPA + TanStack Query), ayrı repo/klasör. |
@@ -300,5 +300,6 @@ Diyetisyen yalnızca kendi asistanının bu ilişki boyunca verdiği cevapları 
 **Güvenlik:** genel güvenlik kuralları (yeme bozukluğu, gebelik, kronik hastalık, <1200 kcal) persona'nın üstündedir;
 asistan kendini diyetisyen olarak tanıtmaz, plan hedeflerini değiştirmeyi önermez.
 
-**Açık konular:** ücretsiz kullanıcı günlük AI kotası (`FREE_DAILY_DIETICIAN_LIMIT`) diyetisyen danışanlarına da uygulanıyor —
-ödeme modeliyle birlikte karar verilecek. Örnek sayısı büyürse kelime eşleşmesi yerine pgvector.
+**Premium:** diyetisyen danışanları otomatik premium (bkz. §1) — AI koç kilidi ve ücretsiz günlük kotalar onlara uygulanmaz.
+
+**Açık konular:** örnek sayısı büyürse kelime eşleşmesi yerine pgvector.
