@@ -1,5 +1,6 @@
 import type { LlmMessage, LlmToolCall, LlmToolDefinition } from '../../../shared/llm/types';
 import type { ConversationDigest } from '../domain/ConversationDigest';
+import type { DietitianPersona } from './CoachAccessPort';
 import type { DieticianIntent } from '../domain/DieticianIntent';
 
 export interface DieticianTurnResult {
@@ -32,19 +33,24 @@ export interface LlmDieticianPort {
     messages: LlmMessage[],
     tools: LlmToolDefinition[],
     forceToolChoice?: { toolName: string },
+    persona?: DietitianPersona | null,
   ): Promise<DieticianTurnResult>;
 
-  /** Prime tier. Streams the final user-facing answer. */
-  streamAdvice(messages: LlmMessage[]): AsyncIterable<string>;
+  /**
+   * Prime tier. Streams the final user-facing answer. `persona` (a dietitian's
+   * AI assistant) swaps the generic coach system prompt for one that puts the
+   * dietitian's rules first — never both, they contradict.
+   */
+  streamAdvice(messages: LlmMessage[], persona?: DietitianPersona | null): AsyncIterable<string>;
 
   /** Cheap tier. Streams a short reply for the smalltalk lane. */
-  streamSmalltalk(messages: LlmMessage[]): AsyncIterable<string>;
+  streamSmalltalk(messages: LlmMessage[], persona?: DietitianPersona | null): AsyncIterable<string>;
 
   /**
    * Prime tier, non-streaming, no tools. A dietitian trying their AI assistant
-   * in the panel; `messages` already carry the persona block.
+   * in the panel, with the same system prompt their clients get.
    */
-  previewReply(messages: LlmMessage[]): Promise<string>;
+  previewReply(messages: LlmMessage[], persona: DietitianPersona): Promise<string>;
 
   /** Cheap tier, structured output. Rebuilds the rolling digest. */
   summarizeConversation(input: SummarizeConversationInput): Promise<ConversationDigest>;

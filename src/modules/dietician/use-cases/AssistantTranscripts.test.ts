@@ -50,7 +50,7 @@ describe('AssistantTranscripts', () => {
 });
 
 describe('PreviewAssistantReply', () => {
-  it('sends the persona block and the preview note ahead of the chat', async () => {
+  it('uses the same persona and rules reminder the client chats get', async () => {
     const llm = new FakeLlmDieticianPort();
     const reply = await new PreviewAssistantReply(llm).execute(
       {
@@ -61,7 +61,7 @@ describe('PreviewAssistantReply', () => {
         tone: null,
         approach: null,
         rules: [],
-        avoid: [],
+        avoid: ['Asla yemek tarifi verme.'],
         handoffMessage: null,
         clientInstructions: null,
         examples: [],
@@ -70,10 +70,12 @@ describe('PreviewAssistantReply', () => {
     );
 
     expect(reply).toBe('preview reply');
-    const [persona, note, user] = llm.previewCalls[0]!;
-    expect(persona).toMatchObject({ role: 'system' });
-    expect(persona!.content).toContain('AI assistant of dietitian Ayşe');
+    expect(llm.previewPersonas[0]).toMatchObject({ dietitianId: 'dyt-1', avoid: ['Asla yemek tarifi verme.'] });
+    const [note, user, reminder] = llm.previewCalls[0]!;
     expect(note!.content).toContain('This is a preview');
     expect(user).toEqual({ role: 'user', content: 'Akşam ne yiyeyim?' });
+    // Same last word as in a real client chat.
+    expect(reminder).toMatchObject({ role: 'system' });
+    expect(reminder!.content).toContain('Never: Asla yemek tarifi verme.');
   });
 });

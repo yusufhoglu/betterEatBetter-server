@@ -9,7 +9,7 @@ import {
   type DieticianLane,
   type DieticianTurnTimings,
 } from '../observability/dieticianTurnMetrics';
-import { buildAssistantPersonaBlock } from '../domain/assistantPersonaBlock';
+import { assistantAdviceGuard, assistantRulesReminder } from '../domain/assistantPersonaBlock';
 import { coachUnavailableError } from '../domain/coachAccessErrors';
 import { buildDieticianContextBlock } from '../domain/dieticianContext';
 import type { DieticianConversation } from '../domain/DieticianConversation';
@@ -26,7 +26,7 @@ import {
   DIETICIAN_ADVICE_GUARD,
   DIETICIAN_SMALLTALK_GUARD,
 } from '../dieticianSystemPrompt';
-import type { CoachAccessPort } from '../ports/CoachAccessPort';
+import type { CoachAccessPort, DietitianPersona } from '../ports/CoachAccessPort';
 import type { DailySnapshotPort } from '../ports/DailySnapshotPort';
 import type { DieticianConversationRepositoryPort } from '../ports/DieticianConversationRepositoryPort';
 import type { LlmDieticianPort } from '../ports/LlmDieticianPort';
@@ -84,9 +84,11 @@ function toLlmMessage(message: DieticianMessage): LlmMessage {
  *                    ↘ [assisted: gather (cheap tool loop) → synthesize (prime stream)]
  *   → post-turn: refresh the rolling digest every N turns (cheap, guarded)
  *
- * For a dietitian's client the turn runs as that dietitian's AI assistant: the
- * persona block joins the context, and every message of the turn is stamped
- * with the dietitian's id so they can review it.
+ * For a dietitian's client the turn runs as that dietitian's AI assistant:
+ * every stage gets the persona (the adapter swaps in a system prompt that puts
+ * the dietitian's rules first), their rules are repeated as the last message
+ * before the answer, no card tool is forced, and every message of the turn is
+ * stamped with the dietitian's id so they can review it.
  */
 export class RunDieticianTurn {
   constructor(
@@ -161,11 +163,11 @@ export class RunDieticianTurn {
       lane = needsAssistedLane(intent) ? 'assisted' : 'smalltalk';
 
       const contextBlock = buildDieticianContextBlock({ plan, snapshot, digest: conversation.digest });
-      const baseMessages: LlmMessage[] = [
-        ...(persona ? [{ role: 'system' as const, content: buildAssistantPersonaBlock(persona) }] : []),
-        ...(contextBlock ? [{ role: 'system' as const, content: contextBlock }] : []),
-        ...history,
-      ];
+      const baseMessages: LlmMessage[] = contextBlock
+        ? [{ role: 'system', content: contextBlock }, ...history]
+        : history;
+      // The dietitian's rules, repeated right before the answer, where recency weighs most.
+      const rulesReminder: LlmMessage[] = persona ? [{ role: 'system', content: assistantRulesReminder(persona) }] : [];
 
       const sink: TextSink = { text: '' };
 
@@ -173,11 +175,11 @@ export class RunDieticianTurn {
       let streamFn: (messages: LlmMessage[]) => AsyncIterable<string>;
 
       if (lane === 'smalltalk') {
-        synthesisMessages = [...baseMessages, { role: 'system', content: DIETICIAN_SMALLTALK_GUARD }];
-        streamFn = (messages) => this.llm.streamSmalltalk(messages);
+        synthesisMessages = [...baseMessages, { role: 'system', content: DIETICIAN_SMALLTALK_GUARD }, ...rulesReminder];
+        streamFn = (messages) => this.llm.streamSmalltalk(messages, persona);
       } else {
         const gatherStartedAt = performance.now();
-        const gatherIterator = this.gatherContext(input, baseMessages, intent, stamp);
+        const gatherIterator = this.gatherContext(input, baseMessages, intent, persona);
         let gatherStep = await gatherIterator.next();
         while (!gatherStep.done) {
           noteFirstChunk();
@@ -188,9 +190,10 @@ export class RunDieticianTurn {
         gatherTurns = gatherStep.value.gatherTurns;
         synthesisMessages = [
           ...gatherStep.value.messages,
-          { role: 'system', content: DIETICIAN_ADVICE_GUARD },
+          { role: 'system', content: persona ? assistantAdviceGuard(persona) : DIETICIAN_ADVICE_GUARD },
+          ...rulesReminder,
         ];
-        streamFn = (messages) => this.llm.streamAdvice(messages);
+        streamFn = (messages) => this.llm.streamAdvice(messages, persona);
       }
 
       const streamStartedAt = performance.now();
@@ -231,8 +234,9 @@ export class RunDieticianTurn {
     input: RunDieticianTurnInput,
     baseMessages: LlmMessage[],
     intent: DieticianIntent,
-    stamp: string | null,
+    persona: DietitianPersona | null,
   ): AsyncGenerator<DieticianStreamChunk, GatherOutcome, undefined> {
+    const stamp = persona?.dietitianId ?? null;
     // propose_meal_log is armed only on log_help; rating/recipe cards (and plain tools) stay armed everywhere.
     const allowProposal = intent === 'log_help';
     const armedTools = this.tools.filter((tool) => tool.yieldsCard !== 'proposal' || allowProposal);
@@ -245,7 +249,11 @@ export class RunDieticianTurn {
     // get_meal_data(recentMeals) when the user refers to a logged meal instead
     // of describing it) and hand real numbers to the card tool instead of
     // guessing from the bare request text.
-    const forcedCardTool = forcedCardToolForIntent(intent);
+    //
+    // Never for a dietitian's assistant: forcing a card overrides the
+    // dietitian's rules (e.g. "never give recipes") in code, where no prompt
+    // can stop it. The model decides, with those rules first in its prompt.
+    const forcedCardTool = persona ? null : forcedCardToolForIntent(intent);
     const canForce = forcedCardTool !== null && armedTools.some((tool) => tool.definition.name === forcedCardTool);
     let cardCalled = false;
 
@@ -254,7 +262,7 @@ export class RunDieticianTurn {
     for (let turn = 0; turn < this.maxGatherTurns; turn++) {
       const isLastTurn = turn === this.maxGatherTurns - 1;
       const forceToolChoice = canForce && !cardCalled && isLastTurn ? { toolName: forcedCardTool! } : undefined;
-      const result = await this.llm.runContextGathering(workingMessages, toolDefinitions, forceToolChoice);
+      const result = await this.llm.runContextGathering(workingMessages, toolDefinitions, forceToolChoice, persona);
 
       if (!result.toolCalls || result.toolCalls.length === 0) {
         if (canForce && !cardCalled) {
