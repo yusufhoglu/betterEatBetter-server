@@ -80,6 +80,7 @@ shape for a user who never subscribed).
 ```json
 {
   "isPremium": true,
+  "source": "subscription",
   "productId": "premium_yearly",
   "expiresAt": "2027-08-30T10:00:00.000Z",
   "willRenew": true,
@@ -89,7 +90,11 @@ shape for a user who never subscribed).
 
 - `isPremium` — grant access while `now < expiresAt`, even if `willRenew` is
   false (cancelled) or `inGracePeriod` is true.
-- Free user: `{ "isPremium": false, "productId": null, "expiresAt": null, "willRenew": false, "inGracePeriod": false }`.
+- `source` — `"subscription"` (Play/App Store), `"dietitian"` (the user is an active
+  client of a dietitian: premium for as long as the link lasts, no store details —
+  hide "Manage in Play"), or `null` when not premium. A paying user stays `"subscription"`.
+- Free user: `{ "isPremium": false, "source": null, "productId": null, "expiresAt": null, "willRenew": false, "inGracePeriod": false }`.
+- The same rule drives every premium gate (AI coach, free daily chat/photo quotas, `/me.isPremium`).
 
 ## Real-time Developer Notifications (RTDN)
 

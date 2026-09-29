@@ -24,6 +24,7 @@ function parseOrThrow<T>(schema: z.ZodType<T>, body: unknown): T {
 function serializeEntitlement(entitlement: EntitlementDetails) {
   return {
     isPremium: entitlement.isPremium,
+    source: entitlement.source,
     productId: entitlement.productId,
     expiresAt: entitlement.expiresAt ? entitlement.expiresAt.toISOString() : null,
     willRenew: entitlement.willRenew,

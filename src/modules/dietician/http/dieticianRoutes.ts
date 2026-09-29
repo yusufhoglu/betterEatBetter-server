@@ -25,10 +25,9 @@ import { PrismaUserProfileRepository } from '../../onboarding-plan/adapters/repo
 import { GetActivePlan } from '../../onboarding-plan/use-cases/GetActivePlan';
 import { GetUserProfile } from '../../onboarding-plan/use-cases/GetUserProfile';
 import { UpdateProfileMeasurements } from '../../onboarding-plan/use-cases/UpdateProfileMeasurements';
-import { PrismaSubscriptionRepository } from '../../subscription/adapters/repository/PrismaSubscriptionRepository';
 import { PremiumStatusCache } from '../../subscription/entitlement/PremiumStatusCache';
 import { premiumContextMiddleware } from '../../subscription/entitlement/premiumContextMiddleware';
-import { GetSubscriptionEntitlement } from '../../subscription/use-cases/GetSubscriptionEntitlement';
+import { buildGetSubscriptionEntitlement } from '../../subscription/entitlement/entitlementWiring';
 import { NutritionLoggingSnapshotAdapter } from '../adapters/context/NutritionLoggingSnapshotAdapter';
 import { OnboardingPlanContextAdapter } from '../adapters/context/OnboardingPlanContextAdapter';
 import { TieredLlmDieticianAdapter } from '../adapters/llm/TieredLlmDieticianAdapter';
@@ -125,7 +124,7 @@ export function dieticianRoutes(): Router {
 
   const premiumContext = premiumContextMiddleware(
     new PremiumStatusCache(
-      new GetSubscriptionEntitlement(new PrismaSubscriptionRepository(prisma)),
+      buildGetSubscriptionEntitlement(),
       cacheRedisClient,
       env.ENTITLEMENT_CACHE_TTL_SECONDS,
     ),

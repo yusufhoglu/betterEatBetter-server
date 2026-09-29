@@ -3,8 +3,7 @@ import { authMiddleware } from '../../../shared/auth/authMiddleware';
 import { env } from '../../../shared/config/env';
 import { PremiumStatusCache } from '../../subscription/entitlement/PremiumStatusCache';
 import { premiumContextMiddleware } from '../../subscription/entitlement/premiumContextMiddleware';
-import { PrismaSubscriptionRepository } from '../../subscription/adapters/repository/PrismaSubscriptionRepository';
-import { GetSubscriptionEntitlement } from '../../subscription/use-cases/GetSubscriptionEntitlement';
+import { buildGetSubscriptionEntitlement } from '../../subscription/entitlement/entitlementWiring';
 import { RecognizeFromPhoto } from '../use-cases/RecognizeFromPhoto';
 import { RecognizeFromBarcode } from '../use-cases/RecognizeFromBarcode';
 import { RecognizeFromText } from '../use-cases/RecognizeFromText';
@@ -53,7 +52,7 @@ export function foodRecognitionRoutes(): Router {
   // quota. Same cache the chat path uses (entitlement:premium:<userId>).
   const premiumContext = premiumContextMiddleware(
     new PremiumStatusCache(
-      new GetSubscriptionEntitlement(new PrismaSubscriptionRepository(prisma)),
+      buildGetSubscriptionEntitlement(),
       cacheRedisClient,
       env.ENTITLEMENT_CACHE_TTL_SECONDS,
     ),

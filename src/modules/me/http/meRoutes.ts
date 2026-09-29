@@ -10,8 +10,7 @@ import { GetActivePlan } from '../../onboarding-plan/use-cases/GetActivePlan';
 import { GetUserProfile } from '../../onboarding-plan/use-cases/GetUserProfile';
 import { UpdatePlan } from '../../onboarding-plan/use-cases/UpdatePlan';
 import { UpdateProfileMeasurements } from '../../onboarding-plan/use-cases/UpdateProfileMeasurements';
-import { PrismaSubscriptionRepository } from '../../subscription/adapters/repository/PrismaSubscriptionRepository';
-import { GetSubscriptionEntitlement } from '../../subscription/use-cases/GetSubscriptionEntitlement';
+import { buildGetSubscriptionEntitlement } from '../../subscription/entitlement/entitlementWiring';
 import { PrismaMeCatalogRepository } from '../adapters/repository/PrismaMeCatalogRepository';
 import { PrismaMePreferencesRepository } from '../adapters/repository/PrismaMePreferencesRepository';
 import { SaveDieticianRecipe } from '../use-cases/SaveDieticianRecipe';
@@ -31,7 +30,7 @@ export function meRoutes(): Router {
     new GetActivePlan(planRepository),
     new UpdatePlan(userProfileRepository, planRepository),
     new UpdateProfileMeasurements(userProfileRepository, planRepository),
-    new GetSubscriptionEntitlement(new PrismaSubscriptionRepository(prisma)),
+    buildGetSubscriptionEntitlement(),
     catalogRepository,
     new PrismaMePreferencesRepository(prisma),
     new SaveDieticianRecipe(catalogRepository),

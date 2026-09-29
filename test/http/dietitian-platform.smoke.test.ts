@@ -150,6 +150,10 @@ describe('dietitian platform smoke', () => {
     const again = await request(app).post('/practice/join').set('Authorization', client.auth).send({ code: invite.body.code, consentScopes: [] });
     expect(again.body.code).toBe('CLIENT_ALREADY_LINKED');
 
+    // a dietitian's client is premium while the link lasts
+    const entitlement = await request(app).get('/subscription/entitlement').set('Authorization', client.auth);
+    expect(entitlement.body).toMatchObject({ isPremium: true, source: 'dietitian', productId: null });
+
     // AI coach is now locked for the client
     const coach = await request(app).get('/dietician/conversations').set('Authorization', client.auth);
     expect(coach.status).toBe(403);

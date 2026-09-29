@@ -1,5 +1,6 @@
 import type { Redis } from 'ioredis';
 import { createModuleLogger } from '../../../../shared/observability/logger';
+import { premiumEntitlementCacheKey } from '../../../subscription/entitlement/PremiumStatusCache';
 import type { ManagedClientCachePort } from '../../ports/ManagedClientCachePort';
 
 const logger = createModuleLogger('practice');
@@ -31,9 +32,13 @@ export class RedisManagedClientCache implements ManagedClientCachePort {
     }
   }
 
+  /**
+   * Also drops the cached premium decision: a client with an active dietitian
+   * is premium (subscription module), so it flips exactly when the link does.
+   */
   async invalidate(clientId: string): Promise<void> {
     try {
-      await this.redis.del(key(clientId));
+      await this.redis.del(key(clientId), premiumEntitlementCacheKey(clientId));
     } catch (err) {
       logger.warn({ err, clientId }, 'managed-client cache invalidation failed');
     }
