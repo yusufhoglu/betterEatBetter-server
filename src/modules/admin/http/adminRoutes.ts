@@ -14,10 +14,12 @@ export function adminRoutes(): Router {
   router.get('/audit', controller.handleAudit);
 
   router.get('/users', controller.handleListUsers);
+  router.post('/users', controller.handleCreateUser);
   router.get('/users/:userId', controller.handleGetUser);
   router.post('/users/:userId/suspend', controller.handleSuspendUser);
   router.post('/users/:userId/unsuspend', controller.handleUnsuspendUser);
   router.put('/users/:userId/premium', controller.handleSetPremium);
+  router.post('/users/:userId/password', controller.handleResetPassword);
   router.post('/users/:userId/reassign', controller.handleReassignClient);
 
   router.get('/dietitians', controller.handleListDietitians);

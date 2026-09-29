@@ -97,8 +97,11 @@ describe('platform admin smoke', () => {
     return { id: user.id, auth: `Bearer ${signAccessToken(user.id)}`, email };
   }
 
+  let adminUser: Promise<{ id: string; auth: string; email: string }> | undefined;
+  const getAdmin = () => (adminUser ??= createUser('Platform Admin', ADMIN_EMAIL));
+
   it('manages codes, dietitians, users, premium, suspension and usage', async () => {
-    const admin = await createUser('Platform Admin', ADMIN_EMAIL);
+    const admin = await getAdmin();
     const outsider = await createUser('Not Admin');
 
     // access
@@ -245,5 +248,76 @@ describe('platform admin smoke', () => {
       ]),
     );
     expect(JSON.stringify(audit.body)).not.toContain(created.body.code);
+  }, 60_000);
+
+  it('creates accounts that can sign in, and resets passwords', async () => {
+    const admin = await getAdmin();
+    const email = `Yeni.${RUN}@Smoke.Test`;
+
+    // plain user, generated password, premium
+    const created = await request(app)
+      .post('/admin/users')
+      .set('Authorization', admin.auth)
+      .send({ email, name: `Yeni Kullanıcı ${RUN}`, passwordMode: 'generate', premium: true });
+    expect(created.status).toBe(201);
+    expect(created.body.email).toBe(email.toLowerCase());
+    const password = created.body.generatedPassword as string;
+    expect(password).toMatch(/^.{4}-.{4}-.{4}$/);
+
+    const signIn = await request(app).post('/auth/sign-in').send({ email: email.toLowerCase(), password });
+    expect(signIn.status).toBe(200);
+    const userAuth = `Bearer ${signIn.body.accessToken}`;
+    expect((await request(app).get('/subscription/entitlement').set('Authorization', userAuth)).body.isPremium).toBe(true);
+
+    // same email in another case is refused
+    const dup = await request(app).post('/admin/users').set('Authorization', admin.auth).send({ email: email.toUpperCase(), name: 'Kopya' });
+    expect(dup.status).toBe(409);
+    expect(dup.body.code).toBe('EMAIL_ALREADY_REGISTERED');
+
+    // weak admin-chosen password is refused with the sign-up rule
+    const weak = await request(app)
+      .post('/admin/users')
+      .set('Authorization', admin.auth)
+      .send({ email: `weak.${RUN}@smoke.test`, name: 'Zayıf', passwordMode: 'set', password: '123' });
+    expect(weak.body.code).toBe('PASSWORD_TOO_WEAK');
+
+    // dietitian with a chosen password lands in the practice panel directly
+    const dytEmail = `dyt.${RUN}@smoke.test`;
+    const dyt = await request(app)
+      .post('/admin/users')
+      .set('Authorization', admin.auth)
+      .send({ email: dytEmail, name: `Dyt. Yeni ${RUN}`, role: 'dietitian', passwordMode: 'set', password: 'Guclu-Sifre-9', dietitianTitle: 'Uzm. Dyt.', licenseNo: 'TR-123' });
+    expect(dyt.status).toBe(201);
+    expect(dyt.body.generatedPassword).toBeNull();
+    const dytSignIn = await request(app).post('/auth/sign-in').send({ email: dytEmail, password: 'Guclu-Sifre-9' });
+    const me = await request(app).get('/practice/me').set('Authorization', `Bearer ${dytSignIn.body.accessToken}`);
+    expect(me.body.dietitian.profile).toMatchObject({ title: 'Uzm. Dyt.', licenseNo: 'TR-123' });
+    expect(me.body.dietitian.memberships[0]).toMatchObject({ role: 'owner', organization: { kind: 'solo', name: `Dyt. Yeni ${RUN}` } });
+    const invite = await request(app).post('/practice/invites').set('Authorization', `Bearer ${dytSignIn.body.accessToken}`).send({});
+    expect(invite.status).toBe(201);
+
+    // Google-only account has no password
+    const google = await request(app)
+      .post('/admin/users')
+      .set('Authorization', admin.auth)
+      .send({ email: `google.${RUN}@smoke.test`, name: 'Google Kişi', passwordMode: 'google' });
+    const googleDetail = await request(app).get(`/admin/users/${google.body.userId}`).set('Authorization', admin.auth);
+    expect(googleDetail.body.user.signInMethods).toEqual({ password: false, google: false });
+
+    // reset: old password stops working, the session is ended, the new one works
+    const reset = await request(app).post(`/admin/users/${created.body.userId}/password`).set('Authorization', admin.auth).send({});
+    expect(reset.status).toBe(200);
+    expect(reset.body.generatedPassword).not.toBe(password);
+    expect((await request(app).post('/auth/sign-in').send({ email: email.toLowerCase(), password })).status).toBe(401);
+    expect((await request(app).post('/auth/refresh').send({ refreshToken: signIn.body.refreshToken })).status).not.toBe(200);
+    expect(
+      (await request(app).post('/auth/sign-in').send({ email: email.toLowerCase(), password: reset.body.generatedPassword })).status,
+    ).toBe(200);
+
+    const audit = await request(app).get('/admin/audit').query({ limit: 50 }).set('Authorization', admin.auth);
+    const mine = audit.body.items.filter((a: { admin: { userId: string } }) => a.admin?.userId === admin.id);
+    expect(mine.map((a: { action: string }) => a.action)).toEqual(expect.arrayContaining(['user.create', 'user.password_reset']));
+    expect(JSON.stringify(audit.body)).not.toContain(password);
+    expect(JSON.stringify(audit.body)).not.toContain('Guclu-Sifre-9');
   }, 60_000);
 });

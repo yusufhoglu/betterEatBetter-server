@@ -23,6 +23,17 @@ export interface CreateActivationCodeRecord {
   note: string | null;
 }
 
+export interface CreateUserRecord {
+  email: string;
+  name: string;
+  /** null = no password; the user signs in with Google (linked by email). */
+  passwordHash: string | null;
+  premium: boolean;
+  /** Set to make the account a solo-practice dietitian right away. */
+  dietitian: { title: string | null; licenseNo: string | null; inviteKey: string } | null;
+  now: Date;
+}
+
 export interface AuditInput {
   adminId: string;
   action: string;
@@ -37,6 +48,12 @@ export interface AuditInput {
  */
 export interface AdminRepositoryPort {
   findUserEmail(userId: string): Promise<string | null>;
+  /** Case-insensitive, so admins can't create a near-duplicate of an existing login. */
+  emailExists(email: string): Promise<boolean>;
+  /** Account (+ optional dietitian practice and premium grant) in one transaction. */
+  createUser(record: CreateUserRecord): Promise<{ userId: string }>;
+  /** Replaces the password (null removes it) and revokes every session. */
+  setPassword(userId: string, passwordHash: string | null, now: Date): Promise<void>;
   userExists(userId: string): Promise<boolean>;
 
   getOverview(now: Date, windowDays: number): Promise<AdminOverview>;

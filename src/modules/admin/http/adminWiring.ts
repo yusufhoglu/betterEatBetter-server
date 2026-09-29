@@ -7,7 +7,10 @@ import { premiumEntitlementCacheKey } from '../../subscription/entitlement/Premi
 import { PrismaAdminRepository } from '../adapters/repository/PrismaAdminRepository';
 import { BufferedAiUsageRecorder } from '../adapters/usage/BufferedAiUsageRecorder';
 import { AdminAccessPolicy } from '../use-cases/AdminAccessPolicy';
+import { EmailPasswordAdapter } from '../../identity/adapters/provider/EmailPasswordAdapter';
+import { PrismaUserRepository } from '../../identity/adapters/repository/PrismaUserRepository';
 import { AdminQueries } from '../use-cases/AdminQueries';
+import { ManageAccounts } from '../use-cases/ManageAccounts';
 import { ManageActivationCodes } from '../use-cases/ManageActivationCodes';
 import { ManageDietitians } from '../use-cases/ManageDietitians';
 import { ManageUsers } from '../use-cases/ManageUsers';
@@ -27,6 +30,8 @@ export function buildAdminUseCases(): AdminUseCases {
         await cacheRedisClient.del(premiumEntitlementCacheKey(userId));
       },
     }),
+    // Same argon2id hashing as sign-up, so admin-made passwords work with the normal sign-in.
+    accounts: new ManageAccounts(repository, (password) => new EmailPasswordAdapter(new PrismaUserRepository()).hashPassword(password)),
     dietitians: new ManageDietitians(repository, (clientId, dietitianId) => reassign.execute(clientId, dietitianId)),
     codes: new ManageActivationCodes(repository),
   };

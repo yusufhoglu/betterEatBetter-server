@@ -12,7 +12,13 @@ import {
   type DailyCount,
   type UserFilter,
 } from '../../domain/adminTypes';
-import type { AdminRepositoryPort, AuditInput, CreateActivationCodeRecord, ListUsersInput } from '../../ports/AdminRepositoryPort';
+import type {
+  AdminRepositoryPort,
+  AuditInput,
+  CreateActivationCodeRecord,
+  CreateUserRecord,
+  ListUsersInput,
+} from '../../ports/AdminRepositoryPort';
 
 const GRANT_PRODUCT_ID = 'admin_grant';
 const GRANT_PROVIDER = 'manual';
@@ -70,6 +76,56 @@ export class PrismaAdminRepository implements AdminRepositoryPort {
 
   async findUserEmail(userId: string): Promise<string | null> {
     return (await this.db.user.findUnique({ where: { id: userId }, select: { email: true } }))?.email ?? null;
+  }
+
+  async emailExists(email: string): Promise<boolean> {
+    return (await this.db.user.count({ where: { email: { equals: email, mode: 'insensitive' } } })) > 0;
+  }
+
+  async createUser(record: CreateUserRecord): Promise<{ userId: string }> {
+    return this.db.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { email: record.email, name: record.name, passwordHash: record.passwordHash },
+        select: { id: true },
+      });
+      if (record.dietitian) {
+        // Same shape ActivateDietitian creates from a solo activation code.
+        const organization = await tx.organization.create({ data: { name: record.name, kind: 'solo' } });
+        await tx.dietitianProfile.create({
+          data: { userId: user.id, title: record.dietitian.title, licenseNo: record.dietitian.licenseNo, verifiedAt: record.now },
+        });
+        await tx.organizationMember.create({
+          data: {
+            organizationId: organization.id,
+            userId: user.id,
+            role: 'owner',
+            inviteKey: record.dietitian.inviteKey,
+            joinedAt: record.now,
+          },
+        });
+      }
+      if (record.premium) {
+        await tx.subscription.create({
+          data: {
+            userId: user.id,
+            productId: GRANT_PRODUCT_ID,
+            provider: GRANT_PROVIDER,
+            status: 'active',
+            expiresAt: null,
+            willRenew: false,
+            inGracePeriod: false,
+          },
+        });
+      }
+      return { userId: user.id };
+    });
+  }
+
+  async setPassword(userId: string, passwordHash: string | null, now: Date): Promise<void> {
+    await this.db.$transaction([
+      this.db.user.update({ where: { id: userId }, data: { passwordHash } }),
+      this.db.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } }),
+    ]);
   }
 
   async userExists(userId: string): Promise<boolean> {

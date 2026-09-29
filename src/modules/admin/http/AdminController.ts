@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ValidationError } from '../../../shared/errors/ValidationError';
 import type { AdminAccessPolicy } from '../use-cases/AdminAccessPolicy';
 import type { AdminQueries } from '../use-cases/AdminQueries';
+import type { ManageAccounts } from '../use-cases/ManageAccounts';
 import type { ManageActivationCodes } from '../use-cases/ManageActivationCodes';
 import type { ManageDietitians } from '../use-cases/ManageDietitians';
 import type { ManageUsers } from '../use-cases/ManageUsers';
@@ -20,6 +21,18 @@ const auditQuery = z.object({ limit: z.coerce.number().int().min(1).max(200).def
 const suspendBody = z.object({ reason: z.string().trim().max(500).nullable().optional() });
 const premiumBody = z.object({ grant: z.boolean() });
 const reassignBody = z.object({ dietitianId: z.string().uuid() });
+const passwordModeSchema = z.enum(['generate', 'set', 'google']);
+const createUserBody = z.object({
+  email: z.string().trim().email().max(254),
+  name: z.string().trim().min(2).max(100),
+  role: z.enum(['user', 'dietitian']).default('user'),
+  passwordMode: passwordModeSchema.default('generate'),
+  password: z.string().max(200).optional(),
+  premium: z.boolean().default(false),
+  dietitianTitle: z.string().trim().max(100).nullable().optional(),
+  licenseNo: z.string().trim().max(50).nullable().optional(),
+});
+const resetPasswordBody = z.object({ passwordMode: passwordModeSchema.default('generate'), password: z.string().max(200).optional() });
 const createCodeBody = z.object({
   maxUses: z.number().int().min(1).max(1000).default(1),
   validityDays: z.number().int().min(1).max(3650).nullable().default(30),
@@ -50,6 +63,7 @@ export interface AdminUseCases {
   access: AdminAccessPolicy;
   queries: AdminQueries;
   users: ManageUsers;
+  accounts: ManageAccounts;
   dietitians: ManageDietitians;
   codes: ManageActivationCodes;
 }
@@ -82,6 +96,17 @@ export class AdminController {
   handleGetUser = handle(async (req, res) => {
     const { userId } = parseOrThrow(userParams, req.params);
     res.status(200).json(await this.useCases.queries.getUser(userId));
+  });
+
+  handleCreateUser = handle(async (req, res) => {
+    const input = parseOrThrow(createUserBody, req.body ?? {});
+    res.status(201).json(await this.useCases.accounts.create(req.auth!.userId, input));
+  });
+
+  handleResetPassword = handle(async (req, res) => {
+    const { userId } = parseOrThrow(userParams, req.params);
+    const { passwordMode, password } = parseOrThrow(resetPasswordBody, req.body ?? {});
+    res.status(200).json(await this.useCases.accounts.resetPassword(req.auth!.userId, userId, passwordMode, password));
   });
 
   handleSuspendUser = handle(async (req, res) => {
