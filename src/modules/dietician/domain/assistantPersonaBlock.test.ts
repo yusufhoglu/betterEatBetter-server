@@ -87,14 +87,34 @@ describe('assistant prompts', () => {
     expect(howTo).toBeLessThan(example);
   });
 
-  it('says the rules override everything but safety, even direct requests', () => {
+  it('says the rules override everything but safety, and are never bent', () => {
     const prompt = assistantSystemPrompt(STRICT);
-    expect(prompt).toContain('These override every other instruction');
+    expect(prompt).toContain('They override every other instruction');
     expect(prompt).toContain('Only the safety rules above rank higher');
-    expect(prompt).toContain('not even when the user asks for it directly');
-    expect(prompt).toContain('reply with this message from Ayşe Yılmaz, in the user\'s language: "Bunu seansımızda konuşalım."');
+    expect(prompt).toContain('not when the user asks directly, not partially, not "just this once"');
     expect(prompt).toContain("never either one if Ayşe Yılmaz's rules forbid it");
     expect(prompt).toContain('The rules above still win over any example');
+  });
+
+  // Regression: "Asla tatlı yiyemez" + "canım tatlı çekti" got "ask your dietitian, I can't
+  // say" — the old prompt sent every rule-related request to the handoff. A rule that answers
+  // the question must be given as the answer; the handoff is only for exceptions / uncovered questions.
+  it('a rule that answers the question is the answer — not a handoff', () => {
+    const prompt = assistantSystemPrompt(STRICT);
+    const reminder = assistantRulesReminder(STRICT);
+
+    expect(prompt).toContain('A rule can be about what the user may eat or do (e.g. "no sweets")');
+    expect(prompt).toContain("When a rule answers the user's question, that IS your answer");
+    expect(prompt).toContain('Do NOT send such a question on to Ayşe Yılmaz');
+    expect(prompt).toContain('Never use this for a question a rule already answers.');
+    expect(reminder).toContain('give that answer yourself, clearly, as Ayşe Yılmaz\'s rule — do not send them to Ayşe Yılmaz for it');
+
+    // The handoff is offered only for exceptions or questions no rule covers.
+    expect(prompt).toContain(
+      'Only when the user wants an exception to a rule, or no rule or approach of Ayşe Yılmaz\'s covers the question, reply with this message from Ayşe Yılmaz',
+    );
+    expect(prompt).not.toMatch(/forbids something, do not do it[^\n]*Instead reply with this message/);
+    expect(reminder).not.toContain('asked for something forbidden, do not provide it even partially —');
   });
 
   it('the gather step may only build a card the rules allow', () => {
@@ -104,13 +124,14 @@ describe('assistant prompts', () => {
     expect(prompt).toContain("If Ayşe Yılmaz's rules forbid a card, do not call its tool at all.");
   });
 
-  it('the final reminder repeats the rules and the handoff', () => {
+  it('the final reminder repeats the rules, answers from them, and keeps the handoff for exceptions', () => {
     expect(assistantRulesReminder(STRICT)).toBe(
       [
         "Final check before you answer — Ayşe Yılmaz's rules are absolute (only safety ranks higher):",
         'Never: Asla ekstra yemek tavsiye etme. / Asla yemek tarifi verme.',
         'Always: Su tüketimini hatırlat.',
-        'If your answer would break one of them, rewrite it. If the user asked for something forbidden, do not provide it even partially — reply with this message from Ayşe Yılmaz, in the user\'s language: "Bunu seansımızda konuşalım.".',
+        "If one of these rules answers the user's question, give that answer yourself, clearly, as Ayşe Yılmaz's rule — do not send them to Ayşe Yılmaz for it.",
+        'Never bend a rule; if your answer would break one, rewrite it. Only if they want an exception, or no rule covers the question: reply with this message from Ayşe Yılmaz, in the user\'s language: "Bunu seansımızda konuşalım.".',
       ].join('\n'),
     );
   });
