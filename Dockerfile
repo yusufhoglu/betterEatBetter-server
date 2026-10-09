@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # Docker Hub throttles anonymous pulls from shared CI runners (HTTP 429), so the base
 # image comes from the ECR Public mirror of the same official image. Override with
 # --build-arg NODE_IMAGE=node:20-bookworm-slim to pull from Docker Hub.
