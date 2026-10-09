@@ -1,7 +1,12 @@
 # syntax=docker/dockerfile:1
 
+# Docker Hub throttles anonymous pulls from shared CI runners (HTTP 429), so the base
+# image comes from the ECR Public mirror of the same official image. Override with
+# --build-arg NODE_IMAGE=node:20-bookworm-slim to pull from Docker Hub.
+ARG NODE_IMAGE=public.ecr.aws/docker/library/node:20-bookworm-slim
+
 # ---- builder: full deps, Prisma client, TypeScript build ----
-FROM node:20-bookworm-slim AS builder
+FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 
 # openssl is required by Prisma's query engine; build-essential/python3 cover
@@ -21,7 +26,7 @@ RUN npx prisma generate && npm run build
 RUN npm prune --omit=dev
 
 # ---- runner: slim runtime image ----
-FROM node:20-bookworm-slim AS runner
+FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
