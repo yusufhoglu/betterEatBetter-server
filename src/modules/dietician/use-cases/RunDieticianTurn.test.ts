@@ -51,11 +51,17 @@ class FakeRateMealTool implements DieticianTool {
 
 class FakeRecipeTool implements DieticianTool {
   readonly calls: Array<Record<string, unknown>> = [];
+  readonly contexts: Array<Parameters<DieticianTool['execute']>[2]> = [];
   readonly yieldsCard = 'recipe' as const;
   readonly definition = { name: 'provide_recipe', description: 'fake', inputSchema: { type: 'object' } };
   constructor(private readonly result: Recipe) {}
-  async execute(_userId: string, input: Record<string, unknown>): Promise<Recipe> {
+  async execute(
+    _userId: string,
+    input: Record<string, unknown>,
+    context: Parameters<DieticianTool['execute']>[2],
+  ): Promise<Recipe> {
     this.calls.push(input);
+    this.contexts.push(context);
     return this.result;
   }
 }
@@ -499,12 +505,33 @@ describe('RunDieticianTurn', () => {
       expect(reminder!.content).toContain('Never: Takviye önerme.');
     });
 
-    it('never forces the recipe card for the assistant, even on a recipe request', async () => {
+    it('forces the recipe card for the assistant on a recipe request and hands the rules to the recipe tool', async () => {
       const recipeTool = new FakeRecipeTool(fakeRecipe);
       const { llm, runTurn } = build({
         tools: [new FakeDataTool(), recipeTool],
         maxGatherTurns: 2,
         coachTurn: { kind: 'assistant', persona: PERSONA },
+      });
+      llm.setIntent('recipe');
+      llm.setGatherResults([
+        { content: '', toolCalls: [{ id: 't0', name: 'get_meal_data', input: {} }] },
+        { content: '', toolCalls: [{ id: 't1', name: 'provide_recipe', input: { request: 'tatlı' } }] },
+      ]);
+
+      await collect(runTurn.execute({ userId: 'user-1', conversationId: 'c1', content: 'Bana tatlı tarifi ver', today: TODAY }));
+
+      expect(llm.gatherCalls.at(-1)!.forceToolChoice).toEqual({ toolName: 'provide_recipe' });
+      expect(recipeTool.calls).toHaveLength(1);
+      expect(recipeTool.contexts[0]!.persona).toBe(PERSONA);
+    });
+
+    it('does not force the recipe card when the dietitian rules mention recipes', async () => {
+      const recipeTool = new FakeRecipeTool(fakeRecipe);
+      const persona = { ...PERSONA, avoid: [...PERSONA.avoid, 'Tarif verme'] };
+      const { llm, runTurn } = build({
+        tools: [new FakeDataTool(), recipeTool],
+        maxGatherTurns: 2,
+        coachTurn: { kind: 'assistant', persona },
       });
       llm.setIntent('recipe');
       llm.setGatherResults([{ content: '' }]);

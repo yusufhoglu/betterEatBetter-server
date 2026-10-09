@@ -2,7 +2,9 @@ import { ValidationError } from '../../../../shared/errors/ValidationError';
 import type { LlmClient } from '../../../../shared/llm/LlmClient';
 import { requestStructuredOutput } from '../../../../shared/llm/structuredOutput';
 import type { LlmMessage, LlmToolDefinition } from '../../../../shared/llm/types';
+import { assistantRulesReminder } from '../../domain/assistantPersonaBlock';
 import { recipeSchema, type Recipe } from '../../domain/Recipe';
+import type { DietitianPersona } from '../../ports/CoachAccessPort';
 import type { DieticianTool } from './DieticianTool';
 
 const PROVIDE_RECIPE_SYSTEM_PROMPT = [
@@ -47,7 +49,7 @@ export class ProvideRecipeTool implements DieticianTool {
   async execute(
     _userId: string,
     input: Record<string, unknown>,
-    context: { conversationId: string; messages: LlmMessage[] },
+    context: { conversationId: string; messages: LlmMessage[]; persona?: DietitianPersona | null },
   ): Promise<Recipe> {
     const request = typeof input.request === 'string' ? input.request.trim() : '';
     if (!request) {
@@ -63,6 +65,9 @@ export class ProvideRecipeTool implements DieticianTool {
         system: PROVIDE_RECIPE_SYSTEM_PROMPT,
         messages: [
           ...context.messages.filter((message) => message.role === 'system'),
+          // This is an isolated call: for a dietitian's assistant the rules must be
+          // restated here or the recipe ignores them (e.g. "no desserts").
+          ...(context.persona ? [{ role: 'system' as const, content: assistantRulesReminder(context.persona) }] : []),
           // Carries the user's language + phrasing into this isolated call.
           ...(lastUserMessage ? [lastUserMessage] : []),
           {

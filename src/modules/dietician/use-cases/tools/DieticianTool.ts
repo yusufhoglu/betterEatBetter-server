@@ -1,4 +1,5 @@
 import type { LlmMessage, LlmToolDefinition } from '../../../../shared/llm/types';
+import type { DietitianPersona } from '../../ports/CoachAccessPort';
 
 /**
  * A tool the data-gathering loop can dispatch to. Structurally identical to
@@ -12,6 +13,6 @@ export interface DieticianTool {
   execute(
     userId: string,
     input: Record<string, unknown>,
-    context: { conversationId: string; messages: LlmMessage[] },
+    context: { conversationId: string; messages: LlmMessage[]; persona?: DietitianPersona | null },
   ): Promise<unknown>;
 }

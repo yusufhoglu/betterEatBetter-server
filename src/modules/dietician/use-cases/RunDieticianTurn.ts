@@ -35,6 +35,13 @@ import type { DieticianTool } from './tools/DieticianTool';
 
 const logger = createModuleLogger('dietician');
 
+const RECIPE_WORD = /tarif|recipe/i;
+
+/** True when any of the dietitian's rules / things to avoid talk about recipes. */
+function personaMentionsRecipes(persona: DietitianPersona): boolean {
+  return [...persona.rules, ...persona.avoid].some((line) => RECIPE_WORD.test(line));
+}
+
 export interface RunDieticianTurnInput {
   userId: string;
   conversationId: string;
@@ -250,10 +257,16 @@ export class RunDieticianTurn {
     // of describing it) and hand real numbers to the card tool instead of
     // guessing from the bare request text.
     //
-    // Never for a dietitian's assistant: forcing a card overrides the
-    // dietitian's rules (e.g. "never give recipes") in code, where no prompt
-    // can stop it. The model decides, with those rules first in its prompt.
-    const forcedCardTool = persona ? null : forcedCardToolForIntent(intent);
+    // For a dietitian's assistant only the recipe card is forced, and only when
+    // none of the dietitian's rules mention recipes (forcing would override a
+    // "never give recipes" rule in code, where no prompt can stop it). The
+    // recipe tool receives the rules, so everything else they say still applies
+    // to the recipe it writes. Other cards stay up to the model.
+    const forcedCardTool = persona
+      ? intent === 'recipe' && !personaMentionsRecipes(persona)
+        ? 'provide_recipe'
+        : null
+      : forcedCardToolForIntent(intent);
     const canForce = forcedCardTool !== null && armedTools.some((tool) => tool.definition.name === forcedCardTool);
     let cardCalled = false;
 
@@ -286,6 +299,7 @@ export class RunDieticianTurn {
           ? await tool.execute(input.userId, toolCall.input, {
               conversationId: input.conversationId,
               messages: workingMessages,
+              persona,
             })
           : { error: `Unknown tool: ${toolCall.name}` };
 
