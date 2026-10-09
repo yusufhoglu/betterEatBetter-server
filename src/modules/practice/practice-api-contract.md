@@ -119,6 +119,43 @@ Danisan tarafi mevcut `/dietician/*` uclarini kullanir; kim olarak konusulacagin
 - Etkin durum: `enabled` (ana anahtar) VE (`access` ?? `defaultClientAccess`) VE diyetisyen askida degil; ustune `schedule`.
 - Diyetisyen yalnizca KENDI asistaninin bu iliski boyunca (`link.startedAt` sonrasi) cevapladigi mesajlari gorur.
 
+## Beslenme plani
+
+Diyetisyen danisan basina TEK plan yazar (iliskiye baglidir; iliski bitip yenisi baslarsa temiz sayfa). Plan diyetisyenin kendi emegi olduğu icin danisan onay kapsami gerekmez: atanmis diyetisyen yazar, danisani gorebilen kadro (atanmis + org owner/admin) okur, danisan kendi planini okur.
+
+```jsonc
+// MealPlan govdesi (PUT) — tamami gonderilir, mevcut plan yer degistirir
+{
+  "title": "Hafta 1" | null,          // <=120
+  "notes": "Genel not" | null,        // <=3000
+  "meals": [                           // <=12, sirali
+    {
+      "id": "string",                  // editorun verdigi kararli id
+      "name": "Sabah",                 // <=60; varsayilanlar: Sabah, Ara öğün, Öğle, İkindi, Akşam, Gece
+      "time": "08:00" | null,          // 24s HH:MM
+      "note": null,                    // <=500
+      "items": [                       // <=60
+        { "id": "string", "name": "Yulaf", "amount": 50 | null, "unit": "g",
+          "calories": 190 | null, "proteinG": 6 | null, "carbsG": 33 | null, "fatG": 3 | null,  // girilen miktarin TOPLAMI
+          "note": null }
+      ]
+    }
+  ]
+}
+```
+
+| Istek | Not |
+| --- | --- |
+| `GET /practice/clients/:clientId/meal-plan` | `{ plan: { id, title, notes, meals, createdAt, updatedAt } \| null }` |
+| `PUT /practice/clients/:clientId/meal-plan` | Govde yukaridaki. Atanmis diyetisyen (403 `NOT_ASSIGNED_DIETITIAN`). → `{ plan }`. 400 `INVALID_REQUEST_BODY` |
+| `DELETE /practice/clients/:clientId/meal-plan` | 204 |
+| `GET /practice/me/meal-plan` | Danisan (mobil): aktif diyetisyeninin plani. `{ plan \| null }` |
+| `GET /practice/plan-header` | Diyetisyenin PDF baslik bilgisi `{ clinicName, tagline, contact, footer }` (hepsi `null` olabilir) |
+| `PUT /practice/plan-header` | Ayni sekil, tamami |
+| `GET /practice/foods?q=` | Once diyetisyenin kendi besinleri, `q` >= 2 harfse ardindan ortak katalog: `{ items: [{ source: "custom"\|"catalog", id, name, brand, amount, unit, calories, proteinG, carbsG, fatG }] }` — degerler `amount` `unit` icin (katalog: 100 g ya da 1 porsiyon) |
+| `POST /practice/foods` | `{ name, amount, unit, calories, proteinG, carbsG, fatG }` → 201 `{ id, dietitianId, ... }`. En fazla 500 (403 `CUSTOM_FOOD_LIMIT`) |
+| `PUT/DELETE /practice/foods/:foodId` | Sadece sahibi (digerine 404 `FOOD_NOT_FOUND`) |
+
 ## Danisanin kendisi (mobil)
 
 - `PUT /activity/steps { timeZone, source: "apple_health"|"health_connect", days: [{ date, steps }] }` — son 31 gun, idempotent.

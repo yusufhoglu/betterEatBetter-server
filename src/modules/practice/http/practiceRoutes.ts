@@ -34,7 +34,12 @@ import { RotateInviteKey } from '../use-cases/RotateInviteKey';
 import { SetClientPlan } from '../use-cases/SetClientPlan';
 import { UpdateConsent } from '../use-cases/UpdateConsent';
 import { UpdateDietitianProfile } from '../use-cases/UpdateDietitianProfile';
+import { CatalogFoodSearchAdapter } from '../adapters/food/CatalogFoodSearchAdapter';
+import { PrismaMealPlanRepository } from '../adapters/repository/PrismaMealPlanRepository';
+import { NotificationsPlanNotifier } from '../adapters/push/NotificationsPlanNotifier';
+import { MealPlans } from '../use-cases/MealPlans';
 import { AiAssistantController } from './AiAssistantController';
+import { MealPlanController } from './MealPlanController';
 import { PracticeController } from './PracticeController';
 import {
   aiAssistantRepository,
@@ -108,6 +113,10 @@ export function practiceRoutes(): Router {
     (key) => checkRateLimit(key, AI_PREVIEW_LIMIT, AI_PREVIEW_WINDOW_SECONDS),
   );
 
+  const mealPlanController = new MealPlanController(
+    new MealPlans(new PrismaMealPlanRepository(prisma), repository, policy, new CatalogFoodSearchAdapter(), new NotificationsPlanNotifier()),
+  );
+
   router.use(authMiddleware);
 
   router.get('/me', controller.handleGetMe);
@@ -130,6 +139,14 @@ export function practiceRoutes(): Router {
   router.patch('/ai/examples/:exampleId', aiController.handleUpdateExample);
   router.delete('/ai/examples/:exampleId', aiController.handleDeleteExample);
 
+  // meal plans: letterhead + the dietitian's foods
+  router.get('/plan-header', mealPlanController.handleGetHeader);
+  router.put('/plan-header', mealPlanController.handleSaveHeader);
+  router.get('/foods', mealPlanController.handleSearchFoods);
+  router.post('/foods', mealPlanController.handleCreateFood);
+  router.put('/foods/:foodId', mealPlanController.handleUpdateFood);
+  router.delete('/foods/:foodId', mealPlanController.handleDeleteFood);
+
   // client side
   router.post('/invites/preview', controller.handlePreviewInvite);
   router.post('/join', controller.handleJoin);
@@ -137,6 +154,7 @@ export function practiceRoutes(): Router {
   router.patch('/me/link/consent', controller.handleUpdateConsent);
   router.post('/me/link/end', controller.handleEndMyLink);
   router.get('/me/access-log', controller.handleGetAccessLog);
+  router.get('/me/meal-plan', mealPlanController.handleGetMyPlan);
 
   // dietitian → clients
   router.get('/clients', controller.handleListClients);
@@ -149,6 +167,9 @@ export function practiceRoutes(): Router {
   router.put('/clients/:clientId/plan', controller.handleSetClientPlan);
   router.post('/clients/:clientId/end', controller.handleEndClientLink);
   router.patch('/clients/:clientId/assignee', controller.handleReassign);
+  router.get('/clients/:clientId/meal-plan', mealPlanController.handleGetClientPlan);
+  router.put('/clients/:clientId/meal-plan', mealPlanController.handleSaveClientPlan);
+  router.delete('/clients/:clientId/meal-plan', mealPlanController.handleDeleteClientPlan);
   router.get('/clients/:clientId/notes', controller.handleListNotes);
   router.post('/clients/:clientId/notes', controller.handleCreateNote);
   router.patch('/clients/:clientId/notes/:noteId', controller.handleUpdateNote);

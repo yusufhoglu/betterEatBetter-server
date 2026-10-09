@@ -568,6 +568,8 @@ model DietitianProfile {
   licenseNo        String?
   bio              String?
   specialties      String[] @default([])
+  // Letterhead printed on meal-plan PDFs; null until the dietitian edits it.
+  planHeader       Json?
   activationCodeId String?
   verifiedAt       DateTime @default(now())
   createdAt        DateTime @default(now())
@@ -611,11 +613,46 @@ model DietitianClientLink {
   notes            DietitianNote[]
   insight          ClientInsight?
   aiSetting        ClientAiSetting?
+  mealPlan         MealPlan?
 
   @@index([dietitianId, status])
   @@index([organizationId, status])
   @@index([clientId, status])
   @@map("dietitian_client_links")
+}
+
+// One meal plan per client relationship (like notes, a new link starts clean).
+// `meals` is the ordered list of meals with their foods (see practice/domain/mealPlan.ts).
+model MealPlan {
+  id          String              @id @default(uuid())
+  linkId      String              @unique
+  link        DietitianClientLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  dietitianId String
+  title       String?
+  notes       String?
+  meals       Json
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@map("meal_plans")
+}
+
+// A dietitian's own foods; searched together with the shared catalog when writing plans.
+// Nutrition values are for `amount` `unit` (e.g. 100 g, 1 adet).
+model DietitianFood {
+  id          String   @id @default(uuid())
+  dietitianId String
+  name        String
+  amount      Float
+  unit        String
+  calories    Float
+  proteinG    Float
+  carbsG      Float
+  fatG        Float
+  createdAt   DateTime @default(now())
+
+  @@index([dietitianId])
+  @@map("dietitian_foods")
 }
 
 model DataAccessLog {
